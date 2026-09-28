@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ru">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#192427"><title>Vireon · Вердана / B1</title><link rel="icon" href="data:,"></head>
+<body>
+<canvas id="world" aria-label="Трёхмерный участок Верданы"></canvas>
+<div id="hud">
+ <header><div class="identity"><span class="wordmark">VIREON<span class="brand-dot">.</span></span><span class="divider"></span><div><strong>ВЕРДАНА</strong><span class="eyebrow">ПЛАНИРОВКА · B1</span></div></div><nav aria-label="Инструменты осмотра"><button id="day" title="Сменить освещение"><span id="light-icon">☀</span><span id="light-text">День</span></button><button id="map-button" title="Карта участка [M]">⌑ <span>Карта</span></button><button id="pause-button" aria-label="Пауза" title="Пауза [Esc]">Ⅱ</button></nav></header>
+ <div id="navigation"><span class="nav-arrow">↑</span><span id="target-name">Местная трава</span><span id="target-distance"></span></div>
+ <div id="reticle" aria-hidden="true"></div>
+ <aside id="discovery" hidden><span id="discovery-kind" class="eyebrow"></span><strong id="discovery-title"></strong><button id="inspect">Осмотреть <span>E</span></button></aside>
+ <div id="route-status"><span class="tiny-dot"></span><span id="progress">Осмотрено 0 / 9</span><span class="small-muted">160 × 160 м</span></div>
+ <div id="joystick" role="group" aria-label="Джойстик движения"><div class="stick-ring"><div id="stick"></div></div><span>ДВИЖЕНИЕ</span></div>
+ <div id="actions"><button id="run" aria-pressed="false">↟<span>Бег</span></button><button id="jump">↑<span>Прыжок</span></button></div>
+ <div id="look-hint">Потяните экран для обзора</div>
+ <div id="prototype-note">Макет мира · без выживания</div>
+</div>
+<div id="veil" class="veil">
+ <section id="welcome" class="panel welcome"><div class="eyebrow">VIREON / ПЕРВАЯ ПЛАНЕТА</div><h1>Первые шаги<br>по Вердане.</h1><p>Исследуйте долину, найдите лёд и пещеру.<br>Вернитесь к свету капсулы.</p><div class="intro-meta"><span>160 × 160 м</span><span>9 мест</span><span>День / ночь</span></div><button id="start" class="primary">Исследовать <span>→</span></button><p class="help">Телефон: джойстик и свайп.<br>Компьютер: WASD, обзор мышью с зажатой кнопкой, Space — прыжок.</p><small>Рабочая планировка. Добычи, голода и сохранения мира пока нет.</small></section>
+ <section id="paused" class="panel" hidden><div class="eyebrow">ОСМОТР ПРИОСТАНОВЛЕН</div><h2 id="pause-title">Пауза</h2><p>Можно вернуться к прогулке или начать маршрут от капсулы.</p><button id="resume" class="primary">Продолжить <span>→</span></button><button id="reset" class="secondary">Вернуться к капсуле</button><button id="metrics-toggle" class="text-button">Показать показатели сцены</button><p class="help">Это режим осмотра планировки. Возврат к капсуле не является механикой телепортации в игре.</p></section>
+ <section id="map-panel" class="panel map-panel" hidden><div class="panel-heading"><div><div class="eyebrow">СТАРТОВЫЙ УЧАСТОК</div><h2>Долина Верданы</h2></div><button id="close-map" class="icon-button" aria-label="Закрыть карту">×</button></div><div class="map-layout"><canvas id="map" width="480" height="480" aria-label="Карта участка и положения игрока"></canvas><div><p class="help">Выберите ориентир. Указатель покажет направление; добраться нужно пешком.</p><div id="landmark-list"></div></div></div></section>
+ <section id="info-panel" class="panel" hidden><div class="eyebrow" id="info-kind"></div><h2 id="info-title"></h2><p id="info-text"></p><button id="close-info" class="primary">Продолжить осмотр <span>→</span></button></section>
+</div>
+<div id="portrait" hidden><span>↻</span><h2>Поверните устройство</h2><p>Для прогулки нужен горизонтальный экран.</p></div>
+<div id="error" hidden><div class="panel"><h2>Сцену не удалось открыть</h2><p id="error-text"></p><button onclick="location.reload()" class="primary">Попробовать снова</button></div></div>
+<output id="metrics" hidden></output>
+<script type="module" src="/src/main.ts"></script>
+</body></html>

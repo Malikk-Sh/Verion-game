@@ -1,0 +1,96 @@
+{
+  "checks": [
+    "Development page loads, WebGL2 initializes, no error overlay",
+    "Inspection opens a real landmark card and records visit",
+    "Keyboard movement exits capsule into valley",
+    "Drag-to-look changes heading",
+    "Day/night switch changes scene state",
+    "Pause freezes active simulation time",
+    "Map selects target without teleporting",
+    "Two simultaneous real touch contacts move and look independently, then release",
+    "Touch cancellation clears joystick",
+    "844×390 layout has visible control targets at least 48 CSS pixels tall",
+    "Portrait pauses; landscape return requires explicit resume",
+    "Standalone HTML initializes and starts from file://",
+    "Standalone requires no remote runtime resources",
+    "No browser console errors or uncaught exceptions"
+  ],
+  "errors": [],
+  "measurements": [
+    {
+      "ready": true,
+      "running": true,
+      "dialog": "",
+      "night": true,
+      "selected": "grass",
+      "visited": [
+        "capsule"
+      ],
+      "activeTime": 6.65,
+      "position": {
+        "x": 42.33679895730194,
+        "y": 0.3246704863546185,
+        "z": 47.8505872041319
+      },
+      "yaw": 0.18000000000000005,
+      "pitch": -0.0050000000000000044,
+      "grounded": true,
+      "input": {
+        "forward": 0,
+        "right": 0,
+        "run": false,
+        "jump": false,
+        "joyX": 0,
+        "joyY": 0,
+        "joyPointer": null,
+        "lookPointer": null
+      },
+      "drawCalls": 31,
+      "triangles": 22190,
+      "frameP95Ms": 316.6999999999998,
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "renderer": "WebGL 2.0 (OpenGL ES 3.0 Chromium)"
+    },
+    {
+      "ready": true,
+      "running": true,
+      "dialog": "",
+      "night": false,
+      "selected": "cave",
+      "visited": [
+        "capsule"
+      ],
+      "activeTime": 11.7,
+      "position": {
+        "x": 43.538027244465994,
+        "y": 0.30092321859058996,
+        "z": 51.69658416752969
+      },
+      "yaw": 0.3400000000000001,
+      "pitch": 0.039999999999999994,
+      "grounded": true,
+      "input": {
+        "forward": 0,
+        "right": 0,
+        "run": false,
+        "jump": false,
+        "joyX": 0,
+        "joyY": 0,
+        "joyPointer": null,
+        "lookPointer": null
+      },
+      "drawCalls": 34,
+      "triangles": 22226,
+      "frameP95Ms": 266.59999999999945,
+      "viewport": {
+        "width": 844,
+        "height": 390
+      },
+      "renderer": "WebGL 2.0 (OpenGL ES 3.0 Chromium)"
+    }
+  ],
+  "environment": "Headless Chromium; software rendering in this verification environment. Not a phone FPS test."
+}
