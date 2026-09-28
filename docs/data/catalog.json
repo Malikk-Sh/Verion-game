@@ -1,0 +1,4657 @@
+{
+  "version": "1.0.0",
+  "status": "baseline_design_not_playtested",
+  "units": {
+    "EU": "условная энергия",
+    "GU": "условная единица конкретного газа",
+    "WU": "условная единица воды",
+    "FU": "условная единица нефтепродукта"
+  },
+  "items": {
+    "stone": {
+      "name": "Камень",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "verdana",
+          "niva",
+          "asteroid",
+          "pyra"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "sand": {
+      "name": "Песок",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "verdana",
+          "niva",
+          "pyra"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "soil_a": {
+      "name": "Грунт Верданы",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "verdana"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "soil_b": {
+      "name": "Реголит Нивы",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "niva"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "soil_c": {
+      "name": "Пепельный грунт Пирры",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "pyra"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "soil_asteroid": {
+      "name": "Астероидная крошка",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "asteroid"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "grass": {
+      "name": "Съедобная трава",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "verdana"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "fiber": {
+      "name": "Растительные волокна",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "niva",
+          "pyra"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "pulp": {
+      "name": "Пищевая масса",
+      "kind": "item",
+      "stack": 64
+    },
+    "ice": {
+      "name": "Кусок льда",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "verdana",
+          "niva"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "carbon": {
+      "name": "Углеродное сырьё",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "verdana",
+          "niva",
+          "asteroid",
+          "pyra"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "carbonate": {
+      "name": "Углеродсодержащая порода",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "verdana",
+          "niva",
+          "pyra"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "volatile_rock": {
+      "name": "Газоносная порода",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "verdana",
+          "niva",
+          "pyra"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "hydrocarbon_rock": {
+      "name": "Углеводородная порода",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "niva",
+          "pyra"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "iron_raw": {
+      "name": "Железная руда",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "verdana",
+          "niva",
+          "asteroid",
+          "pyra"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "copper_raw": {
+      "name": "Медная руда",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "verdana",
+          "niva",
+          "asteroid",
+          "pyra"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "gold_raw": {
+      "name": "Золотая руда",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "verdana",
+          "niva",
+          "asteroid",
+          "pyra"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "velite_raw": {
+      "name": "Велитовая руда",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "niva",
+          "asteroid"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "astrite_raw": {
+      "name": "Астритовая руда",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "pyra"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "iron": {
+      "name": "Железный слиток",
+      "kind": "item",
+      "stack": 64
+    },
+    "copper": {
+      "name": "Медный слиток",
+      "kind": "item",
+      "stack": 64
+    },
+    "gold": {
+      "name": "Золотой слиток",
+      "kind": "item",
+      "stack": 64
+    },
+    "velite": {
+      "name": "Велитовый слиток",
+      "kind": "item",
+      "stack": 64
+    },
+    "astrite": {
+      "name": "Астритовый слиток",
+      "kind": "item",
+      "stack": 64
+    },
+    "steel": {
+      "name": "Стальной слиток",
+      "kind": "item",
+      "stack": 64
+    },
+    "glass": {
+      "name": "Стекло",
+      "kind": "item",
+      "stack": 64
+    },
+    "plate_iron": {
+      "name": "Железная пластина",
+      "kind": "item",
+      "stack": 64
+    },
+    "plate_steel": {
+      "name": "Стальная пластина",
+      "kind": "item",
+      "stack": 64
+    },
+    "plate_velite": {
+      "name": "Велитовая пластина",
+      "kind": "item",
+      "stack": 64
+    },
+    "plate_astrite": {
+      "name": "Астритовая пластина",
+      "kind": "item",
+      "stack": 64
+    },
+    "wire": {
+      "name": "Медный провод",
+      "kind": "item",
+      "stack": 64
+    },
+    "circuit": {
+      "name": "Базовая электроника",
+      "kind": "item",
+      "stack": 64
+    },
+    "circuit_adv": {
+      "name": "Продвинутая электроника",
+      "kind": "item",
+      "stack": 64
+    },
+    "motor": {
+      "name": "Привод",
+      "kind": "item",
+      "stack": 64
+    },
+    "seal": {
+      "name": "Уплотнитель",
+      "kind": "item",
+      "stack": 64
+    },
+    "cloth": {
+      "name": "Ткань",
+      "kind": "item",
+      "stack": 64
+    },
+    "sorbent": {
+      "name": "Сорбент",
+      "kind": "item",
+      "stack": 64
+    },
+    "spent_sorbent": {
+      "name": "Отработанный сорбент",
+      "kind": "item",
+      "stack": 64
+    },
+    "mineral_residue": {
+      "name": "Минеральный остаток",
+      "kind": "item",
+      "stack": 64
+    },
+    "compost": {
+      "name": "Компост",
+      "kind": "item",
+      "stack": 64
+    },
+    "fertilizer": {
+      "name": "Удобрение",
+      "kind": "item",
+      "stack": 64
+    },
+    "fertile_soil": {
+      "name": "Плодородный грунт",
+      "kind": "item",
+      "stack": 64
+    },
+    "seed_reed": {
+      "name": "Семя тростника",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "verdana"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "seed_tuber": {
+      "name": "Семя клубнеплода",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "verdana"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "seed_bean": {
+      "name": "Семя бобов",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "verdana"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "seed_tree": {
+      "name": "Семя древовидной культуры",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "verdana"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "seed_potato": {
+      "name": "Картофель для посадки",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "niva"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "reed": {
+      "name": "Сочный тростник",
+      "kind": "item",
+      "stack": 64
+    },
+    "tuber": {
+      "name": "Клубнеплод",
+      "kind": "item",
+      "stack": 64
+    },
+    "beans": {
+      "name": "Бобы",
+      "kind": "item",
+      "stack": 64
+    },
+    "potato": {
+      "name": "Картофель",
+      "kind": "item",
+      "stack": 64
+    },
+    "wood": {
+      "name": "Древесина",
+      "kind": "item",
+      "stack": 64
+    },
+    "algae": {
+      "name": "Культура водорослей",
+      "kind": "item",
+      "stack": 64
+    },
+    "biomass": {
+      "name": "Влажная биомасса",
+      "kind": "item",
+      "stack": 64
+    },
+    "meal": {
+      "name": "Приготовленный клубнеплод",
+      "kind": "item",
+      "stack": 64
+    },
+    "ration": {
+      "name": "Полевой рацион",
+      "kind": "item",
+      "stack": 64
+    },
+    "fragment_a": {
+      "name": "Фрагмент панциря",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "verdana"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "fragment_b": {
+      "name": "Фрагмент криопанциря",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "niva",
+          "asteroid"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "fragment_c": {
+      "name": "Фрагмент термопанциря",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "pyra"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "shell": {
+      "name": "Панцирная пластина",
+      "kind": "item",
+      "stack": 64
+    },
+    "cryo_shell": {
+      "name": "Криопластина",
+      "kind": "item",
+      "stack": 64
+    },
+    "heat_shell": {
+      "name": "Термопластина",
+      "kind": "item",
+      "stack": 64
+    },
+    "blueprint_rocket": {
+      "name": "Чертёж первой ракеты",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "verdana"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "blueprint_industry": {
+      "name": "Чертёж велитовой промышленности",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "niva"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "blueprint_station": {
+      "name": "Чертёж станции",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "asteroid"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "blueprint_heat": {
+      "name": "Чертёж термостойких сплавов",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "pyra"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "ore_core": {
+      "name": "Рудный керн",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "asteroid"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "research_sample": {
+      "name": "Научный образец",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "pyra"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "iron_dust": {
+      "name": "Железный пыль",
+      "kind": "item",
+      "stack": 64
+    },
+    "iron_speck": {
+      "name": "Железный пылинка",
+      "kind": "item",
+      "stack": 64
+    },
+    "copper_dust": {
+      "name": "Медный пыль",
+      "kind": "item",
+      "stack": 64
+    },
+    "copper_speck": {
+      "name": "Медный пылинка",
+      "kind": "item",
+      "stack": 64
+    },
+    "gold_dust": {
+      "name": "Золотой пыль",
+      "kind": "item",
+      "stack": 64
+    },
+    "gold_speck": {
+      "name": "Золотой пылинка",
+      "kind": "item",
+      "stack": 64
+    },
+    "velite_dust": {
+      "name": "Велитовый пыль",
+      "kind": "item",
+      "stack": 64
+    },
+    "velite_speck": {
+      "name": "Велитовый пылинка",
+      "kind": "item",
+      "stack": 64
+    },
+    "astrite_dust": {
+      "name": "Астритовый пыль",
+      "kind": "item",
+      "stack": 64
+    },
+    "astrite_speck": {
+      "name": "Астритовый пылинка",
+      "kind": "item",
+      "stack": 64
+    },
+    "water": {
+      "name": "Вода",
+      "kind": "fluid",
+      "stack": 0
+    },
+    "oxygen": {
+      "name": "Кислород",
+      "kind": "fluid",
+      "stack": 0
+    },
+    "hydrogen": {
+      "name": "Водород",
+      "kind": "fluid",
+      "stack": 0
+    },
+    "co2": {
+      "name": "Газ CO₂",
+      "kind": "fluid",
+      "stack": 0
+    },
+    "buffer_gas": {
+      "name": "Фоновый газ",
+      "kind": "fluid",
+      "stack": 0
+    },
+    "oil": {
+      "name": "Нефть",
+      "kind": "fluid",
+      "stack": 0,
+      "source": {
+        "worlds": [
+          "verdana"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "fuel": {
+      "name": "Нефтяное горючее",
+      "kind": "fluid",
+      "stack": 0
+    },
+    "workbench": {
+      "name": "Верстак",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "kiln": {
+      "name": "Плавильная печь",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "arc_furnace": {
+      "name": "Электрическая сплавная печь",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "fabricator": {
+      "name": "Станция механизмов",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "spacebench": {
+      "name": "Ракетный ангар",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "biogenerator": {
+      "name": "Биогенератор",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "oil_generator": {
+      "name": "Топливный генератор",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "solar": {
+      "name": "Солнечная панель",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "solar_adv": {
+      "name": "Улучшенная солнечная панель",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "battery": {
+      "name": "Аккумулятор",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "battery_adv": {
+      "name": "Улучшенный аккумулятор",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "electrolyzer": {
+      "name": "Генератор кислорода",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "refill": {
+      "name": "Заправочная станция",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "distributor": {
+      "name": "Распределитель с климатическим блоком",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "autofill": {
+      "name": "Модуль автозаправки",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "climate_cold": {
+      "name": "Усилитель холодного климата",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "climate_heat": {
+      "name": "Усилитель жаркого климата",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "dome": {
+      "name": "Стартовый купол со шлюзом",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "room": {
+      "name": "Комнатный модуль",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "bulkhead": {
+      "name": "Герметичная переборка",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "airlock": {
+      "name": "Двухдверный шлюз",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "wall": {
+      "name": "Защитный блок",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "window": {
+      "name": "Прозрачный защитный блок",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "floor": {
+      "name": "Блок пола",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "vent": {
+      "name": "Вентиляционная решётка",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "bed": {
+      "name": "Кровать",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "chest": {
+      "name": "Контейнер",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "lamp": {
+      "name": "Автономный светильник",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "growlight": {
+      "name": "Агролампа",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "cable": {
+      "name": "Электрокабель",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "gas_pipe": {
+      "name": "Газовая труба",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "liquid_pipe": {
+      "name": "Жидкостная труба",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "item_link": {
+      "name": "Предметный передатчик",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "valve": {
+      "name": "Газовый клапан",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "water_tank": {
+      "name": "Бак жидкости",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "gas_tank": {
+      "name": "Газовый бак",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "pump": {
+      "name": "Водяная помпа",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "soil_press": {
+      "name": "Пресс грунта",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "plate_press": {
+      "name": "Пресс пластин",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "sieve_hand": {
+      "name": "Ручное сито",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "sieve_frame": {
+      "name": "Рамочное сито",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "sieve_electric": {
+      "name": "Электросито",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "sieve_auto": {
+      "name": "Автопросеиватель",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "mesh_fiber": {
+      "name": "Волоконная сетка",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "mesh_iron": {
+      "name": "Железная сетка",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "mesh_steel": {
+      "name": "Стальная сетка",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "mesh_velite": {
+      "name": "Велитовая сетка",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "extractor": {
+      "name": "Глубинный экстрактор грунта",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "composter": {
+      "name": "Компостница",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "composter_sealed": {
+      "name": "Герметичная компостница",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "bed_crop": {
+      "name": "Грядка-контейнер",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "farm_arm": {
+      "name": "Фермерский манипулятор",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "water_recovery": {
+      "name": "Экстрактор растительной воды",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "cleaner": {
+      "name": "Атмосферный очиститель",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "cleaner_adv": {
+      "name": "Улучшенный очиститель",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "gas_extractor": {
+      "name": "Газодобывающий термореактор",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "gas_extractor_adv": {
+      "name": "Улучшенный термореактор",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "greenhouse": {
+      "name": "Парниковая установка",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "ice_melter": {
+      "name": "Ледоплавильня",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "basin_intake": {
+      "name": "Узел наполнения водоёма",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "bioreactor": {
+      "name": "Закрытый фотобиореактор",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "spreader": {
+      "name": "Распространитель растений",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "cooler": {
+      "name": "Регулятор альбедо",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "refinery": {
+      "name": "Нефтепереработчик",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "oil_pump": {
+      "name": "Нефтяная помпа",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "hydrogen_collector": {
+      "name": "Модуль сбора водорода",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "landing_pad": {
+      "name": "Пусковая платформа 3×3",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "rocket_1": {
+      "name": "Ракета I",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "rocket_2": {
+      "name": "Ракета II",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "rocket_3": {
+      "name": "Ракета III",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "rover": {
+      "name": "Ровер",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "trailer": {
+      "name": "Грузовой модуль ровера",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "jetpack_1": {
+      "name": "Jetpack I",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "jetpack_2": {
+      "name": "Jetpack II",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "grapple": {
+      "name": "Крюк-кошка",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "claws": {
+      "name": "Когти",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "suit": {
+      "name": "Базовый скафандр",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "suit_pressure": {
+      "name": "Скафандр с усилением давления",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "suit_heat": {
+      "name": "Скафандр с усилением жары",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "suit_combined": {
+      "name": "Совмещённый скафандр",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "underwear_1": {
+      "name": "Термобельё I",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "underwear_2": {
+      "name": "Термобельё II",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "bottle_1": {
+      "name": "Баллон I",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "bottle_2": {
+      "name": "Баллон II",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "bottle_3": {
+      "name": "Баллон III",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "canister": {
+      "name": "Канистра жидкости",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "gas_canister": {
+      "name": "Канистра газа",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "tool_stone": {
+      "name": "Каменный мультитул",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "pick_iron": {
+      "name": "Железная кирка",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "pick_steel": {
+      "name": "Стальная кирка",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "drill_1": {
+      "name": "Бур I",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "drill_2": {
+      "name": "Бур II",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "sword_1": {
+      "name": "Железный меч",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "sword_2": {
+      "name": "Стальной меч",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "sword_3": {
+      "name": "Велитовый меч",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "tablet": {
+      "name": "Планшет-справочник",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "repair_kit": {
+      "name": "Ремкомплект",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "station_kit": {
+      "name": "Комплект орбитальной станции",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "decor_panel": {
+      "name": "Декоративная панель",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "turret": {
+      "name": "Защитная турель",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "ammo": {
+      "name": "Боеприпасы турели",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "beacon": {
+      "name": "Навигационный маяк",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "soil_a_x4": {
+      "name": "Грунт Верданы ×4",
+      "kind": "item",
+      "stack": 64
+    },
+    "soil_a_x16": {
+      "name": "Грунт Верданы ×16",
+      "kind": "item",
+      "stack": 64
+    },
+    "soil_b_x4": {
+      "name": "Реголит Нивы ×4",
+      "kind": "item",
+      "stack": 64
+    },
+    "soil_b_x16": {
+      "name": "Реголит Нивы ×16",
+      "kind": "item",
+      "stack": 64
+    },
+    "soil_c_x4": {
+      "name": "Пепельный грунт Пирры ×4",
+      "kind": "item",
+      "stack": 64
+    },
+    "soil_c_x16": {
+      "name": "Пепельный грунт Пирры ×16",
+      "kind": "item",
+      "stack": 64
+    },
+    "soil_asteroid_x4": {
+      "name": "Астероидная крошка ×4",
+      "kind": "item",
+      "stack": 64
+    },
+    "soil_asteroid_x16": {
+      "name": "Астероидная крошка ×16",
+      "kind": "item",
+      "stack": 64
+    }
+  },
+  "recipes": [
+    {
+      "id": "grass_parts",
+      "station": "hand",
+      "inputs": {
+        "grass": 1
+      },
+      "outputs": {
+        "fiber": 2,
+        "pulp": 1
+      },
+      "seconds": 1,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "reed_fiber",
+      "station": "hand",
+      "inputs": {
+        "reed": 1
+      },
+      "outputs": {
+        "fiber": 2
+      },
+      "seconds": 1,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "pack_iron",
+      "station": "hand",
+      "inputs": {
+        "iron_speck": 4
+      },
+      "outputs": {
+        "iron_dust": 1
+      },
+      "seconds": 1,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "smelt_iron_raw",
+      "station": "kiln",
+      "inputs": {
+        "iron_raw": 1,
+        "fiber": 2
+      },
+      "outputs": {
+        "iron": 1
+      },
+      "seconds": 6,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": "Печь сжигает волокна; снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
+    },
+    {
+      "id": "arc_iron_raw",
+      "station": "arc_furnace",
+      "inputs": {
+        "iron_raw": 1
+      },
+      "outputs": {
+        "iron": 1
+      },
+      "seconds": 4,
+      "EU_per_second": 16,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "smelt_iron_dust",
+      "station": "kiln",
+      "inputs": {
+        "iron_dust": 1,
+        "fiber": 2
+      },
+      "outputs": {
+        "iron": 1
+      },
+      "seconds": 6,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": "Печь сжигает волокна; снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
+    },
+    {
+      "id": "arc_iron_dust",
+      "station": "arc_furnace",
+      "inputs": {
+        "iron_dust": 1
+      },
+      "outputs": {
+        "iron": 1
+      },
+      "seconds": 4,
+      "EU_per_second": 16,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "pack_copper",
+      "station": "hand",
+      "inputs": {
+        "copper_speck": 4
+      },
+      "outputs": {
+        "copper_dust": 1
+      },
+      "seconds": 1,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "smelt_copper_raw",
+      "station": "kiln",
+      "inputs": {
+        "copper_raw": 1,
+        "fiber": 2
+      },
+      "outputs": {
+        "copper": 1
+      },
+      "seconds": 6,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": "Печь сжигает волокна; снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
+    },
+    {
+      "id": "arc_copper_raw",
+      "station": "arc_furnace",
+      "inputs": {
+        "copper_raw": 1
+      },
+      "outputs": {
+        "copper": 1
+      },
+      "seconds": 4,
+      "EU_per_second": 16,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "smelt_copper_dust",
+      "station": "kiln",
+      "inputs": {
+        "copper_dust": 1,
+        "fiber": 2
+      },
+      "outputs": {
+        "copper": 1
+      },
+      "seconds": 6,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": "Печь сжигает волокна; снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
+    },
+    {
+      "id": "arc_copper_dust",
+      "station": "arc_furnace",
+      "inputs": {
+        "copper_dust": 1
+      },
+      "outputs": {
+        "copper": 1
+      },
+      "seconds": 4,
+      "EU_per_second": 16,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "pack_gold",
+      "station": "hand",
+      "inputs": {
+        "gold_speck": 4
+      },
+      "outputs": {
+        "gold_dust": 1
+      },
+      "seconds": 1,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "smelt_gold_raw",
+      "station": "kiln",
+      "inputs": {
+        "gold_raw": 1,
+        "fiber": 2
+      },
+      "outputs": {
+        "gold": 1
+      },
+      "seconds": 6,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": "Печь сжигает волокна; снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
+    },
+    {
+      "id": "arc_gold_raw",
+      "station": "arc_furnace",
+      "inputs": {
+        "gold_raw": 1
+      },
+      "outputs": {
+        "gold": 1
+      },
+      "seconds": 4,
+      "EU_per_second": 16,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "smelt_gold_dust",
+      "station": "kiln",
+      "inputs": {
+        "gold_dust": 1,
+        "fiber": 2
+      },
+      "outputs": {
+        "gold": 1
+      },
+      "seconds": 6,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": "Печь сжигает волокна; снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
+    },
+    {
+      "id": "arc_gold_dust",
+      "station": "arc_furnace",
+      "inputs": {
+        "gold_dust": 1
+      },
+      "outputs": {
+        "gold": 1
+      },
+      "seconds": 4,
+      "EU_per_second": 16,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "pack_velite",
+      "station": "hand",
+      "inputs": {
+        "velite_speck": 4
+      },
+      "outputs": {
+        "velite_dust": 1
+      },
+      "seconds": 1,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "smelt_velite_raw",
+      "station": "kiln",
+      "inputs": {
+        "velite_raw": 1,
+        "fiber": 2
+      },
+      "outputs": {
+        "velite": 1
+      },
+      "seconds": 6,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": "Печь сжигает волокна; снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
+    },
+    {
+      "id": "arc_velite_raw",
+      "station": "arc_furnace",
+      "inputs": {
+        "velite_raw": 1
+      },
+      "outputs": {
+        "velite": 1
+      },
+      "seconds": 4,
+      "EU_per_second": 16,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "smelt_velite_dust",
+      "station": "kiln",
+      "inputs": {
+        "velite_dust": 1,
+        "fiber": 2
+      },
+      "outputs": {
+        "velite": 1
+      },
+      "seconds": 6,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": "Печь сжигает волокна; снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
+    },
+    {
+      "id": "arc_velite_dust",
+      "station": "arc_furnace",
+      "inputs": {
+        "velite_dust": 1
+      },
+      "outputs": {
+        "velite": 1
+      },
+      "seconds": 4,
+      "EU_per_second": 16,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "pack_astrite",
+      "station": "hand",
+      "inputs": {
+        "astrite_speck": 4
+      },
+      "outputs": {
+        "astrite_dust": 1
+      },
+      "seconds": 1,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "expansion2",
+      "note": ""
+    },
+    {
+      "id": "smelt_astrite_raw",
+      "station": "kiln",
+      "inputs": {
+        "astrite_raw": 1,
+        "fiber": 2
+      },
+      "outputs": {
+        "astrite": 1
+      },
+      "seconds": 6,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "expansion2",
+      "note": "Печь сжигает волокна; снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
+    },
+    {
+      "id": "arc_astrite_raw",
+      "station": "arc_furnace",
+      "inputs": {
+        "astrite_raw": 1
+      },
+      "outputs": {
+        "astrite": 1
+      },
+      "seconds": 4,
+      "EU_per_second": 16,
+      "tech": "steel",
+      "scope": "expansion2",
+      "note": ""
+    },
+    {
+      "id": "smelt_astrite_dust",
+      "station": "kiln",
+      "inputs": {
+        "astrite_dust": 1,
+        "fiber": 2
+      },
+      "outputs": {
+        "astrite": 1
+      },
+      "seconds": 6,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "expansion2",
+      "note": "Печь сжигает волокна; снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
+    },
+    {
+      "id": "arc_astrite_dust",
+      "station": "arc_furnace",
+      "inputs": {
+        "astrite_dust": 1
+      },
+      "outputs": {
+        "astrite": 1
+      },
+      "seconds": 4,
+      "EU_per_second": 16,
+      "tech": "steel",
+      "scope": "expansion2",
+      "note": ""
+    },
+    {
+      "id": "glass",
+      "station": "kiln",
+      "inputs": {
+        "sand": 2,
+        "fiber": 2
+      },
+      "outputs": {
+        "glass": 1
+      },
+      "seconds": 6,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "charcoal",
+      "station": "kiln",
+      "inputs": {
+        "fiber": 8
+      },
+      "outputs": {
+        "carbon": 1
+      },
+      "seconds": 10,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": "Требует окислитель печи как другие операции kiln."
+    },
+    {
+      "id": "steel",
+      "station": "arc_furnace",
+      "inputs": {
+        "iron": 2,
+        "carbon": 1
+      },
+      "outputs": {
+        "steel": 2
+      },
+      "seconds": 10,
+      "EU_per_second": 20,
+      "tech": "power",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_wire",
+      "station": "workbench",
+      "inputs": {
+        "copper": 1
+      },
+      "outputs": {
+        "wire": 4
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_cloth",
+      "station": "hand",
+      "inputs": {
+        "fiber": 4
+      },
+      "outputs": {
+        "cloth": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_seal",
+      "station": "workbench",
+      "inputs": {
+        "fiber": 2,
+        "carbon": 1
+      },
+      "outputs": {
+        "seal": 2
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_motor",
+      "station": "workbench",
+      "inputs": {
+        "iron": 2,
+        "copper": 1
+      },
+      "outputs": {
+        "motor": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_circuit",
+      "station": "workbench",
+      "inputs": {
+        "iron": 1,
+        "copper": 2,
+        "glass": 1
+      },
+      "outputs": {
+        "circuit": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_circuit_adv",
+      "station": "fabricator",
+      "inputs": {
+        "circuit": 2,
+        "gold": 1,
+        "velite": 1
+      },
+      "outputs": {
+        "circuit_adv": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "velite",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_sorbent",
+      "station": "workbench",
+      "inputs": {
+        "carbon": 1,
+        "sand": 1
+      },
+      "outputs": {
+        "sorbent": 4
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_shell",
+      "station": "workbench",
+      "inputs": {
+        "fragment_a": 4
+      },
+      "outputs": {
+        "shell": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_cryo_shell",
+      "station": "workbench",
+      "inputs": {
+        "fragment_b": 4
+      },
+      "outputs": {
+        "cryo_shell": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_heat_shell",
+      "station": "workbench",
+      "inputs": {
+        "fragment_c": 4
+      },
+      "outputs": {
+        "heat_shell": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "expansion2",
+      "note": ""
+    },
+    {
+      "id": "plate_iron",
+      "station": "plate_press",
+      "inputs": {
+        "iron": 1
+      },
+      "outputs": {
+        "plate_iron": 1
+      },
+      "seconds": 3,
+      "EU_per_second": 8,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "plate_steel",
+      "station": "plate_press",
+      "inputs": {
+        "steel": 1
+      },
+      "outputs": {
+        "plate_steel": 1
+      },
+      "seconds": 3,
+      "EU_per_second": 8,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "plate_velite",
+      "station": "plate_press",
+      "inputs": {
+        "velite": 1
+      },
+      "outputs": {
+        "plate_velite": 1
+      },
+      "seconds": 3,
+      "EU_per_second": 8,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "plate_astrite",
+      "station": "plate_press",
+      "inputs": {
+        "astrite": 1
+      },
+      "outputs": {
+        "plate_astrite": 1
+      },
+      "seconds": 3,
+      "EU_per_second": 8,
+      "tech": "steel",
+      "scope": "expansion2",
+      "note": ""
+    },
+    {
+      "id": "craft_plate_iron",
+      "station": "workbench",
+      "inputs": {
+        "iron": 1
+      },
+      "outputs": {
+        "plate_iron": 1
+      },
+      "seconds": 10,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_workbench",
+      "station": "hand",
+      "inputs": {
+        "stone": 8,
+        "fiber": 4
+      },
+      "outputs": {
+        "workbench": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_kiln",
+      "station": "hand",
+      "inputs": {
+        "stone": 12,
+        "fiber": 4
+      },
+      "outputs": {
+        "kiln": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_tool_stone",
+      "station": "hand",
+      "inputs": {
+        "stone": 4,
+        "fiber": 2
+      },
+      "outputs": {
+        "tool_stone": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_biogenerator",
+      "station": "workbench",
+      "inputs": {
+        "iron": 6,
+        "copper": 2,
+        "stone": 4
+      },
+      "outputs": {
+        "biogenerator": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_electrolyzer",
+      "station": "workbench",
+      "inputs": {
+        "iron": 6,
+        "copper": 4,
+        "glass": 2
+      },
+      "outputs": {
+        "electrolyzer": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_refill",
+      "station": "workbench",
+      "inputs": {
+        "iron": 2,
+        "copper": 1
+      },
+      "outputs": {
+        "refill": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_bottle_1",
+      "station": "workbench",
+      "inputs": {
+        "iron": 2,
+        "copper": 1
+      },
+      "outputs": {
+        "bottle_1": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_distributor",
+      "station": "workbench",
+      "inputs": {
+        "iron": 4,
+        "copper": 2,
+        "circuit": 1
+      },
+      "outputs": {
+        "distributor": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_dome",
+      "station": "workbench",
+      "inputs": {
+        "iron": 8,
+        "glass": 12,
+        "fiber": 8
+      },
+      "outputs": {
+        "dome": 1
+      },
+      "seconds": 20,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_bed",
+      "station": "workbench",
+      "inputs": {
+        "iron": 2,
+        "cloth": 4
+      },
+      "outputs": {
+        "bed": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_chest",
+      "station": "workbench",
+      "inputs": {
+        "iron": 2
+      },
+      "outputs": {
+        "chest": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_lamp",
+      "station": "workbench",
+      "inputs": {
+        "iron": 1,
+        "copper": 1,
+        "glass": 1
+      },
+      "outputs": {
+        "lamp": 2
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": "Без обслуживания; условный автономный источник."
+    },
+    {
+      "id": "craft_cable",
+      "station": "workbench",
+      "inputs": {
+        "wire": 1,
+        "fiber": 1
+      },
+      "outputs": {
+        "cable": 4
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_gas_pipe",
+      "station": "workbench",
+      "inputs": {
+        "iron": 1,
+        "copper": 1
+      },
+      "outputs": {
+        "gas_pipe": 4
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_liquid_pipe",
+      "station": "workbench",
+      "inputs": {
+        "iron": 1,
+        "glass": 1
+      },
+      "outputs": {
+        "liquid_pipe": 4
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_item_link",
+      "station": "workbench",
+      "inputs": {
+        "iron": 1,
+        "motor": 1
+      },
+      "outputs": {
+        "item_link": 2
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_valve",
+      "station": "workbench",
+      "inputs": {
+        "iron": 1,
+        "copper": 1
+      },
+      "outputs": {
+        "valve": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_water_tank",
+      "station": "workbench",
+      "inputs": {
+        "iron": 4,
+        "glass": 2
+      },
+      "outputs": {
+        "water_tank": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_gas_tank",
+      "station": "workbench",
+      "inputs": {
+        "plate_iron": 4,
+        "copper": 2
+      },
+      "outputs": {
+        "gas_tank": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_canister",
+      "station": "workbench",
+      "inputs": {
+        "iron": 2
+      },
+      "outputs": {
+        "canister": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_gas_canister",
+      "station": "workbench",
+      "inputs": {
+        "iron": 2,
+        "copper": 1
+      },
+      "outputs": {
+        "gas_canister": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_arc_furnace",
+      "station": "workbench",
+      "inputs": {
+        "iron": 4,
+        "plate_iron": 4,
+        "copper": 4,
+        "circuit": 1,
+        "stone": 8
+      },
+      "outputs": {
+        "arc_furnace": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "power",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_plate_press",
+      "station": "workbench",
+      "inputs": {
+        "iron": 6,
+        "motor": 1,
+        "circuit": 1
+      },
+      "outputs": {
+        "plate_press": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "power",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_fabricator",
+      "station": "workbench",
+      "inputs": {
+        "steel": 6,
+        "circuit": 2,
+        "motor": 1
+      },
+      "outputs": {
+        "fabricator": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_spacebench",
+      "station": "fabricator",
+      "inputs": {
+        "steel": 8,
+        "iron": 8,
+        "circuit": 2
+      },
+      "outputs": {
+        "spacebench": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_solar",
+      "station": "fabricator",
+      "inputs": {
+        "steel": 2,
+        "copper": 4,
+        "glass": 4,
+        "circuit": 1
+      },
+      "outputs": {
+        "solar": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_battery",
+      "station": "fabricator",
+      "inputs": {
+        "iron": 4,
+        "copper": 4,
+        "carbon": 2
+      },
+      "outputs": {
+        "battery": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_solar_adv",
+      "station": "fabricator",
+      "inputs": {
+        "solar": 1,
+        "velite": 4,
+        "circuit_adv": 1
+      },
+      "outputs": {
+        "solar_adv": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "velite",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_battery_adv",
+      "station": "fabricator",
+      "inputs": {
+        "battery": 1,
+        "velite": 4,
+        "circuit_adv": 1
+      },
+      "outputs": {
+        "battery_adv": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "velite",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_room",
+      "station": "workbench",
+      "inputs": {
+        "iron": 8,
+        "glass": 4
+      },
+      "outputs": {
+        "room": 1
+      },
+      "seconds": 20,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_bulkhead",
+      "station": "workbench",
+      "inputs": {
+        "iron": 2,
+        "seal": 1
+      },
+      "outputs": {
+        "bulkhead": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_airlock",
+      "station": "workbench",
+      "inputs": {
+        "iron": 4,
+        "motor": 1,
+        "seal": 2
+      },
+      "outputs": {
+        "airlock": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_wall",
+      "station": "workbench",
+      "inputs": {
+        "iron": 1
+      },
+      "outputs": {
+        "wall": 4
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_floor",
+      "station": "workbench",
+      "inputs": {
+        "iron": 1
+      },
+      "outputs": {
+        "floor": 4
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_window",
+      "station": "workbench",
+      "inputs": {
+        "glass": 1,
+        "iron": 1
+      },
+      "outputs": {
+        "window": 4
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_vent",
+      "station": "workbench",
+      "inputs": {
+        "iron": 1
+      },
+      "outputs": {
+        "vent": 2
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_growlight",
+      "station": "fabricator",
+      "inputs": {
+        "iron": 2,
+        "copper": 2,
+        "glass": 2,
+        "circuit": 1
+      },
+      "outputs": {
+        "growlight": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_autofill",
+      "station": "fabricator",
+      "inputs": {
+        "steel": 2,
+        "circuit": 2,
+        "motor": 1
+      },
+      "outputs": {
+        "autofill": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_climate_cold",
+      "station": "fabricator",
+      "inputs": {
+        "steel": 4,
+        "cloth": 4,
+        "circuit": 1
+      },
+      "outputs": {
+        "climate_cold": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_climate_heat",
+      "station": "fabricator",
+      "inputs": {
+        "astrite": 4,
+        "circuit_adv": 2,
+        "heat_shell": 1
+      },
+      "outputs": {
+        "climate_heat": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "pyra",
+      "scope": "expansion2",
+      "note": ""
+    },
+    {
+      "id": "craft_pump",
+      "station": "fabricator",
+      "inputs": {
+        "steel": 2,
+        "copper": 2,
+        "motor": 1
+      },
+      "outputs": {
+        "pump": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_mesh_fiber",
+      "station": "hand",
+      "inputs": {
+        "fiber": 4
+      },
+      "outputs": {
+        "mesh_fiber": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_mesh_iron",
+      "station": "workbench",
+      "inputs": {
+        "iron": 2,
+        "fiber": 2
+      },
+      "outputs": {
+        "mesh_iron": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_mesh_steel",
+      "station": "fabricator",
+      "inputs": {
+        "steel": 2,
+        "wire": 2
+      },
+      "outputs": {
+        "mesh_steel": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_mesh_velite",
+      "station": "fabricator",
+      "inputs": {
+        "velite": 2,
+        "gold": 1,
+        "wire": 2
+      },
+      "outputs": {
+        "mesh_velite": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "velite",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_sieve_hand",
+      "station": "hand",
+      "inputs": {
+        "fiber": 4,
+        "stone": 2
+      },
+      "outputs": {
+        "sieve_hand": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": "Сетка отдельная, корпус не включает её."
+    },
+    {
+      "id": "craft_sieve_frame",
+      "station": "workbench",
+      "inputs": {
+        "sieve_hand": 1,
+        "iron": 2,
+        "fiber": 4
+      },
+      "outputs": {
+        "sieve_frame": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": "Перед улучшением вынуть сетку, она сохраняется."
+    },
+    {
+      "id": "craft_sieve_electric",
+      "station": "fabricator",
+      "inputs": {
+        "sieve_frame": 1,
+        "steel": 2,
+        "motor": 1,
+        "circuit": 1
+      },
+      "outputs": {
+        "sieve_electric": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_sieve_auto",
+      "station": "fabricator",
+      "inputs": {
+        "sieve_electric": 1,
+        "velite": 4,
+        "circuit_adv": 1
+      },
+      "outputs": {
+        "sieve_auto": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "velite",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_soil_press",
+      "station": "fabricator",
+      "inputs": {
+        "steel": 4,
+        "motor": 2,
+        "circuit": 1
+      },
+      "outputs": {
+        "soil_press": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "compress_soil_a_4",
+      "station": "soil_press",
+      "inputs": {
+        "soil_a": 4
+      },
+      "outputs": {
+        "soil_a_x4": 1
+      },
+      "seconds": 2,
+      "EU_per_second": 12,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "unpack_soil_a_4",
+      "station": "hand",
+      "inputs": {
+        "soil_a_x4": 1
+      },
+      "outputs": {
+        "soil_a": 4
+      },
+      "seconds": 1,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "compress_soil_a_16",
+      "station": "soil_press",
+      "inputs": {
+        "soil_a": 16
+      },
+      "outputs": {
+        "soil_a_x16": 1
+      },
+      "seconds": 6,
+      "EU_per_second": 12,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "unpack_soil_a_16",
+      "station": "hand",
+      "inputs": {
+        "soil_a_x16": 1
+      },
+      "outputs": {
+        "soil_a": 16
+      },
+      "seconds": 1,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "compress_soil_b_4",
+      "station": "soil_press",
+      "inputs": {
+        "soil_b": 4
+      },
+      "outputs": {
+        "soil_b_x4": 1
+      },
+      "seconds": 2,
+      "EU_per_second": 12,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "unpack_soil_b_4",
+      "station": "hand",
+      "inputs": {
+        "soil_b_x4": 1
+      },
+      "outputs": {
+        "soil_b": 4
+      },
+      "seconds": 1,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "compress_soil_b_16",
+      "station": "soil_press",
+      "inputs": {
+        "soil_b": 16
+      },
+      "outputs": {
+        "soil_b_x16": 1
+      },
+      "seconds": 6,
+      "EU_per_second": 12,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "unpack_soil_b_16",
+      "station": "hand",
+      "inputs": {
+        "soil_b_x16": 1
+      },
+      "outputs": {
+        "soil_b": 16
+      },
+      "seconds": 1,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "compress_soil_c_4",
+      "station": "soil_press",
+      "inputs": {
+        "soil_c": 4
+      },
+      "outputs": {
+        "soil_c_x4": 1
+      },
+      "seconds": 2,
+      "EU_per_second": 12,
+      "tech": "steel",
+      "scope": "expansion2",
+      "note": ""
+    },
+    {
+      "id": "unpack_soil_c_4",
+      "station": "hand",
+      "inputs": {
+        "soil_c_x4": 1
+      },
+      "outputs": {
+        "soil_c": 4
+      },
+      "seconds": 1,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "expansion2",
+      "note": ""
+    },
+    {
+      "id": "compress_soil_c_16",
+      "station": "soil_press",
+      "inputs": {
+        "soil_c": 16
+      },
+      "outputs": {
+        "soil_c_x16": 1
+      },
+      "seconds": 6,
+      "EU_per_second": 12,
+      "tech": "steel",
+      "scope": "expansion2",
+      "note": ""
+    },
+    {
+      "id": "unpack_soil_c_16",
+      "station": "hand",
+      "inputs": {
+        "soil_c_x16": 1
+      },
+      "outputs": {
+        "soil_c": 16
+      },
+      "seconds": 1,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "expansion2",
+      "note": ""
+    },
+    {
+      "id": "compress_soil_asteroid_4",
+      "station": "soil_press",
+      "inputs": {
+        "soil_asteroid": 4
+      },
+      "outputs": {
+        "soil_asteroid_x4": 1
+      },
+      "seconds": 2,
+      "EU_per_second": 12,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "unpack_soil_asteroid_4",
+      "station": "hand",
+      "inputs": {
+        "soil_asteroid_x4": 1
+      },
+      "outputs": {
+        "soil_asteroid": 4
+      },
+      "seconds": 1,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "compress_soil_asteroid_16",
+      "station": "soil_press",
+      "inputs": {
+        "soil_asteroid": 16
+      },
+      "outputs": {
+        "soil_asteroid_x16": 1
+      },
+      "seconds": 6,
+      "EU_per_second": 12,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "unpack_soil_asteroid_16",
+      "station": "hand",
+      "inputs": {
+        "soil_asteroid_x16": 1
+      },
+      "outputs": {
+        "soil_asteroid": 16
+      },
+      "seconds": 1,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_extractor",
+      "station": "fabricator",
+      "inputs": {
+        "steel": 8,
+        "velite": 8,
+        "motor": 2,
+        "circuit_adv": 2
+      },
+      "outputs": {
+        "extractor": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "velite",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_composter",
+      "station": "workbench",
+      "inputs": {
+        "stone": 4,
+        "fiber": 4
+      },
+      "outputs": {
+        "composter": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_composter_sealed",
+      "station": "fabricator",
+      "inputs": {
+        "composter": 1,
+        "steel": 2,
+        "seal": 2,
+        "circuit": 1
+      },
+      "outputs": {
+        "composter_sealed": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_bed_crop",
+      "station": "workbench",
+      "inputs": {
+        "iron": 2,
+        "soil_a": 4
+      },
+      "outputs": {
+        "bed_crop": 2
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": "",
+      "inputAlternatives": {
+        "soil_a": [
+          "soil_a",
+          "soil_b",
+          "soil_c"
+        ]
+      }
+    },
+    {
+      "id": "craft_farm_arm",
+      "station": "fabricator",
+      "inputs": {
+        "steel": 4,
+        "velite": 2,
+        "motor": 2,
+        "circuit_adv": 1
+      },
+      "outputs": {
+        "farm_arm": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "velite",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_water_recovery",
+      "station": "fabricator",
+      "inputs": {
+        "steel": 4,
+        "velite": 4,
+        "glass": 2,
+        "circuit_adv": 1
+      },
+      "outputs": {
+        "water_recovery": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "velite",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "compost_pulp",
+      "station": "composter",
+      "inputs": {
+        "pulp": 4
+      },
+      "outputs": {
+        "compost": 1
+      },
+      "seconds": 45,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "sealed_compost_pulp",
+      "station": "composter_sealed",
+      "inputs": {
+        "pulp": 4
+      },
+      "outputs": {
+        "compost": 1
+      },
+      "seconds": 30,
+      "EU_per_second": 4,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "compost_grass",
+      "station": "composter",
+      "inputs": {
+        "grass": 4
+      },
+      "outputs": {
+        "compost": 1
+      },
+      "seconds": 45,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "sealed_compost_grass",
+      "station": "composter_sealed",
+      "inputs": {
+        "grass": 4
+      },
+      "outputs": {
+        "compost": 1
+      },
+      "seconds": 30,
+      "EU_per_second": 4,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "compost_fiber",
+      "station": "composter",
+      "inputs": {
+        "fiber": 8
+      },
+      "outputs": {
+        "compost": 1
+      },
+      "seconds": 45,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "sealed_compost_fiber",
+      "station": "composter_sealed",
+      "inputs": {
+        "fiber": 8
+      },
+      "outputs": {
+        "compost": 1
+      },
+      "seconds": 30,
+      "EU_per_second": 4,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "compost_seed_reed",
+      "station": "composter",
+      "inputs": {
+        "seed_reed": 4
+      },
+      "outputs": {
+        "compost": 1
+      },
+      "seconds": 45,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "sealed_compost_seed_reed",
+      "station": "composter_sealed",
+      "inputs": {
+        "seed_reed": 4
+      },
+      "outputs": {
+        "compost": 1
+      },
+      "seconds": 30,
+      "EU_per_second": 4,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "compost_seed_tuber",
+      "station": "composter",
+      "inputs": {
+        "seed_tuber": 4
+      },
+      "outputs": {
+        "compost": 1
+      },
+      "seconds": 45,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "sealed_compost_seed_tuber",
+      "station": "composter_sealed",
+      "inputs": {
+        "seed_tuber": 4
+      },
+      "outputs": {
+        "compost": 1
+      },
+      "seconds": 30,
+      "EU_per_second": 4,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "compost_seed_bean",
+      "station": "composter",
+      "inputs": {
+        "seed_bean": 4
+      },
+      "outputs": {
+        "compost": 1
+      },
+      "seconds": 45,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "sealed_compost_seed_bean",
+      "station": "composter_sealed",
+      "inputs": {
+        "seed_bean": 4
+      },
+      "outputs": {
+        "compost": 1
+      },
+      "seconds": 30,
+      "EU_per_second": 4,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "compost_seed_tree",
+      "station": "composter",
+      "inputs": {
+        "seed_tree": 4
+      },
+      "outputs": {
+        "compost": 1
+      },
+      "seconds": 45,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "sealed_compost_seed_tree",
+      "station": "composter_sealed",
+      "inputs": {
+        "seed_tree": 4
+      },
+      "outputs": {
+        "compost": 1
+      },
+      "seconds": 30,
+      "EU_per_second": 4,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "compost_seed_potato",
+      "station": "composter",
+      "inputs": {
+        "seed_potato": 4
+      },
+      "outputs": {
+        "compost": 1
+      },
+      "seconds": 45,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "sealed_compost_seed_potato",
+      "station": "composter_sealed",
+      "inputs": {
+        "seed_potato": 4
+      },
+      "outputs": {
+        "compost": 1
+      },
+      "seconds": 30,
+      "EU_per_second": 4,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "compost_tuber",
+      "station": "composter",
+      "inputs": {
+        "tuber": 4
+      },
+      "outputs": {
+        "compost": 1
+      },
+      "seconds": 45,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "sealed_compost_tuber",
+      "station": "composter_sealed",
+      "inputs": {
+        "tuber": 4
+      },
+      "outputs": {
+        "compost": 1
+      },
+      "seconds": 30,
+      "EU_per_second": 4,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "compost_beans",
+      "station": "composter",
+      "inputs": {
+        "beans": 4
+      },
+      "outputs": {
+        "compost": 1
+      },
+      "seconds": 45,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "sealed_compost_beans",
+      "station": "composter_sealed",
+      "inputs": {
+        "beans": 4
+      },
+      "outputs": {
+        "compost": 1
+      },
+      "seconds": 30,
+      "EU_per_second": 4,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "compost_potato",
+      "station": "composter",
+      "inputs": {
+        "potato": 4
+      },
+      "outputs": {
+        "compost": 1
+      },
+      "seconds": 45,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "sealed_compost_potato",
+      "station": "composter_sealed",
+      "inputs": {
+        "potato": 4
+      },
+      "outputs": {
+        "compost": 1
+      },
+      "seconds": 30,
+      "EU_per_second": 4,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "compost_biomass",
+      "station": "composter",
+      "inputs": {
+        "biomass": 4
+      },
+      "outputs": {
+        "compost": 1
+      },
+      "seconds": 45,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "sealed_compost_biomass",
+      "station": "composter_sealed",
+      "inputs": {
+        "biomass": 4
+      },
+      "outputs": {
+        "compost": 1
+      },
+      "seconds": 30,
+      "EU_per_second": 4,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "compost_reed",
+      "station": "composter",
+      "inputs": {
+        "reed": 4
+      },
+      "outputs": {
+        "compost": 1
+      },
+      "seconds": 45,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "sealed_compost_reed",
+      "station": "composter_sealed",
+      "inputs": {
+        "reed": 4
+      },
+      "outputs": {
+        "compost": 1
+      },
+      "seconds": 30,
+      "EU_per_second": 4,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_fertilizer",
+      "station": "workbench",
+      "inputs": {
+        "compost": 1,
+        "sand": 1
+      },
+      "outputs": {
+        "fertilizer": 2
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_fertile_soil",
+      "station": "workbench",
+      "inputs": {
+        "soil_a": 4,
+        "compost": 1
+      },
+      "outputs": {
+        "fertile_soil": 4
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": "Искусственный грунт не просеивается.",
+      "inputAlternatives": {
+        "soil_a": [
+          "soil_a",
+          "soil_b",
+          "soil_c"
+        ]
+      }
+    },
+    {
+      "id": "cook_tuber",
+      "station": "kiln",
+      "inputs": {
+        "tuber": 1,
+        "fiber": 1
+      },
+      "outputs": {
+        "meal": 1
+      },
+      "seconds": 4,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "cook_potato",
+      "station": "kiln",
+      "inputs": {
+        "potato": 1,
+        "fiber": 1
+      },
+      "outputs": {
+        "meal": 1
+      },
+      "seconds": 4,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_ration",
+      "station": "workbench",
+      "inputs": {
+        "meal": 1,
+        "beans": 1
+      },
+      "outputs": {
+        "ration": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_algae",
+      "station": "workbench",
+      "inputs": {
+        "seed_reed": 1,
+        "compost": 1,
+        "water": 2
+      },
+      "outputs": {
+        "algae": 1
+      },
+      "seconds": 15,
+      "EU_per_second": 0,
+      "tech": "habitat",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "recover_reed",
+      "station": "water_recovery",
+      "inputs": {
+        "reed": 1
+      },
+      "outputs": {
+        "water": 1,
+        "fiber": 1
+      },
+      "seconds": 10,
+      "EU_per_second": 15,
+      "tech": "velite",
+      "scope": "core",
+      "note": "Выход меньше водного вложения соответствующего выращивания; не бесконечная вода из сухих семян."
+    },
+    {
+      "id": "recover_biomass",
+      "station": "water_recovery",
+      "inputs": {
+        "biomass": 1
+      },
+      "outputs": {
+        "water": 1,
+        "fiber": 1
+      },
+      "seconds": 10,
+      "EU_per_second": 15,
+      "tech": "velite",
+      "scope": "core",
+      "note": "Выход меньше водного вложения соответствующего выращивания; не бесконечная вода из сухих семян."
+    },
+    {
+      "id": "recover_seed_reed",
+      "station": "water_recovery",
+      "inputs": {
+        "seed_reed": 8
+      },
+      "outputs": {
+        "water": 1,
+        "fiber": 1
+      },
+      "seconds": 10,
+      "EU_per_second": 15,
+      "tech": "velite",
+      "scope": "core",
+      "note": "Выход меньше водного вложения соответствующего выращивания; не бесконечная вода из сухих семян."
+    },
+    {
+      "id": "recover_seed_tuber",
+      "station": "water_recovery",
+      "inputs": {
+        "seed_tuber": 8
+      },
+      "outputs": {
+        "water": 1,
+        "fiber": 1
+      },
+      "seconds": 10,
+      "EU_per_second": 15,
+      "tech": "velite",
+      "scope": "core",
+      "note": "Выход меньше водного вложения соответствующего выращивания; не бесконечная вода из сухих семян."
+    },
+    {
+      "id": "recover_seed_bean",
+      "station": "water_recovery",
+      "inputs": {
+        "seed_bean": 8
+      },
+      "outputs": {
+        "water": 1,
+        "fiber": 1
+      },
+      "seconds": 10,
+      "EU_per_second": 15,
+      "tech": "velite",
+      "scope": "core",
+      "note": "Выход меньше водного вложения соответствующего выращивания; не бесконечная вода из сухих семян."
+    },
+    {
+      "id": "recover_seed_tree",
+      "station": "water_recovery",
+      "inputs": {
+        "seed_tree": 8
+      },
+      "outputs": {
+        "water": 1,
+        "fiber": 1
+      },
+      "seconds": 10,
+      "EU_per_second": 15,
+      "tech": "velite",
+      "scope": "core",
+      "note": "Выход меньше водного вложения соответствующего выращивания; не бесконечная вода из сухих семян."
+    },
+    {
+      "id": "recover_seed_potato",
+      "station": "water_recovery",
+      "inputs": {
+        "seed_potato": 8
+      },
+      "outputs": {
+        "water": 1,
+        "fiber": 1
+      },
+      "seconds": 10,
+      "EU_per_second": 15,
+      "tech": "velite",
+      "scope": "core",
+      "note": "Выход меньше водного вложения соответствующего выращивания; не бесконечная вода из сухих семян."
+    },
+    {
+      "id": "craft_cleaner",
+      "station": "fabricator",
+      "inputs": {
+        "iron": 8,
+        "copper": 4,
+        "circuit": 1
+      },
+      "outputs": {
+        "cleaner": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_gas_extractor",
+      "station": "fabricator",
+      "inputs": {
+        "iron": 10,
+        "copper": 4,
+        "motor": 2
+      },
+      "outputs": {
+        "gas_extractor": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_greenhouse",
+      "station": "fabricator",
+      "inputs": {
+        "iron": 8,
+        "copper": 6,
+        "circuit": 1
+      },
+      "outputs": {
+        "greenhouse": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_ice_melter",
+      "station": "fabricator",
+      "inputs": {
+        "iron": 6,
+        "copper": 4
+      },
+      "outputs": {
+        "ice_melter": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_basin_intake",
+      "station": "fabricator",
+      "inputs": {
+        "iron": 4,
+        "copper": 2,
+        "motor": 1
+      },
+      "outputs": {
+        "basin_intake": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_bioreactor",
+      "station": "fabricator",
+      "inputs": {
+        "iron": 8,
+        "copper": 6,
+        "glass": 4,
+        "circuit": 1
+      },
+      "outputs": {
+        "bioreactor": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_spreader",
+      "station": "fabricator",
+      "inputs": {
+        "iron": 6,
+        "copper": 4,
+        "motor": 1
+      },
+      "outputs": {
+        "spreader": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_cleaner_adv",
+      "station": "fabricator",
+      "inputs": {
+        "cleaner": 1,
+        "velite": 4,
+        "circuit_adv": 1
+      },
+      "outputs": {
+        "cleaner_adv": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "velite",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_gas_extractor_adv",
+      "station": "fabricator",
+      "inputs": {
+        "gas_extractor": 1,
+        "velite": 4,
+        "circuit_adv": 1
+      },
+      "outputs": {
+        "gas_extractor_adv": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "velite",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_cooler",
+      "station": "fabricator",
+      "inputs": {
+        "steel": 6,
+        "astrite": 4,
+        "glass": 6,
+        "circuit_adv": 2
+      },
+      "outputs": {
+        "cooler": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "pyra",
+      "scope": "expansion2",
+      "note": ""
+    },
+    {
+      "id": "craft_refinery",
+      "station": "fabricator",
+      "inputs": {
+        "steel": 6,
+        "iron": 4,
+        "motor": 1,
+        "circuit": 1
+      },
+      "outputs": {
+        "refinery": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_oil_pump",
+      "station": "fabricator",
+      "inputs": {
+        "steel": 4,
+        "motor": 1,
+        "copper": 2
+      },
+      "outputs": {
+        "oil_pump": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_oil_generator",
+      "station": "fabricator",
+      "inputs": {
+        "steel": 6,
+        "motor": 2,
+        "circuit": 1
+      },
+      "outputs": {
+        "oil_generator": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_hydrogen_collector",
+      "station": "fabricator",
+      "inputs": {
+        "steel": 4,
+        "velite": 4,
+        "gas_tank": 1,
+        "circuit_adv": 1
+      },
+      "outputs": {
+        "hydrogen_collector": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "velite",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "electrolysis",
+      "station": "electrolyzer",
+      "inputs": {
+        "water": 1
+      },
+      "outputs": {
+        "oxygen": 240,
+        "hydrogen": 480
+      },
+      "seconds": 10,
+      "EU_per_second": 12,
+      "tech": "power",
+      "scope": "core",
+      "note": "H₂ автоматически сбрасывается до установки модуля сбора; воду и газы учитывать разными игровыми единицами."
+    },
+    {
+      "id": "melt_in_generator",
+      "station": "electrolyzer",
+      "inputs": {
+        "ice": 1
+      },
+      "outputs": {
+        "water": 1
+      },
+      "seconds": 2,
+      "EU_per_second": 6,
+      "tech": "power",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "melt_bulk",
+      "station": "ice_melter",
+      "inputs": {
+        "ice": 4
+      },
+      "outputs": {
+        "water": 4
+      },
+      "seconds": 4,
+      "EU_per_second": 20,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "extract_co2",
+      "station": "gas_extractor",
+      "inputs": {
+        "carbonate": 1
+      },
+      "outputs": {
+        "co2": 40,
+        "mineral_residue": 1
+      },
+      "seconds": 10,
+      "EU_per_second": 30,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "extract_buffer",
+      "station": "gas_extractor",
+      "inputs": {
+        "volatile_rock": 1
+      },
+      "outputs": {
+        "buffer_gas": 40,
+        "mineral_residue": 1
+      },
+      "seconds": 10,
+      "EU_per_second": 30,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "extract_co2_adv",
+      "station": "gas_extractor_adv",
+      "inputs": {
+        "carbonate": 1
+      },
+      "outputs": {
+        "co2": 40,
+        "mineral_residue": 1
+      },
+      "seconds": 5,
+      "EU_per_second": 45,
+      "tech": "velite",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "extract_buffer_adv",
+      "station": "gas_extractor_adv",
+      "inputs": {
+        "volatile_rock": 1
+      },
+      "outputs": {
+        "buffer_gas": 40,
+        "mineral_residue": 1
+      },
+      "seconds": 5,
+      "EU_per_second": 45,
+      "tech": "velite",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "photosynthesis",
+      "station": "bioreactor",
+      "inputs": {
+        "co2": 40,
+        "water": 1,
+        "fertilizer": 1
+      },
+      "outputs": {
+        "oxygen": 40,
+        "biomass": 1
+      },
+      "seconds": 20,
+      "EU_per_second": 20,
+      "tech": "steel",
+      "scope": "core",
+      "note": "Культура algae установлена как катализатор; освещение встроено в потребление. Режим баллонов/атмосферы выбирается явно, выпуск не дублирует продукт."
+    },
+    {
+      "id": "refine_oil",
+      "station": "refinery",
+      "inputs": {
+        "oil": 2
+      },
+      "outputs": {
+        "fuel": 2
+      },
+      "seconds": 5,
+      "EU_per_second": 16,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "extract_oil_rock",
+      "station": "refinery",
+      "inputs": {
+        "hydrocarbon_rock": 1
+      },
+      "outputs": {
+        "oil": 4,
+        "mineral_residue": 1
+      },
+      "seconds": 10,
+      "EU_per_second": 20,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_landing_pad",
+      "station": "spacebench",
+      "inputs": {
+        "plate_steel": 6,
+        "iron": 6
+      },
+      "outputs": {
+        "landing_pad": 1
+      },
+      "seconds": 20,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_rocket_1",
+      "station": "spacebench",
+      "inputs": {
+        "plate_steel": 48,
+        "iron": 24,
+        "copper": 12,
+        "circuit": 6,
+        "motor": 4,
+        "seal": 8
+      },
+      "outputs": {
+        "rocket_1": 1
+      },
+      "seconds": 120,
+      "EU_per_second": 0,
+      "tech": "flight",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_rocket_2",
+      "station": "spacebench",
+      "inputs": {
+        "rocket_1": 1,
+        "plate_velite": 24,
+        "steel": 16,
+        "circuit_adv": 4,
+        "motor": 4
+      },
+      "outputs": {
+        "rocket_2": 1
+      },
+      "seconds": 120,
+      "EU_per_second": 0,
+      "tech": "velite",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_rocket_3",
+      "station": "spacebench",
+      "inputs": {
+        "rocket_2": 1,
+        "plate_astrite": 24,
+        "velite": 12,
+        "circuit_adv": 6,
+        "seal": 8
+      },
+      "outputs": {
+        "rocket_3": 1
+      },
+      "seconds": 180,
+      "EU_per_second": 0,
+      "tech": "hydrogen",
+      "scope": "expansion2",
+      "note": ""
+    },
+    {
+      "id": "craft_rover",
+      "station": "spacebench",
+      "inputs": {
+        "steel": 12,
+        "motor": 2,
+        "circuit": 2,
+        "seal": 4
+      },
+      "outputs": {
+        "rover": 1
+      },
+      "seconds": 30,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_trailer",
+      "station": "spacebench",
+      "inputs": {
+        "steel": 6,
+        "iron": 4
+      },
+      "outputs": {
+        "trailer": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_jetpack_1",
+      "station": "fabricator",
+      "inputs": {
+        "velite": 6,
+        "steel": 4,
+        "motor": 2,
+        "circuit_adv": 1,
+        "gas_tank": 1
+      },
+      "outputs": {
+        "jetpack_1": 1
+      },
+      "seconds": 25,
+      "EU_per_second": 0,
+      "tech": "velite",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_jetpack_2",
+      "station": "fabricator",
+      "inputs": {
+        "jetpack_1": 1,
+        "velite": 8,
+        "circuit_adv": 2,
+        "cryo_shell": 1
+      },
+      "outputs": {
+        "jetpack_2": 1
+      },
+      "seconds": 30,
+      "EU_per_second": 0,
+      "tech": "velite",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_grapple",
+      "station": "workbench",
+      "inputs": {
+        "iron": 4,
+        "fiber": 12,
+        "motor": 1
+      },
+      "outputs": {
+        "grapple": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "power",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_claws",
+      "station": "fabricator",
+      "inputs": {
+        "steel": 4,
+        "shell": 1
+      },
+      "outputs": {
+        "claws": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_suit",
+      "station": "workbench",
+      "inputs": {
+        "iron": 6,
+        "cloth": 4,
+        "seal": 2
+      },
+      "outputs": {
+        "suit": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_underwear_1",
+      "station": "workbench",
+      "inputs": {
+        "cloth": 6,
+        "fiber": 4
+      },
+      "outputs": {
+        "underwear_1": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_underwear_2",
+      "station": "fabricator",
+      "inputs": {
+        "underwear_1": 1,
+        "cloth": 4,
+        "cryo_shell": 1
+      },
+      "outputs": {
+        "underwear_2": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "velite",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_suit_pressure",
+      "station": "fabricator",
+      "inputs": {
+        "suit": 1,
+        "steel": 4,
+        "velite": 4,
+        "shell": 1
+      },
+      "outputs": {
+        "suit_pressure": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "velite",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_suit_heat",
+      "station": "fabricator",
+      "inputs": {
+        "suit": 1,
+        "steel": 4,
+        "velite": 4,
+        "cryo_shell": 1
+      },
+      "outputs": {
+        "suit_heat": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "velite",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_suit_combined",
+      "station": "fabricator",
+      "inputs": {
+        "suit_pressure": 1,
+        "suit_heat": 1
+      },
+      "outputs": {
+        "suit_combined": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "velite",
+      "scope": "core",
+      "note": "Потребляет два костюма; возвращает установленные баллоны/когти в инвентарь, свойства объединяет. Цена одинакова в любом порядке."
+    },
+    {
+      "id": "craft_bottle_2",
+      "station": "fabricator",
+      "inputs": {
+        "bottle_1": 1,
+        "steel": 2,
+        "seal": 1
+      },
+      "outputs": {
+        "bottle_2": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_bottle_3",
+      "station": "fabricator",
+      "inputs": {
+        "bottle_2": 1,
+        "velite": 2,
+        "seal": 1
+      },
+      "outputs": {
+        "bottle_3": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "velite",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_pick_iron",
+      "station": "workbench",
+      "inputs": {
+        "iron": 3,
+        "fiber": 2
+      },
+      "outputs": {
+        "pick_iron": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_pick_steel",
+      "station": "workbench",
+      "inputs": {
+        "steel": 3,
+        "fiber": 2
+      },
+      "outputs": {
+        "pick_steel": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_drill_1",
+      "station": "fabricator",
+      "inputs": {
+        "velite": 4,
+        "steel": 4,
+        "motor": 2,
+        "circuit_adv": 1
+      },
+      "outputs": {
+        "drill_1": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "velite",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_drill_2",
+      "station": "fabricator",
+      "inputs": {
+        "drill_1": 1,
+        "velite": 6,
+        "circuit_adv": 2
+      },
+      "outputs": {
+        "drill_2": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "velite",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_sword_1",
+      "station": "workbench",
+      "inputs": {
+        "iron": 3,
+        "fiber": 2
+      },
+      "outputs": {
+        "sword_1": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_sword_2",
+      "station": "fabricator",
+      "inputs": {
+        "steel": 3,
+        "shell": 1
+      },
+      "outputs": {
+        "sword_2": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_sword_3",
+      "station": "fabricator",
+      "inputs": {
+        "velite": 3,
+        "cryo_shell": 1,
+        "steel": 2
+      },
+      "outputs": {
+        "sword_3": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "velite",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_repair_kit",
+      "station": "workbench",
+      "inputs": {
+        "iron": 1,
+        "fiber": 2
+      },
+      "outputs": {
+        "repair_kit": 2
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_tablet",
+      "station": "workbench",
+      "inputs": {
+        "iron": 1,
+        "copper": 1,
+        "glass": 1
+      },
+      "outputs": {
+        "tablet": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": "Первая ачивка выдаёт первый экземпляр; рецепт для замены потерянного."
+    },
+    {
+      "id": "craft_beacon",
+      "station": "workbench",
+      "inputs": {
+        "iron": 2,
+        "copper": 1,
+        "glass": 1
+      },
+      "outputs": {
+        "beacon": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "power",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_station_kit",
+      "station": "spacebench",
+      "inputs": {
+        "plate_steel": 64,
+        "iron": 32,
+        "velite": 24,
+        "glass": 16,
+        "solar": 4,
+        "battery": 2,
+        "landing_pad": 1,
+        "chest": 1
+      },
+      "outputs": {
+        "station_kit": 1
+      },
+      "seconds": 180,
+      "EU_per_second": 0,
+      "tech": "station",
+      "scope": "expansion1",
+      "note": "При создании списывается комплект из инвентаря персонажа. Содержит перечисленные установленные панели/батареи/площадку/сундук, без скрытого удвоения."
+    },
+    {
+      "id": "craft_decor_panel",
+      "station": "workbench",
+      "inputs": {
+        "wood": 1,
+        "iron": 1
+      },
+      "outputs": {
+        "decor_panel": 4
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "expansion1",
+      "note": ""
+    },
+    {
+      "id": "craft_turret",
+      "station": "fabricator",
+      "inputs": {
+        "velite": 8,
+        "astrite": 4,
+        "motor": 2,
+        "circuit_adv": 2
+      },
+      "outputs": {
+        "turret": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "pyra",
+      "scope": "expansion2",
+      "note": ""
+    },
+    {
+      "id": "craft_ammo",
+      "station": "fabricator",
+      "inputs": {
+        "iron": 1,
+        "carbon": 1
+      },
+      "outputs": {
+        "ammo": 20
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "expansion2",
+      "note": ""
+    },
+    {
+      "id": "regenerate_sorbent",
+      "station": "arc_furnace",
+      "inputs": {
+        "spent_sorbent": 4,
+        "carbon": 1
+      },
+      "outputs": {
+        "sorbent": 2,
+        "mineral_residue": 2
+      },
+      "seconds": 20,
+      "EU_per_second": 20,
+      "tech": "steel",
+      "scope": "core",
+      "note": ""
+    }
+  ]
+}
