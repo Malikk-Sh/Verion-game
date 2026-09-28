@@ -1,0 +1,28 @@
+{
+  "version": "A1",
+  "date": "2026-09-28",
+  "kind": "concept_art_not_game_capture",
+  "images": [
+    {
+      "path": "images/verdana-a1-day.png",
+      "width": 1672,
+      "height": 941,
+      "bytes": 2276988,
+      "sha256": "6b2a36f7161cccc1661fec2bc04e31e7efedf7e672b74fd64f363bbe2ff60369"
+    },
+    {
+      "path": "images/verdana-a1-night.png",
+      "width": 1672,
+      "height": 941,
+      "bytes": 2018418,
+      "sha256": "aece2d50f940d7753e1bca967e23c04d16b131ef40203387a1c8de2876250dd5"
+    },
+    {
+      "path": "images/verdana-a1-base.png",
+      "width": 1672,
+      "height": 941,
+      "bytes": 2202859,
+      "sha256": "55e64f926e290601cfc43e0fc9e8cfc2e178235155586b1cec66f32f35b5e0e7"
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="560" viewBox="0 0 1120 560" role="img" aria-labelledby="title desc">
+<title id="title">Вердана — палитра A1</title>
+<desc id="desc">Десять цветовых образцов для окружения и человеческой базы, с точными кодами HEX.</desc>
+<rect width="1120" height="560" fill="#171D23"/>
+<g font-family="DejaVu Sans, sans-serif">
+<text x="40" y="53" fill="#E5E8E5" font-size="27" font-weight="bold">ВЕРДАНА / ПАЛИТРА A1</text>
+<text x="40" y="84" fill="#ABB5BF" font-size="15">Материалы и цветовые ориентиры • sRGB • 28.09.2026</text>
+<rect x="40" y="118" width="192" height="100" rx="6" fill="#343A3D" stroke="#77818B" stroke-width="1"/>
+<text x="40" y="244" fill="#E5E8E5" font-size="16">Графит</text>
+<text x="40" y="268" fill="#ABB5BF" font-size="15">#343A3D</text>
+<rect x="252" y="118" width="192" height="100" rx="6" fill="#9B8063" stroke="#77818B" stroke-width="1"/>
+<text x="252" y="244" fill="#E5E8E5" font-size="16">Пыль</text>
+<text x="252" y="268" fill="#ABB5BF" font-size="15">#9B8063</text>
+<rect x="464" y="118" width="192" height="100" rx="6" fill="#69745F" stroke="#77818B" stroke-width="1"/>
+<text x="464" y="244" fill="#E5E8E5" font-size="16">Местная трава</text>
+<text x="464" y="268" fill="#ABB5BF" font-size="15">#69745F</text>
+<rect x="676" y="118" width="192" height="100" rx="6" fill="#ABC6CD" stroke="#77818B" stroke-width="1"/>
+<text x="676" y="244" fill="#E5E8E5" font-size="16">Лёд</text>
+<text x="676" y="268" fill="#ABB5BF" font-size="15">#ABC6CD</text>
+<rect x="888" y="118" width="192" height="100" rx="6" fill="#D8D9CE" stroke="#77818B" stroke-width="1"/>
+<text x="888" y="244" fill="#E5E8E5" font-size="16">Корпус</text>
+<text x="888" y="268" fill="#ABB5BF" font-size="15">#D8D9CE</text>
+<rect x="40" y="312" width="192" height="100" rx="6" fill="#D48842" stroke="#77818B" stroke-width="1"/>
+<text x="40" y="438" fill="#E5E8E5" font-size="16">Янтарь</text>
+<text x="40" y="462" fill="#ABB5BF" font-size="15">#D48842</text>
+<rect x="252" y="312" width="192" height="100" rx="6" fill="#D8C5A9" stroke="#77818B" stroke-width="1"/>
+<text x="252" y="438" fill="#E5E8E5" font-size="16">Дневная дымка</text>
+<text x="252" y="462" fill="#ABB5BF" font-size="15">#D8C5A9</text>
+<rect x="464" y="312" width="192" height="100" rx="6" fill="#17243B" stroke="#77818B" stroke-width="1"/>
+<text x="464" y="438" fill="#E5E8E5" font-size="16">Ночное небо</text>
+<text x="464" y="462" fill="#ABB5BF" font-size="15">#17243B</text>
+<rect x="676" y="312" width="192" height="100" rx="6" fill="#465467" stroke="#77818B" stroke-width="1"/>
+<text x="676" y="438" fill="#E5E8E5" font-size="16">Ночной полутон</text>
+<text x="676" y="462" fill="#ABB5BF" font-size="15">#465467</text>
+<rect x="888" y="312" width="192" height="100" rx="6" fill="#829B52" stroke="#77818B" stroke-width="1"/>
+<text x="888" y="438" fill="#E5E8E5" font-size="16">Выращенная зелень</text>
+<text x="888" y="462" fill="#ABB5BF" font-size="15">#829B52</text>
+<text x="40" y="535" fill="#ABB5BF" font-size="14">Цвет материала меняется под освещением. Ночная подсветка не равна игровому защитному свету.</text>
+</g></svg>
