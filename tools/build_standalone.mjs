@@ -9,8 +9,8 @@ html=html.replace('<script type="module" src="/src/main.ts"></script>',()=>`<sty
 const license=await readFile('node_modules/three/LICENSE','utf8');
 html=html.replace('</head>',()=>`<!-- Three.js license\n${license}\n--></head>`);
 await mkdir('artifacts',{recursive:true});
-await writeFile('artifacts/vireon-verdana-b1.html',html);
+await writeFile('artifacts/vireon-verdana-b2.html',html);
 await mkdir('preview',{recursive:true});
-await writeFile('preview/vireon-verdana-b1.html',html);
+await writeFile('preview/vireon-verdana-b2.html',html);
 await copyFile('node_modules/three/LICENSE','artifacts/THREE-LICENSE.txt');
-console.log('Standalone artifact: artifacts/vireon-verdana-b1.html');
+console.log('Standalone artifact: artifacts/vireon-verdana-b2.html');

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import './style.css';
+import { installFullscreen } from './fullscreen';
 import { createWorld } from './scene';
 import { Character, type Input } from './controller';
 import { boxes, EYE, FIXED_DT, heightAt, LANDMARKS, ROUTE, SIZE, type Landmark } from './world';
@@ -34,6 +35,7 @@ function boot(){
  addEventListener('blur',()=>pause('Осмотр приостановлен'));
  document.addEventListener('visibilitychange',()=>{clearInput();if(document.hidden)pause('Осмотр приостановлен');});
  canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();pause();error('Графический контекст был потерян. Перезагрузите сцену — в этом макете прогресс не сохраняется.');});
+ installFullscreen(el<HTMLButtonElement>('fullscreen-toggle'),el('fullscreen-status'));
  el('start').onclick=resume;el('resume').onclick=resume;el('pause-button').onclick=()=>pause();
  el('reset').onclick=()=>{actor.reset();resume();};
  const setNight=(value:boolean)=>{night=value;world.setNight(night);el('light-text').textContent=night?'Ночь':'День';el('light-icon').textContent=night?'☾':'☀';el('day').setAttribute('aria-pressed',String(night));};
@@ -92,7 +94,7 @@ function boot(){
   el('discovery').hidden=!nearest;if(nearest){el('discovery-kind').textContent=nearest.kind;el('discovery-title').textContent=nearest.name;}
   el('progress').textContent=`Осмотрено ${visited.size} / ${LANDMARKS.length}`;
  }
- function state(){const sorted=[...frames].sort((a,b)=>a-b);return {ready:true,running,dialog,night,selected,visited:[...visited],activeTime:Number(activeTime.toFixed(3)),position:{x:actor.x,y:actor.y,z:actor.z},yaw:actor.yaw,pitch:actor.pitch,grounded:actor.grounded,input:{...input,joyX,joyY,joyPointer,lookPointer},drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0,viewport:{width:innerWidth,height:innerHeight},renderer:renderer.getContext().getParameter(renderer.getContext().VERSION)};}
+ function state(){const sorted=[...frames].sort((a,b)=>a-b);return {ready:true,version:'B2',grassCount:world.grassCount,fullscreen:!!document.fullscreenElement,running,dialog,night,selected,visited:[...visited],activeTime:Number(activeTime.toFixed(3)),position:{x:actor.x,y:actor.y,z:actor.z},yaw:actor.yaw,pitch:actor.pitch,grounded:actor.grounded,input:{...input,joyX,joyY,joyPointer,lookPointer},drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0,viewport:{width:innerWidth,height:innerHeight},renderer:renderer.getContext().getParameter(renderer.getContext().VERSION)};}
  Object.defineProperty(window,'__vireon',{value:{getState:state},writable:false});
  const draw=(now:number)=>{
   const actualFrameMs=now-last;const dt=Math.min(actualFrameMs/1000,.25);last=now;
@@ -101,14 +103,14 @@ function boot(){
    input.right=(keys.has('KeyD')||keys.has('ArrowRight')?1:0)-(keys.has('KeyA')||keys.has('ArrowLeft')?1:0)+joyX;
    accumulator+=dt;while(accumulator>=FIXED_DT){actor.step(FIXED_DT,input);input.jump=false;activeTime+=FIXED_DT;accumulator-=FIXED_DT;}
   }
-  if(!started){camera.position.set(57,5.8,22);camera.lookAt(67,2,78);}
+  if(!started){camera.position.set(51,4.8,54);camera.lookAt(39.5,2.4,40);}
   else{
    const a=running?accumulator/FIXED_DT:1;viewPos.set(THREE.MathUtils.lerp(actor.previous.x,actor.x,a),THREE.MathUtils.lerp(actor.previous.y,actor.y,a)+EYE,THREE.MathUtils.lerp(actor.previous.z,actor.z,a));camera.position.copy(viewPos);
    viewDirection.set(Math.sin(actor.yaw)*Math.cos(actor.pitch),Math.sin(actor.pitch),Math.cos(actor.yaw)*Math.cos(actor.pitch));camera.lookAt(viewPos.add(viewDirection));
   }
   world.followSky(camera.position);renderer.render(scene,camera);
   if(running&&dt>0){frames.push(actualFrameMs);if(frames.length>180)frames.shift();}
-  if(now-lastUI>150){updateUI();lastUI=now;if(showMetrics){const s=state();el('metrics').textContent=`B1 / WebGL2 / DPR ${renderer.getPixelRatio()}\nВызовы: ${s.drawCalls} · треуг.: ${s.triangles}\nКадр p95: ${s.frameP95Ms.toFixed(1)} мс\nX ${actor.x.toFixed(1)} · Z ${actor.z.toFixed(1)}\nЭто замер текущего браузера`;}}
+  if(now-lastUI>150){updateUI();lastUI=now;if(showMetrics){const s=state();el('metrics').textContent=`B2 / WebGL2 / DPR ${renderer.getPixelRatio()}\nВызовы: ${s.drawCalls} · треуг.: ${s.triangles}\nКадр p95: ${s.frameP95Ms.toFixed(1)} мс\nX ${actor.x.toFixed(1)} · Z ${actor.z.toFixed(1)}\nЭто замер текущего браузера`;}}
   requestAnimationFrame(draw);
  };
  setNight(false);updateUI();document.body.dataset.ready='true';document.body.dataset.running='false';requestAnimationFrame(draw);

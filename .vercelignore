@@ -1,0 +1,11 @@
+.git
+.vercel
+node_modules
+artifacts
+docs
+preview
+tests
+tools/*
+!tools/build_standalone.mjs
+AGENTS.md
+README.md

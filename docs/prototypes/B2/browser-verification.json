@@ -1,0 +1,122 @@
+{
+  "checks": [
+    "Development page loads, WebGL2 initializes, no error overlay",
+    "Inspection opens a real landmark card and records visit",
+    "Scene contains 244 tufts, versus 1218 in B1",
+    "Keyboard movement exits capsule into valley",
+    "Drag-to-look changes heading",
+    "Day/night switch changes scene state",
+    "Pause freezes active simulation time",
+    "Fullscreen enters and exits from a real menu click, button tracks browser state",
+    "Map selects target without teleporting",
+    "Two simultaneous real touch contacts move and look independently, then release",
+    "Touch cancellation clears joystick",
+    "844×390 layout has visible control targets at least 48 CSS pixels tall",
+    "Portrait pauses; landscape return requires explicit resume",
+    "Compact 667×320 landscape keeps discovery clear of movement controls",
+    "Standalone HTML initializes and starts from file://",
+    "Standalone requires no remote runtime resources",
+    "Fullscreen denial leaves scene usable and displays a clear message",
+    "Unsupported fullscreen is disabled with an explanation",
+    "All five close-up model views and night variant render",
+    "No browser console errors or uncaught exceptions"
+  ],
+  "errors": [],
+  "measurements": [
+    {
+      "ready": true,
+      "version": "B2",
+      "grassCount": 244,
+      "fullscreen": false,
+      "running": true,
+      "dialog": "",
+      "night": true,
+      "selected": "grass",
+      "visited": [
+        "capsule"
+      ],
+      "activeTime": 10.7,
+      "position": {
+        "x": 42.07715462871283,
+        "y": 0.3770821378313526,
+        "z": 47.200521959228354
+      },
+      "yaw": 0.18000000000000005,
+      "pitch": -0.0050000000000000044,
+      "grounded": true,
+      "input": {
+        "forward": 0,
+        "right": 0,
+        "run": false,
+        "jump": false,
+        "joyX": 0,
+        "joyY": 0,
+        "joyPointer": null,
+        "lookPointer": null
+      },
+      "drawCalls": 13,
+      "triangles": 33391,
+      "frameP95Ms": 933.2999999999993,
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "renderer": "WebGL 2.0 (OpenGL ES 3.0 Chromium)"
+    },
+    {
+      "ready": true,
+      "version": "B2",
+      "grassCount": 244,
+      "fullscreen": false,
+      "running": true,
+      "dialog": "",
+      "night": false,
+      "selected": "cave",
+      "visited": [
+        "capsule"
+      ],
+      "activeTime": 18.4,
+      "position": {
+        "x": 43.371475678818186,
+        "y": 0.2916781904977744,
+        "z": 51.43830919873638
+      },
+      "yaw": 0.3400000000000001,
+      "pitch": 0.039999999999999994,
+      "grounded": true,
+      "input": {
+        "forward": 0,
+        "right": 0,
+        "run": false,
+        "jump": false,
+        "joyX": 0,
+        "joyY": 0,
+        "joyPointer": null,
+        "lookPointer": null
+      },
+      "drawCalls": 14,
+      "triangles": 33535,
+      "frameP95Ms": 650.0999999999985,
+      "viewport": {
+        "width": 844,
+        "height": 390
+      },
+      "renderer": "WebGL 2.0 (OpenGL ES 3.0 Chromium)"
+    }
+  ],
+  "environment": "Headless Chromium; software rendering in this verification environment. Not a phone FPS test.",
+  "finalVisualPass": {
+    "productionBuild": true,
+    "errors": [],
+    "grassCount": 244,
+    "modelViews": [
+      "capsule",
+      "interior",
+      "cave",
+      "grass",
+      "valley",
+      "night"
+    ],
+    "fullscreenProduction": true
+  }
+}

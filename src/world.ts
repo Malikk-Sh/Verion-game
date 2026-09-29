@@ -68,7 +68,11 @@ export function makeColliders(){
  boxes.push(box('capsule-front-left',38.3,h+1.9,42.9,1.55,3.8,.35));
  boxes.push(box('capsule-front-right',41.7,h+1.9,42.9,1.55,3.8,.35));
  boxes.push(box('capsule-lintel',40,h+3.1,42.9,1.85,1.6,.35));
- boxes.push(box('capsule-roof',40,h+3.9,40,5,.25,6));
+ boxes.push(box('capsule-roof',40,h+4.18,40,4,.25,5));
+ boxes.push(box('capsule-berth',38.12,h+.46,39.5,.8,.9,2.5));
+ boxes.push(box('capsule-console',41.35,h+.87,37.7,1.3,1.6,.65));
+ boxes.push(box('capsule-bottles',39.15,h+.73,37.55,1,.9,.42));
+ boxes.push(box('capsule-threshold',40,h+.085,43.48,2.1,.17,.8));
  // Cave is a horizontal, 5m-wide, 4m-high dead-end passage. No excavating in B1.
  boxes.push(box('cave-south',123,4.1,67.6,20,7.5,3));
  boxes.push(box('cave-north',123,4.1,76.4,20,7.5,3));
@@ -82,3 +86,22 @@ export function makeColliders(){
  return boxes;
 }
 makeColliders();
+
+/** B1 produced 1,218 accepted tufts; B2 uses 244 (one fifth), 84% in patches. */
+export const GRASS_PATCHES = [
+ {x:44,z:57,rx:4.5,rz:3.4}, {x:28,z:76,rx:4.5,rz:2.6},
+ {x:70,z:90,rx:6,rz:3.8}, {x:99,z:128,rx:5,rz:3},
+ {x:136,z:104,rx:4,rz:5}, {x:59,z:114,rx:4.3,rz:3.5},
+];
+export const GRASS: {x:number;z:number;s:number;rotation:number;patch:number}[]=[];
+const grassRandom=random(4242);
+for(let i=0;i<244;i++){
+ const patch=i<204?Math.floor(i/34):-1;
+ let x=0,z=0;
+ for(let attempt=0;attempt<200;attempt++){
+  if(patch>=0){const p=GRASS_PATCHES[patch],a=grassRandom()*Math.PI*2,r=Math.sqrt(grassRandom());x=p.x+Math.cos(a)*p.rx*r;z=p.z+Math.sin(a)*p.rz*r;}
+  else{x=15+grassRandom()*130;z=15+grassRandom()*130;}
+  if(Math.hypot(x-40,z-40)>8&&Math.hypot(x-58,z-44)>14&&!(x>108&&x<140&&z>60&&z<84)&&heightAt(x,z)<4)break;
+ }
+ GRASS.push({x,z,s:.45+grassRandom()*.45,rotation:grassRandom()*Math.PI*2,patch});
+}

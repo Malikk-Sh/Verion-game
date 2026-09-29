@@ -1,23 +1,32 @@
 <!doctype html>
 <html lang="ru">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#192427"><title>Vireon · Вердана / B1</title><link rel="icon" href="data:,"></head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#192c30"><meta name="description" content="Vireon — исследуйте первую долину Верданы. Мобильная 3D-игра о жизни на новых планетах."><title>Vireon · Вердана / B2</title><link rel="icon" href="data:,"></head>
 <body>
+<svg class="icon-defs" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>
+ <symbol id="i-map" viewBox="0 0 24 24"><path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2Zm6-2v16m6-14v16"/></symbol>
+ <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+ <symbol id="i-expand" viewBox="0 0 24 24"><path d="M3 9V3h6m6 0h6v6M3 15v6h6m6 0h6v-6"/></symbol>
+ <symbol id="i-run" viewBox="0 0 24 24"><circle cx="15" cy="4" r="2"/><path d="m7 11 4-4 4 3 4 1M12 9l-2 6 4 2-1 5M10 15l-3 5H3"/></symbol>
+ <symbol id="i-jump" viewBox="0 0 24 24"><path d="M12 18V3M7 8l5-5 5 5M4 18v3h16v-3"/></symbol>
+ <symbol id="i-arrow" viewBox="0 0 24 24"><path d="m12 3 6 14-6-3-6 3Z"/></symbol>
+ <symbol id="i-scan" viewBox="0 0 24 24"><path d="M3 8V3h5m8 0h5v5M3 16v5h5m8 0h5v-5M8 12h8m-4-4v8"/></symbol>
+</defs></svg>
 <canvas id="world" aria-label="Трёхмерный участок Верданы"></canvas>
 <div id="hud">
- <header><div class="identity"><span class="wordmark">VIREON<span class="brand-dot">.</span></span><span class="divider"></span><div><strong>ВЕРДАНА</strong><span class="eyebrow">ПЛАНИРОВКА · B1</span></div></div><nav aria-label="Инструменты осмотра"><button id="day" title="Сменить освещение"><span id="light-icon">☀</span><span id="light-text">День</span></button><button id="map-button" title="Карта участка [M]">⌑ <span>Карта</span></button><button id="pause-button" aria-label="Пауза" title="Пауза [Esc]">Ⅱ</button></nav></header>
- <div id="navigation"><span class="nav-arrow">↑</span><span id="target-name">Местная трава</span><span id="target-distance"></span></div>
+ <header><div class="identity"><span class="brand-mark" aria-hidden="true">V</span><div class="brand-block"><span class="wordmark">VIREON<span class="brand-dot">.</span></span><span class="sector-label">ЭКСПЕДИЦИЯ 01</span></div><span class="divider"></span><div class="planet-label"><strong>ВЕРДАНА</strong><span class="eyebrow">ДОЛИНА ПРИБЫТИЯ</span></div></div><nav aria-label="Инструменты осмотра"><button id="day" title="Сменить освещение" aria-label="Сменить день и ночь"><span id="light-icon">☀</span><span id="light-text">День</span></button><button id="map-button" title="Карта участка [M]" aria-label="Карта"><svg><use href="#i-map"/></svg><span>Карта</span></button><button id="pause-button" aria-label="Пауза" title="Меню [Esc]"><svg><use href="#i-pause"/></svg></button></nav></header>
+ <div id="navigation"><span class="nav-arrow"><svg><use href="#i-arrow"/></svg></span><span id="target-name">Местная трава</span><span id="target-distance"></span></div>
  <div id="reticle" aria-hidden="true"></div>
- <aside id="discovery" hidden><span id="discovery-kind" class="eyebrow"></span><strong id="discovery-title"></strong><button id="inspect">Осмотреть <span>E</span></button></aside>
+ <aside id="discovery" hidden><div class="discovery-mark"><svg><use href="#i-scan"/></svg></div><div class="discovery-copy"><span id="discovery-kind" class="eyebrow"></span><strong id="discovery-title"></strong></div><button id="inspect" aria-label="Осмотреть объект">Осмотреть <span>E</span></button></aside>
  <div id="route-status"><span class="tiny-dot"></span><span id="progress">Осмотрено 0 / 9</span><span class="small-muted">160 × 160 м</span></div>
- <div id="joystick" role="group" aria-label="Джойстик движения"><div class="stick-ring"><div id="stick"></div></div><span>ДВИЖЕНИЕ</span></div>
- <div id="actions"><button id="run" aria-pressed="false">↟<span>Бег</span></button><button id="jump">↑<span>Прыжок</span></button></div>
- <div id="look-hint">Потяните экран для обзора</div>
- <div id="prototype-note">Макет мира · без выживания</div>
+ <div id="joystick" role="group" aria-label="Джойстик движения"><div class="stick-ring"><span class="stick-ticks"></span><div id="stick"></div></div><span>ДВИЖЕНИЕ</span></div>
+ <div id="actions"><button id="run" aria-pressed="false"><svg><use href="#i-run"/></svg><span>Бег</span></button><button id="jump"><svg><use href="#i-jump"/></svg><span>Прыжок</span></button></div>
+ <div id="look-hint">Свайп для обзора</div>
+ <div id="prototype-note"><span class="build-tag">B2</span> Визуальный образец</div>
 </div>
 <div id="veil" class="veil">
- <section id="welcome" class="panel welcome"><div class="eyebrow">VIREON / ПЕРВАЯ ПЛАНЕТА</div><h1>Первые шаги<br>по Вердане.</h1><p>Исследуйте долину, найдите лёд и пещеру.<br>Вернитесь к свету капсулы.</p><div class="intro-meta"><span>160 × 160 м</span><span>9 мест</span><span>День / ночь</span></div><button id="start" class="primary">Исследовать <span>→</span></button><p class="help">Телефон: джойстик и свайп.<br>Компьютер: WASD, обзор мышью с зажатой кнопкой, Space — прыжок.</p><small>Рабочая планировка. Добычи, голода и сохранения мира пока нет.</small></section>
- <section id="paused" class="panel" hidden><div class="eyebrow">ОСМОТР ПРИОСТАНОВЛЕН</div><h2 id="pause-title">Пауза</h2><p>Можно вернуться к прогулке или начать маршрут от капсулы.</p><button id="resume" class="primary">Продолжить <span>→</span></button><button id="reset" class="secondary">Вернуться к капсуле</button><button id="metrics-toggle" class="text-button">Показать показатели сцены</button><p class="help">Это режим осмотра планировки. Возврат к капсуле не является механикой телепортации в игре.</p></section>
- <section id="map-panel" class="panel map-panel" hidden><div class="panel-heading"><div><div class="eyebrow">СТАРТОВЫЙ УЧАСТОК</div><h2>Долина Верданы</h2></div><button id="close-map" class="icon-button" aria-label="Закрыть карту">×</button></div><div class="map-layout"><canvas id="map" width="480" height="480" aria-label="Карта участка и положения игрока"></canvas><div><p class="help">Выберите ориентир. Указатель покажет направление; добраться нужно пешком.</p><div id="landmark-list"></div></div></div></section>
+ <section id="welcome" class="panel welcome"><div class="eyebrow">VIREON / ПЕРВАЯ ПЛАНЕТА</div><h1>Новый мир.<br><em>Ваш первый шаг.</em></h1><p>Долина Верданы. Тихие скалы, редкая жизнь<br>и тёплый свет единственного убежища.</p><div class="intro-meta"><span>160 × 160 м</span><span>9 мест</span><span>День / ночь</span></div><button id="start" class="primary">Исследовать долину <span>→</span></button><p class="help">Телефон: джойстик и свайп.<br>Компьютер: WASD, обзор с зажатой кнопкой мыши, Space — прыжок.</p><small>Визуальный образец B2. Добыча, выживание и сохранение мира появятся позже.</small></section>
+ <section id="paused" class="panel pause-panel" hidden><div class="eyebrow">VIREON / МЕНЮ ЭКСПЕДИЦИИ</div><h2 id="pause-title">Пауза</h2><div class="menu-grid"><button id="resume" class="primary">Продолжить <span>→</span></button><button id="fullscreen-toggle" class="secondary" aria-pressed="false"><svg><use href="#i-expand"/></svg><span data-fullscreen-label>На весь экран</span></button><button id="reset" class="secondary">Вернуться к капсуле</button><button id="metrics-toggle" class="secondary">Показать показатели сцены</button></div><p id="fullscreen-status" role="status" aria-live="polite"></p><p class="help">Возврат к капсуле доступен в режиме осмотра. Это не телепортация в будущей игре.</p></section>
+ <section id="map-panel" class="panel map-panel" hidden><div class="panel-heading"><div><div class="eyebrow">ВЕРДАНА / НАВИГАЦИЯ</div><h2>Долина прибытия</h2></div><button id="close-map" class="icon-button" aria-label="Закрыть карту">×</button></div><div class="map-layout"><canvas id="map" width="480" height="480" aria-label="Карта участка и положения игрока"></canvas><div><p class="help">Выберите ориентир и следуйте указателю.</p><div id="landmark-list"></div></div></div></section>
  <section id="info-panel" class="panel" hidden><div class="eyebrow" id="info-kind"></div><h2 id="info-title"></h2><p id="info-text"></p><button id="close-info" class="primary">Продолжить осмотр <span>→</span></button></section>
 </div>
 <div id="portrait" hidden><span>↻</span><h2>Поверните устройство</h2><p>Для прогулки нужен горизонтальный экран.</p></div>
