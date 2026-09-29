@@ -66,10 +66,8 @@ DPR ограничен 1. Дальность камеры 290 м и туман 7
 
 ## Публикация
 
-Пользователь **явно разрешил** GitHub и Vercel. Исходники и готовая автономная сборка сохраняются в `Malikk-Sh/Verion-game`. Подготовлены `vercel.json` (Vite → dist) и `.vercelignore`, исключающий документы и проверочные страницы из загрузки.
+Пользователь явно разрешил GitHub, Vercel и импорт через браузер. Проект `Malikk-Sh/Verion-game` опубликован: **[verion-game.vercel.app](https://verion-game.vercel.app/)**. Первый production-деплой коммита `a7b3d54` из `main` получил статус **Ready** в панели Vercel. Настройки: Vite, root `./`, build `npm run build`, output `dist`; секреты и база данных не нужны. `vercel.json` и `.vercelignore` находятся в репозитории.
 
-На момент этого отчёта **Vercel не развёрнут**: подключённый `deploy_to_vercel` возвращает `Tool deploy_to_vercel not found`; Vercel CLI 61.0.0 не авторизован; попытка штатного временного режима ответила `Temporary deployments aren't available for this attempt`. Login-flow остановлен, доступ не обходился. Следующий шаг — авторизация CLI либо, после разрешения пользователя на смену способа, импорт GitHub-проекта через браузер Vercel. Не утверждать наличие публичного URL до успешной публикации и проверки.
-
-В кабинете Vercel: Import Git Repository → `Malikk-Sh/Verion-game` → framework Vite, root `./`, build `npm run build`, output `dist`. Секреты/база данных не нужны. Существующие настройки защиты проектов не изменять.
+Публичная страница отдаёт интерфейс B2 и запускает клиентский код. В облачном браузере проверки 3D-сцена показала «Error creating WebGL context»; этот браузер не дал WebGL-контекст, поэтому его результат не подтверждает визуальную работу сцены на опубликованном адресе. До публикации локальная production-сборка прошла браузерные проверки с программным WebGL 2. Физический телефон с B2 и полный экран на нём ещё нужно проверить по публичной ссылке. Не считать статус Ready измерением мобильного FPS.
 
 Первичные API-источники: [Three.js BufferGeometryUtils](https://threejs.org/docs/pages/module-BufferGeometryUtils.html), [InstancedMesh](https://threejs.org/docs/pages/InstancedMesh.html), [Fullscreen request](https://developer.mozilla.org/en-US/docs/Web/API/Element/requestFullscreen), [fullscreenEnabled](https://developer.mozilla.org/en-US/docs/Web/API/Document/fullscreenEnabled).

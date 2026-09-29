@@ -12,7 +12,7 @@
 
 Для разработки: `npm ci`, затем `npm run dev`. Проверки: `npm test`, сборка: `npm run build`, браузер: `npm run verify:browser` после установки Playwright Chromium.
 
-**Vercel:** конфигурация подготовлена, но публикация пока заблокирована отсутствием авторизации CLI и неработающим инструментом деплоя подключённого приложения. Публичный URL ещё не создан. [Подробности и готовые настройки](docs/prototypes/VERDANA_B2.md#публикация).
+**Играть в B2:** [verion-game.vercel.app](https://verion-game.vercel.app/). Проект опубликован на Vercel из ветки `main`; требуется браузер с WebGL 2. [Подробности и ограничения проверки](docs/prototypes/VERDANA_B2.md#публикация).
 
 ## Читать
 
