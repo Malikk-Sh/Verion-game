@@ -1,6 +1,7 @@
-/** Hand-authored B1 layout. Metres; north is +z. No production-world generator. */
+/** Hand-authored Verdana layout (B1 positions, B3 terrain detail). Metres; north is +z. No production-world generator. */
+import { fbm, noise2 } from './noise';
 export const SIZE = 160;
-export const STEP = 2;
+export const STEP = 1;
 export const GRID = SIZE / STEP + 1;
 export const EYE = 1.6;
 export const FIXED_DT = 1 / 20;
@@ -26,9 +27,11 @@ export function box(id: string,x: number,y: number,z: number,w: number,h: number
 }
 export function smooth(a:number,b:number,t:number){const u=Math.max(0,Math.min(1,t));return a+(b-a)*(u*u*(3-2*u));}
 const gaussian=(x:number,z:number,cx:number,cz:number,s:number)=>Math.exp(-((x-cx)**2+(z-cz)**2)/(s*s));
-function rawHeight(x:number,z:number){
+export function rawHeight(x:number,z:number){
  const edge=Math.max(0,(17-Math.min(x,z,SIZE-x,SIZE-z))/17);
- let h=0.8*Math.sin(x*.056)*Math.cos(z*.049)+.32*Math.sin(x*.19+z*.12)+edge*edge*12;
+ // Broad dunes and a little ground roughness; slopes stay walkable (tested at 1 m cells).
+ let h=0.8*Math.sin(x*.056)*Math.cos(z*.049)+.32*Math.sin(x*.19+z*.12)+edge*edge*(10+5*(fbm(x*.03,z*.03,3,71)+.5));
+ h+=.55*fbm(x*.028,z*.028,3,11)+.07*noise2(x*.45,z*.45,23);
  h+=3.4*gaussian(x,z,93,110,20)+2.8*gaussian(x,z,137,53,15);
  h-=1.5*gaussian(x,z,30,80,13)+1.6*gaussian(x,z,100,132,15);
  for(const p of [{x:40,z:40,r:6,h:.5},{x:58,z:44,r:13,h:.5},{x:44,z:57,r:4,h:.35},{x:67,z:65,r:5,h:.3},{x:83,z:55,r:5,h:.5}]){
@@ -73,6 +76,9 @@ export function makeColliders(){
  boxes.push(box('capsule-console',41.35,h+.87,37.7,1.3,1.6,.65));
  boxes.push(box('capsule-bottles',39.15,h+.73,37.55,1,.9,.42));
  boxes.push(box('capsule-threshold',40,h+.085,43.48,2.1,.17,.8));
+ // Two supply crates unloaded beside the capsule; clear of the doorway and ramp.
+ boxes.push(box('crate-a',44.8,heightAt(44.8,41.4)+.4,41.4,1.2,.8,.85));
+ boxes.push(box('crate-b',35.5,heightAt(35.5,43.6)+.35,43.6,.9,.7,.9));
  // Cave is a horizontal, 5m-wide, 4m-high dead-end passage. No excavating in B1.
  boxes.push(box('cave-south',123,4.1,67.6,20,7.5,3));
  boxes.push(box('cave-north',123,4.1,76.4,20,7.5,3));
