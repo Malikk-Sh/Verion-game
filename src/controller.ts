@@ -1,4 +1,6 @@
-import { EYE, SIZE, SPAWN, heightAt, type Box } from './world';
+import { EYE, MIN, MAX, SPAWN, heightAt, type Box } from './world';
+/** Max drop per 50 ms tick that still counts as walking down a slope (≈ 60° at running speed). Ledges higher than this are a fall. */
+const SNAP=.45;
 export type Input = { forward: number; right: number; run: boolean; jump: boolean };
 export class Character {
  x=SPAWN.x; z=SPAWN.z; y=heightAt(this.x,this.z)+.14; yaw=SPAWN.yaw; pitch=-.035;
@@ -7,7 +9,7 @@ export class Character {
  reset(){this.x=SPAWN.x;this.z=SPAWN.z;this.y=heightAt(this.x,this.z)+.14;this.yaw=SPAWN.yaw;this.pitch=-.035;this.vy=0;this.grounded=true;this.previous={x:this.x,y:this.y,z:this.z};}
  private overlaps(x:number,z:number,b:Box){const cx=Math.max(b.minX,Math.min(b.maxX,x)),cz=Math.max(b.minZ,Math.min(b.maxZ,z));return (x-cx)**2+(z-cz)**2<this.radius**2;}
  private moveAxis(dx:number,dz:number){
-  const x=Math.max(2,Math.min(SIZE-2,this.x+dx)),z=Math.max(2,Math.min(SIZE-2,this.z+dz));
+  const x=Math.max(MIN+2,Math.min(MAX-2,this.x+dx)),z=Math.max(MIN+2,Math.min(MAX-2,this.z+dz));
   let support=heightAt(x,z);
   if(support>this.y+.5)return;
   for(const b of this.colliders){
@@ -31,7 +33,10 @@ export class Character {
   // Substeps avoid tunnelling even when moving diagonally past a narrow jamb.
   const n=Math.max(1,Math.ceil(Math.hypot(dx,dz)/.12));
   for(let i=0;i<n;i++){this.moveAxis(dx/n,0);this.moveAxis(0,dz/n);}
-  if(input.jump&&this.grounded){this.vy=4.5;this.grounded=false;}
+  // Stay glued to the ground when walking or running downhill instead of hopping every tick
+  // (B3 left the body airborne for a step, which toggled bob/FOV and made the camera shake).
+  let stick=this.grounded;
+  if(input.jump&&this.grounded){this.vy=4.5;this.grounded=false;stick=false;}
   const oldY=this.y;this.vy-=9*dt;let next=this.y+this.vy*dt;
   let ground=heightAt(this.x,this.z);
   for(const b of this.colliders){
@@ -39,7 +44,7 @@ export class Character {
    if(this.vy<=0&&b.maxY<=oldY+.01)ground=Math.max(ground,b.maxY);
    if(this.vy>0&&oldY+this.height<=b.minY+.01&&next+this.height>b.minY){next=b.minY-this.height;this.vy=0;}
   }
-  if(next<=ground){this.y=ground;this.vy=0;this.grounded=true;}else{this.y=next;this.grounded=false;}
+  if(next<=ground||(stick&&oldY-ground<=SNAP)){this.y=ground;this.vy=0;this.grounded=true;}else{this.y=next;this.grounded=false;}
  }
  get eye(){return this.y+EYE;}
 }
