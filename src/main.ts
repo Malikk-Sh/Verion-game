@@ -54,7 +54,7 @@ function boot(){
   document.body.dataset.dialog=which??'';
   document.body.dataset.running=String(running);
   if(which==='map-panel')drawMap();
-  if(running)audio.resume();
+  if(running)audio.resume();else if(started&&(which==='paused'||which==='settings'))audio.suspend();
  }
  function pause(reason='Пауза'){if(!started)return;el('pause-title').textContent=reason;setDialog('paused');}
  function bootSequence(){
@@ -185,6 +185,7 @@ function boot(){
   if(visible){marker.style.transform=`translate(${(tmp.x*.5+.5)*innerWidth}px,${Math.max(innerHeight<500?92:118,(-tmp.y*.5+.5)*innerHeight)}px) translate(-50%,-50%)`;el('marker-distance').textContent=`${Math.round(d)} м`;}
  }
  function objective(){
+  if(visited.size>=LANDMARKS.length)return insideCapsule()||Math.hypot(actor.x-40,actor.z-40)<8?'Маршрут завершён: все места осмотрены. Спасибо, что прошли B4':'Участок изучен. Возвращайтесь к капсуле';
   if(insideCapsule())return 'Выйдите из капсулы и осмотритесь';
   if(visited.size===0)return 'Отсканируйте капсулу или ближайшее место — кнопка «Сканировать»';
   if(visited.size<LANDMARKS.length)return `Исследуйте окрестности: следуйте метке на компасе (${visited.size} из ${LANDMARKS.length})`;
@@ -232,8 +233,10 @@ function boot(){
    if(ease>0)camera.rotateZ(Math.sin(ease*3)*.06*ease);
    const targetFov=settings.fov+(input.run&&moving&&settings.bob?6:0);fov+=(targetFov-fov)*Math.min(1,dt*6);if(Math.abs(camera.fov-fov)>.01){camera.fov=fov;camera.updateProjectionMatrix();}
   }
-  world.update(dt,camera,renderer);renderer.render(scene,camera);
-  audio.update(dt,started&&insideCapsule()?1:0,world.nightValue);
+  // Explicit pause (and settings opened from it) freezes the whole scene, not only the controller.
+  const frozen=started&&(dialog==='paused'||dialog==='settings');
+  world.update(frozen?0:dt,camera,renderer);renderer.render(scene,camera);
+  if(!frozen)audio.update(dt,started&&insideCapsule()?1:0,world.nightValue);
   if(started){drawCompass(bearing(Math.sin(actor.yaw),Math.cos(actor.yaw)));updateMarker();}
   if(running&&dt>0){frames.push(actualFrameMs);if(frames.length>180)frames.shift();}
   if(now-lastUI>150){updateUI();lastUI=now;if(showMetrics){const s=state();const ob=el('objective').getBoundingClientRect();el('metrics').style.top=`${Math.round(ob.bottom+8)}px`;el('metrics').textContent=`B4 / WebGL2 / DPR ${renderer.getPixelRatio()} / ${settings.quality}\nВызовы: ${s.drawCalls} · треуг.: ${s.triangles}\nКадр p95: ${s.frameP95Ms.toFixed(1)} мс\nX ${actor.x.toFixed(1)} · Z ${actor.z.toFixed(1)}\nЭто замер текущего браузера`;}}

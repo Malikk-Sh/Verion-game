@@ -162,7 +162,8 @@ export function makeColliders(){
  for(const [i,r] of ROCKS.entries())boxes.push(box('rock-'+i,r.x,heightAt(r.x,r.z)+r.sy*.51,r.z,r.s*1.4,r.sy*1.02,r.s*1.4));
  boxes.push(box('iron-outcrop',67,heightAt(67,65)+.7,65,3.6,1.7,3));
  boxes.push(box('copper-outcrop',83,heightAt(83,55)+.7,55,3.6,1.7,3));
- for(const [i,f] of FORMATIONS.entries())boxes.push(box('formation-'+i,f.x,f.base+f.h/2,f.z,f.w*1.35,f.h,f.d*1.35));
+ // Footprint of the rotated formation (geometry spans ±w × ±d): axis-aligned bounds of its elliptical base.
+ for(const [i,f] of FORMATIONS.entries()){const c=Math.cos(f.rotation),s=Math.sin(f.rotation),hx=Math.hypot(f.w*c,f.d*s),hz=Math.hypot(f.w*s,f.d*c);boxes.push(box('formation-'+i,f.x,f.base+f.h/2,f.z,hx*1.9,f.h,hz*1.9));}
  boxes.push(box('spire-a',100,heightAt(100,103)+8,103,5,16,6));
  boxes.push(box('spire-b',106,heightAt(106,104)+6.5,104,4,13,5));
  return boxes;

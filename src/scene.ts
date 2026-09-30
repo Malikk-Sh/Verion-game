@@ -166,7 +166,9 @@ export function createWorld(scene:THREE.Scene){
     batch.add(quad(pt(a,-.05,1.05),pt(b,-.05,1.05),pt(b,.5,1.02),pt(a,.5,1.02)),burnt);
    }
   }
-  batch.add(new THREE.CylinderGeometry(1.25*.46*scale,1.25*.46*scale,.02,16),material,X,cy(4.35),Z);
+  // Close the roof over the whole top octagon (both sides, so it is solid from outside and from the cabin).
+ const top=levels[levels.length-1],c=[X,cy(top[0]),Z];
+ for(let i=0;i<8;i++){const pa=pt(ring[i],top[0],top[1],scale),pb=pt(ring[(i+1)%8],top[0],top[1],scale);batch.add(quad(pa,pb,c,c),material);batch.add(quad(c,c,pb,pa),material);}
  }
  // Door frame, warm light strip.
  for(const s of [-1,1]){box(frame,X+s*1.0,cy(1.22),Z+2.98,.14,2.2,.32);box(orange,X+s*1.09,cy(1.25),Z+3.1,.05,1.9,.04);box(frame,X+s*1.0,cy(1.22),Z+2.74,.18,2.2,.12);}
@@ -394,7 +396,7 @@ export function createWorld(scene:THREE.Scene){
   dust.points.visible=q!=='low';terrain.setQuality(q);}
  const snapped=new THREE.Vector3(),lx=new THREE.Vector3(),ly=new THREE.Vector3(),up=new THREE.Vector3(0,1,0),fwd=new THREE.Vector3(),center=new THREE.Vector3();let terrainBudget=24;
  function update(dt:number,camera:THREE.Camera,renderer:THREE.WebGLRenderer){
-  time+=dt;windUniform.value=time;sky.uniforms.time.value=time;dust.uniforms.time.value=time;dust.uniforms.origin.value.copy(camera.position);
+  sky.mesh.position.copy(camera.position);time+=dt;windUniform.value=time;sky.uniforms.time.value=time;dust.uniforms.time.value=time;dust.uniforms.origin.value.copy(camera.position);
   if(k!==nightTarget){const step=dt*.55;k=Math.abs(nightTarget-k)<=step?nightTarget:k+Math.sign(nightTarget-k)*step;applyNight(k);if(k===nightTarget)envDirty=true;}
   if(envDirty){envDirty=false;envSky.uniforms.night.value=sky.uniforms.night.value;envSky.uniforms.sunDir.value.copy(sky.uniforms.sunDir.value);const gen=new THREE.PMREMGenerator(renderer);const rt=gen.fromScene(envScene,0,.1,1000);gen.dispose();pmremTarget.rt?.dispose();pmremTarget.rt=rt;scene.environment=rt.texture;scene.environmentIntensity=THREE.MathUtils.lerp(.55,.25,k);}
   // Shadow frustum follows the viewer, shifted ahead of it and snapped to whole texels
