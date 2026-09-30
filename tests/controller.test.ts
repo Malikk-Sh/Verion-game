@@ -1,17 +1,27 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {Character} from '../src/controller.ts';
-import {boxes,box,heightAt,FIXED_DT,GRID,STEP,heights} from '../src/world.ts';
+import {boxes,box,heightAt,FIXED_DT,STEP,MIN,MAX,gridHeight,rawHeight,LANDMARKS,FAR_IDS} from '../src/world.ts';
 const idle={forward:0,right:0,run:false,jump:false};
 const walk=(p:Character,seconds:number,input={...idle,forward:1})=>{for(let i=0;i<seconds/FIXED_DT;i++)p.step(FIXED_DT,input);};
 
 test('height sampling uses exactly the terrain triangle split',()=>{
- for(const [x,z]of[[4.6,10.8],[58.7,87.6],[151.7,141.6]]){
-  const ix=Math.floor(x/STEP),iz=Math.floor(z/STEP),u=x/STEP-ix,v=z/STEP-iz,i=iz*GRID+ix;
-  const a=heights[i],b=heights[i+1],c=heights[i+GRID],d=heights[i+GRID+1];
+ for(const [x,z]of[[4.6,10.8],[58.7,87.6],[151.7,141.6],[-150.3,-120.8],[300.2,299.9]]){
+  const ix=Math.floor((x-MIN)/STEP),iz=Math.floor((z-MIN)/STEP),u=(x-MIN)/STEP-ix,v=(z-MIN)/STEP-iz;
+  const a=gridHeight(ix,iz),b=gridHeight(ix+1,iz),c=gridHeight(ix,iz+1),d=gridHeight(ix+1,iz+1);
   const expected=u+v<=1?a+(b-a)*u+(c-a)*v:d+(c-d)*(1-u)+(b-d)*(1-v);
   assert.ok(Math.abs(heightAt(x,z)-expected)<1e-6);
+  assert.ok(Math.abs(a-rawHeight(MIN+ix*STEP,MIN+iz*STEP))<1e-4);
  }
+});
+test('running downhill stays grounded every tick (no hop, no camera shake)',()=>{
+ // Find a steady descent near the valley rim and run down it.
+ const p=new Character([]);let worst=0,airborne=0;
+ for(const [x,z,yaw] of [[10,120,Math.PI*.75],[93,110,0],[145,140,-Math.PI*.6]] as const){
+  p.x=x;p.z=z;p.y=heightAt(x,z);p.vy=0;p.grounded=true;p.yaw=yaw;
+  for(let i=0;i<60;i++){const y0=p.y;p.step(FIXED_DT,{...idle,forward:1,run:true});if(!p.grounded)airborne++;worst=Math.max(worst,y0-p.y);}
+ }
+ assert.equal(airborne,0,`airborne ticks: ${airborne}`);assert.ok(worst>.03,'test path must actually descend');
 });
 test('spawn can walk out of capsule doorway at its initial heading',()=>{
  const p=new Character(boxes);walk(p,3);assert.ok(p.z>49,JSON.stringify(p));
@@ -58,4 +68,14 @@ test('all nine inspection areas reachable on foot; controller follows route with
   assert.ok(Math.hypot(p.x-target.x,p.z-target.z)<.3);
  }
  console.log(`Walked all areas in ${(steps*FIXED_DT).toFixed(1)} simulated seconds; this is a controller test, not a player timing result.`);
+});
+
+test('far landmarks are reachable on foot over a 2 m grid without cliffs',()=>{
+ const S=2,N=Math.floor((MAX-MIN-8)/S),o=MIN+4,key=(i:number,j:number)=>j*N+i;
+ const blocked=(x:number,z:number)=>{const y=heightAt(x,z);return boxes.some(b=>b.maxY>y+.5&&b.minY<y+1.8&&x>b.minX-.3&&x<b.maxX+.3&&z>b.minZ-.3&&z<b.maxZ+.3);};
+ const start=key(Math.round((40-o)/S),Math.round((46-o)/S)),seen=new Uint8Array(N*N),q=[start];seen[start]=1;
+ for(let k=0;k<q.length;k++){const i=q[k]%N,j=Math.floor(q[k]/N),h=heightAt(o+i*S,o+j*S);
+  for(const [di,dj] of [[1,0],[-1,0],[0,1],[0,-1]]){const a=i+di,b=j+dj;if(a<0||b<0||a>=N||b>=N)continue;const n=key(a,b);if(seen[n])continue;const x=o+a*S,z=o+b*S;
+   if(Math.abs(heightAt(x,z)-h)>1.1||blocked(x,z))continue;seen[n]=1;q.push(n);}}
+ for(const id of FAR_IDS){const p=LANDMARKS.find(l=>l.id===id)!;assert.ok(seen[key(Math.round((p.x-o)/S),Math.round((p.z-o)/S))],`no gentle route to ${id}`);}
 });

@@ -1,22 +1,26 @@
 import * as THREE from 'three';
-import { GRID, SIZE, heights, heightAt, rawHeight, LANDMARKS, ROCKS, GRASS, random } from './world';
+import { MIN, MAX, SIZE, heightAt, rawHeight, LANDMARKS, ROCKS, GRASS, FORMATIONS, MESA, CRATER, canyonDist, segDist, random } from './world';
 import { StaticBatch, surface, quad, beam, rod } from './geometry';
-import { chiseledRock } from './rocks';
+import { chiseledRock, oreOutcrop } from './rocks';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { fbm, ridged, noise2 } from './noise';
-import { groundTextures, hullTextures, linerTexture, gratingTexture, consoleScreen } from './textures';
+import { groundTextures, hullTextures, gratingTexture, consoleScreen, panelTexture } from './textures';
 import { createSky, createDust } from './sky';
+import { Terrain, bakeSunShade, useBakedShade } from './terrain';
 
 export type Quality = 'low'|'standard'|'high';
 const lin=(r:number,g:number,b:number)=>new THREE.Color().setRGB(r,g,b,THREE.LinearSRGBColorSpace);
 const smooth=(a:number,b:number,t:number)=>{const u=Math.max(0,Math.min(1,(t-a)/(b-a)));return u*u*(3-2*u);};
-function segDist(px:number,pz:number,ax:number,az:number,bx:number,bz:number){const dx=bx-ax,dz=bz-az,t=Math.max(0,Math.min(1,((px-ax)*dx+(pz-az)*dz)/(dx*dx+dz*dz)));return Math.hypot(px-ax-dx*t,pz-az-dz*t);}
-/** Terrain outside the walkable 160 m square: a rising ring of ridged, snow-capped mountains. */
+/** Beyond the walkable 560 m square: a rising ring of ridged, snow-capped mountains. */
 export function outerHeight(x:number,z:number){
- const cx=Math.max(0,Math.min(SIZE,x)),cz=Math.max(0,Math.min(SIZE,z)),d=Math.hypot(x-cx,z-cz);
- if(d<=0)return x<=0||z<=0||x>=SIZE||z>=SIZE?rawHeight(cx,cz)-.8:rawHeight(cx,cz)-3;
- const ramp=smooth(0,110,d),r=ridged(x*.0065+3,z*.0065-2,5,41);
- return rawHeight(cx,cz)-.8+d*.22+ramp*(r*r*150+fbm(x*.02,z*.02,3,5)*14)+smooth(0,40,d)*fbm(x*.05,z*.05,3,9)*6;
+ const cx=Math.max(MIN,Math.min(MAX,x)),cz=Math.max(MIN,Math.min(MAX,z)),d=Math.hypot(x-cx,z-cz);
+ if(d<=0)return rawHeight(cx,cz)-3;
+ const ramp=smooth(0,160,d),r=ridged(x*.0045+3,z*.0045-2,5,41);
+ return rawHeight(cx,cz)-.8+d*.25+ramp*(r*r*190+fbm(x*.015,z*.015,3,5)*18)+smooth(0,50,d)*fbm(x*.04,z*.04,3,9)*8;
 }
+/** Hull faces: octagon ring, perimeter-proportional U so decals never straddle a corner rib. */
+export const HULL_RING=[[-1.86,3],[1.86,3],[2.5,2.34],[2.5,-2.34],[1.86,-3],[-1.86,-3],[-2.5,-2.34],[-2.5,2.34]];
+export const HULL_U=(()=>{const len=HULL_RING.map((a,i)=>{const b=HULL_RING[(i+1)%8];return Math.hypot(b[0]-a[0],b[1]-a[1]);}),total=len.reduce((x,y)=>x+y,0);let u=0;return len.map(l=>{const r=[u/total,(u+l)/total,l] as [number,number,number];u+=l;return r;});})();
 
 export function createWorld(scene:THREE.Scene){
  const rng=random(558),dummy=new THREE.Object3D(),color=new THREE.Color();
@@ -27,15 +31,17 @@ export function createWorld(scene:THREE.Scene){
  const noShadow=new Set<THREE.Material>();
 
  // ---------- Materials ----------
- const hullTex=hullTextures();
+ const hullTex=hullTextures(HULL_U);
  const hull=mat('hull',{map:hullTex.map,normalMap:hullTex.normalMap,normalScale:new THREE.Vector2(.7,.7),roughness:.55,metalness:.18});
- const liner=mat('liner',{map:linerTexture(),color:'#6c736e',roughness:.94,envMapIntensity:.15});liner.side=THREE.BackSide;
+ const linerMap=panelTexture();linerMap.repeat.set(9,2);
+ const liner=mat('liner',{map:linerMap,color:'#858d89',roughness:.9,envMapIntensity:.2});liner.side=THREE.BackSide;
  const frame=mat('frame',{color:'#2a3336',roughness:.5,metalness:.55});
  const steel=mat('steel',{color:'#a9b0b0',roughness:.32,metalness:.85});
  const burnt=mat('burnt',{color:'#3a3531',roughness:.7,metalness:.5});
  const orange=mat('orange',{color:'#c9682c',roughness:.45,metalness:.2});
  const grateTex=gratingTexture();grateTex.repeat.set(3.5,4.2);
  const grate=mat('grate',{map:grateTex,roughness:.6,metalness:.6});
+ const floorTex=grateTex.clone();floorTex.repeat.set(1,1);floorTex.needsUpdate=true;const floorGrate=mat('floorGrate',{map:floorTex,roughness:.55,metalness:.6});
  const warm=mat('warm',{color:'#ffe2b0',emissive:'#ffb866',emissiveIntensity:2.6});noShadow.add(warm);
  const cool=mat('cool',{color:'#7fd6d0',emissive:'#5cc9c2',emissiveIntensity:1.4});noShadow.add(cool);
  const beacon=mat('beacon',{color:'#ff9a4a',emissive:'#ff7a2a',emissiveIntensity:2});noShadow.add(beacon);
@@ -44,6 +50,7 @@ export function createWorld(scene:THREE.Scene){
  const glass=mat('glass',{color:'#1b2a2e',roughness:.08,metalness:.4,emissive:'#6b4a22',emissiveIntensity:.5});
  const fabric=mat('fabric',{color:'#6f8472',roughness:.95});
  const rock=mat('rock',{vertexColors:true,flatShading:true,roughness:.93});
+ const cliffRock=mat('cliffRock',{vertexColors:true,flatShading:true,roughness:.95});
  const ice=mat('ice',{vertexColors:true,flatShading:true,color:'#cfe6ec',roughness:.14,metalness:0,envMapIntensity:1.6});
  const iron=mat('iron',{color:'#4a5763',roughness:.34,metalness:.8,flatShading:true});
  const copper=mat('copper',{color:'#b8703f',roughness:.36,metalness:.78,flatShading:true});
@@ -51,55 +58,52 @@ export function createWorld(scene:THREE.Scene){
  const screen=consoleScreen();
  const screenMat=mat('screen',{map:screen.texture,emissiveMap:screen.texture,emissive:'#ffffff',emissiveIntensity:1.1,roughness:.3});noShadow.add(screenMat);
 
- // ---------- Terrain (walkable square, 1 m grid, identical to collision heights) ----------
+ // ---------- Terrain: chunked, 1 m collision grid near the viewer ----------
  const ground=groundTextures();ground.map.repeat.set(1,1);
  const terrainMat=new THREE.MeshStandardMaterial({vertexColors:true,map:ground.map,normalMap:ground.normalMap,normalScale:new THREE.Vector2(.9,.9),roughness:.96});
- terrainMat.onBeforeCompile=s=>{s.fragmentShader=s.fragmentShader.replace('#include <map_fragment>',`#ifdef USE_MAP
+ const antiTile=(s:THREE.WebGLProgramParametersWithUniforms)=>{s.fragmentShader=s.fragmentShader.replace('#include <map_fragment>',`#ifdef USE_MAP
   vec4 t1=texture2D(map,vMapUv);vec4 t2=texture2D(map,vMapUv*.23+vec2(.31,.17));diffuseColor.rgb*=mix(t1.rgb,t2.rgb,.45)*1.18;
  #endif`);};
- const P=[['#9b7a58','dust'],['#86694d','earth'],['#6e655c','gravel'],['#b1946f','path'],['#8a7d6c','silt'],['#e7ecee','snow'],['#4d4642','rock']] as const;
+ const P=[['#9b7a58','dust'],['#86694d','earth'],['#6e655c','gravel'],['#b1946f','path'],['#8a7d6c','silt'],['#e7ecee','snow'],['#4d4642','rock'],['#6a4a3a','redrock'],['#b9a583','sand']] as const;
  const C=Object.fromEntries(P.map(([h,k])=>[k,new THREE.Color(h)])) as Record<string,THREE.Color>;
- const paths=[[40,44,43,56],[43,56,62,63],[62,63,80,56],[40,44,56,45],[62,63,30,79],[80,56,110,72]];
- const snowAt=(x:number,z:number,h:number)=>{
-  const ice=smooth(15,8,Math.hypot(x-30,z-80)+fbm(x*.15,z*.15,2,4)*6);
-  const edge=smooth(4,9,h)*smooth(.12,.34,fbm(x*.07,z*.07,3,8))*.85;
-  const hollow=smooth(.42,.62,fbm(x*.08,z*.08,3,13))*smooth(-.2,-.9,h-rawHeight(x,z)*0-(.3*Math.sin(x*.056)*Math.cos(z*.049)));
-  return Math.max(ice,edge,hollow*.9);
- };
- const groundColor=(x:number,z:number,h:number,out:THREE.Color)=>{
+ const paths=[[40,44,43,56],[43,56,62,63],[62,63,80,56],[40,44,56,45],[62,63,30,79],[80,56,110,72],[80,56,104,-40],[30,79,-40,140]];
+ const tmpC=new THREE.Color();
+ const groundColor=(x:number,z:number,h:number,slope:number,out:THREE.Color)=>{
   out.copy(C.dust).lerp(C.earth,smooth(-.3,.4,fbm(x*.035,z*.035,3,2)));
   out.lerp(C.gravel,smooth(.18,.5,fbm(x*.09+4,z*.09,3,6))*.8);
-  const p=Math.min(...paths.map(q=>segDist(x,z,q[0],q[1],q[2],q[3])));
-  out.lerp(C.path,smooth(2.4,.6,p+noise2(x*.5,z*.5,3)*.6)*.55);
+  let p=Infinity;for(const q of paths)p=Math.min(p,segDist(x,z,q[0],q[1],q[2],q[3]));
+  out.lerp(C.path,smooth(2.4,.6,p+noise2(x*.5,z*.5,3)*.6)*.5);
   const silt=smooth(16,10,Math.hypot((x-100)*.9,z-132));out.lerp(C.silt,silt);
-  if(silt>0)out.lerp(new THREE.Color('#cbbfa8'),smooth(.3,0,Math.abs(silt-.35))*.5);
+  if(silt>0)out.lerp(tmpC.set('#cbbfa8'),smooth(.3,0,Math.abs(silt-.35))*.5);
+  const cf=smooth(CRATER.r-14,CRATER.r-26,Math.hypot(x-CRATER.x,z-CRATER.z));out.lerp(tmpC.set('#b39c7b'),cf*.7);
+  const cn=Math.abs(canyonDist(x,z));out.lerp(C.sand,smooth(7,3,cn)*.75);
   out.multiplyScalar(1-smooth(8,3,Math.hypot(x-40,z-40.5))*.32*(0.7+.3*noise2(x,z,5)));
-  out.lerp(C.rock,smooth(4,10,h)*.55);
-  out.lerp(C.snow,snowAt(x,z,h));
+  // Exposed rock on steep ground, with strata on scarps (mesa, canyon, crater rim).
+  const steep=smooth(.22,.55,slope);
+  if(steep>0){tmpC.copy(C.rock).lerp(C.redrock,smooth(-.2,.6,Math.sin(h*1.4+fbm(x*.05,z*.05,2,9)*3))*.55);out.lerp(tmpC,steep*.85);}
+  // Snow: high ground and gentle north-facing hollows; ice pocket in the valley.
+  const snow=Math.max(smooth(15,8,Math.hypot(x-30,z-80)+fbm(x*.15,z*.15,2,4)*6),smooth(38,60,h+fbm(x*.03,z*.03,3,3)*14)*smooth(.6,.25,slope)*.55);
+  out.lerp(C.snow,snow);
   out.multiplyScalar(.93+noise2(x*.7,z*.7,19)*.07);
   return out;
  };
+ const bakeUniforms={uBake:{value:null as unknown as THREE.Texture},uBakeMin:{value:new THREE.Vector2()},uBakeSize:{value:new THREE.Vector2(1,1)},uBakeAmount:{value:1}};
+ useBakedShade(terrainMat,bakeUniforms,antiTile);
+ const terrain=new Terrain(terrainMat,groundColor);scene.add(terrain.group);
+ // ---------- Outer mountains beyond the walkable square ----------
  {
-  const pos:number[]=[],col:number[]=[],uv:number[]=[],idx:number[]=[];
-  for(let z=0;z<GRID;z++)for(let x=0;x<GRID;x++){const h=heights[z*GRID+x];pos.push(x,h,z);groundColor(x,z,h,color);col.push(color.r,color.g,color.b);uv.push(x/2.6,z/2.6);}
-  for(let z=0;z<GRID-1;z++)for(let x=0;x<GRID-1;x++){const a=z*GRID+x;idx.push(a,a+GRID,a+1,a+1,a+GRID,a+GRID+1);}
-  const g=surface(pos,idx,uv);g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));
-  const m=new THREE.Mesh(g,terrainMat);m.receiveShadow=true;scene.add(m);
- }
- // ---------- Outer mountains ----------
- {
-  const step=10,min=-520,max=680,n=(max-min)/step+1,pos:number[]=[],col:number[]=[],uv:number[]=[],idx:number[]=[],hh:number[]=[];
+  const step=12,min=MIN-480,max=MAX+480,n=Math.round((max-min)/step)+1,pos:number[]=[],col:number[]=[],uv:number[]=[],idx:number[]=[],hh:number[]=[];
   for(let j=0;j<n;j++)for(let i=0;i<n;i++){const x=min+i*step,z=min+j*step;hh.push(outerHeight(x,z));}
   for(let j=0;j<n;j++)for(let i=0;i<n;i++){
    const x=min+i*step,z=min+j*step,h=hh[j*n+i];
    const sx=(hh[j*n+Math.min(n-1,i+1)]-hh[j*n+Math.max(0,i-1)])/(2*step),sz=(hh[Math.min(n-1,j+1)*n+i]-hh[Math.max(0,j-1)*n+i])/(2*step),slope=Math.hypot(sx,sz);
    pos.push(x,h,z);uv.push(x/2.6,z/2.6);
-   color.copy(C.dust).lerp(C.rock,smooth(.15,.6,slope)).lerp(new THREE.Color('#403c3a'),smooth(.7,1.3,slope)*.7);
-   const snow=smooth(38,70,h+fbm(x*.02,z*.02,3,3)*30)*smooth(1.25,.55,slope);
-   color.lerp(C.snow,Math.max(snow,snowAt(Math.max(0,Math.min(SIZE,x)),Math.max(0,Math.min(SIZE,z)),h)*smooth(40,0,h)*.0));
+   color.copy(C.dust).lerp(C.rock,smooth(.15,.6,slope)).lerp(tmpC.set('#403c3a'),smooth(.7,1.3,slope)*.7);
+   color.lerp(C.snow,smooth(95,150,h+fbm(x*.02,z*.02,3,3)*40)*smooth(1.1,.5,slope)*.75);
    color.multiplyScalar(.9+noise2(x*.08,z*.08,7)*.1);col.push(color.r,color.g,color.b);
   }
-  for(let j=0;j<n-1;j++)for(let i=0;i<n-1;i++){const a=j*n+i;idx.push(a,a+n,a+1,a+1,a+n,a+n+1);}
+  const inside=(x:number,z:number)=>x>MIN+step&&x<MAX-step&&z>MIN+step&&z<MAX-step;
+  for(let j=0;j<n-1;j++)for(let i=0;i<n-1;i++){const a=j*n+i,x=min+i*step,z=min+j*step;if(inside(x,z)&&inside(x+step,z+step))continue;idx.push(a,a+n,a+1,a+1,a+n,a+n+1);}
   const g=surface(pos,idx,uv);g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));
   const m=new THREE.Mesh(g,terrainMat);m.receiveShadow=true;scene.add(m);
  }
@@ -112,15 +116,9 @@ export function createWorld(scene:THREE.Scene){
  const cliffs=[0,1,2,3,4,5].map(i=>chiseledRock(41+i*9,{strata:3,cuts:9,taper:.42,dust:i%3?undefined:'#e2e8ea'}));
  const tones=['#ffffff','#e9e4dc','#d8dcdc','#f2e8da'];
  ROCKS.forEach((r,i)=>{const h=heightAt(r.x,r.z);batch.add(boulders[i%6],rock,r.x,h-.12,r.z,r.s*.72,r.sy*1.02,r.s*.66,(rng()-.5)*.12,r.rotation,(rng()-.5)*.12,tones[i%4]);});
- // Cliffs and screes along the valley rim, on the rising edge, never inside the walkable centre.
- for(let i=0;i<64;i++){
-  const t=i/64,side=Math.floor(t*4),u=(t*4-side)*(SIZE+40)-20,off=-10-rng()*26;
-  const [x,z]=side===0?[u,off]:side===1?[SIZE-off,u]:side===2?[SIZE-u,SIZE-off]:[off,SIZE-u];
-  const w=7+rng()*11,hh=6+rng()*14;
-  // Sit on the lowest ground under the footprint so no cliff hovers over the inward slope.
-  let base=Infinity;for(const [dx,dz] of [[0,0],[w,0],[-w,0],[0,w],[0,-w]])base=Math.min(base,outerHeight(x+dx,z+dz));
-  batch.add(cliffs[i%6],rock,x,base-1.5,z,w,hh+(outerHeight(x,z)-base),w*(.6+rng()*.5),0,rng()*6,0,i%2?'#d4d2cf':'#ffffff');
- }
+ // Large formations outside the valley (colliders in world.ts). They do not cast shadow-map shadows:
+ // their shadows are baked into the ground (bakeSunShade), so they never pop at the frustum edge.
+ for(const [i,f] of FORMATIONS.entries())batch.add(cliffs[f.shape],cliffRock,f.x,f.base-1.2,f.z,f.w,f.h+1.2,f.d,0,f.rotation,0,i%2?'#d4d2cf':'#ffffff');
  // Twin spires — the valley's signature landmark: two leaning slabs with rubble.
  for(const [x,z,hh,w,lean,ry] of [[100,103,19,2.7,.07,.3],[106.5,104.2,14.5,2.2,-.1,1.2]]){
   batch.add(tall,rock,x,heightAt(x,z)-.4,z,w,hh,w*.8,lean*.5,ry,lean,'#e6e0d6');
@@ -128,11 +126,11 @@ export function createWorld(scene:THREE.Scene){
  }
  // Pebbles: instanced, receive shadows only.
  {
-  const peb=chiseledRock(7,{detail:0,cuts:5});const count=1300;
+  const peb=chiseledRock(7,{detail:0,cuts:5});const count=2600;
   const inst=new THREE.InstancedMesh(peb,rock,count);let k=0;const pr=random(77);
   while(k<count){
    const near=pr()<.55&&ROCKS.length?ROCKS[Math.floor(pr()*ROCKS.length)]:null;
-   const x=near?near.x+(pr()-.5)*near.s*4:6+pr()*148,z=near?near.z+(pr()-.5)*near.s*4:6+pr()*148;
+   const wide=pr()<.45,x=near?near.x+(pr()-.5)*near.s*4:wide?MIN+10+pr()*(SIZE-20):6+pr()*148,z=near?near.z+(pr()-.5)*near.s*4:wide?MIN+10+pr()*(SIZE-20):6+pr()*148;
    if(x>36.5&&x<43.5&&z>36.5&&z<44.2)continue;if(x>112&&x<134&&z>68&&z<76)continue;
    const s=.04+pr()*pr()*.32;dummy.position.set(x,heightAt(x,z)-s*.25,z);dummy.rotation.set(pr(),pr()*6,pr());dummy.scale.set(s*(1+pr()),s*(.6+pr()*.6),s*(1+pr()));dummy.updateMatrix();inst.setMatrixAt(k,dummy.matrix);
    inst.setColorAt(k,color.set(tones[k%4]).multiplyScalar(.8+pr()*.3));k++;
@@ -142,36 +140,37 @@ export function createWorld(scene:THREE.Scene){
 
  // ---------- Landing capsule ----------
  const h=heightAt(40,40),cy=(y:number)=>h+y,X=40,Z=40;
- const ring=[[-1.86,3],[1.86,3],[2.5,2.34],[2.5,-2.34],[1.86,-3],[-1.86,-3],[-2.5,-2.34],[-2.5,2.34]];
+ const ring=HULL_RING;
  const levels=[[.15,1],[1.4,.985],[2.3,.955],[2.9,.93],[3.55,.84],[4.05,.66],[4.35,.46]];
  const pt=(p:number[],y:number,inset:number,s=1)=>[X+p[0]*inset*s,cy(y),Z+p[1]*inset*s];
  const DOOR=.95;
  for(const [material,scale] of [[hull,1],[liner,.965]] as const){
   for(let i=0;i<8;i++){
-   const a=ring[i],b=ring[(i+1)%8];
+   const a=ring[i],b=ring[(i+1)%8],u0=HULL_U[i][0],uw=HULL_U[i][1]-u0,u1=u0+uw;
    for(let l=0;l<levels.length-1;l++){
-    const [y0,k0]=levels[l],[y1,k1]=levels[l+1],v0=y0/4.35,v1=y1/4.35,u0=(i*.37)%1,u1=u0+.37;
+    const [y0,k0]=levels[l],[y1,k1]=levels[l+1],v0=y0/4.35,v1=y1/4.35;
     const lerp=(p:number[],q:number[],t:number)=>[p[0]+(q[0]-p[0])*t,p[1]+(q[1]-p[1])*t];
     if(i===0&&y1<=2.3){
      // Door opening in the front face: left and right jambs only.
      for(const [s0,s1] of [[0,(1-DOOR/(1.86*k0))/2],[(1+DOOR/(1.86*k0))/2,1]]){
       const s0b=s0===0?0:(1+DOOR/(1.86*k1))/2,s1b=s1===1?1:(1-DOOR/(1.86*k1))/2;
-      batch.add(quad(pt(lerp(a,b,s0),y0,k0,scale),pt(lerp(a,b,s1),y0,k0,scale),pt(lerp(a,b,s1b),y1,k1,scale),pt(lerp(a,b,s0b),y1,k1,scale),[[u0+.37*s0,v0],[u0+.37*s1,v0],[u0+.37*s1b,v1],[u0+.37*s0b,v1]]),material);
+      batch.add(quad(pt(lerp(a,b,s0),y0,k0,scale),pt(lerp(a,b,s1),y0,k0,scale),pt(lerp(a,b,s1b),y1,k1,scale),pt(lerp(a,b,s0b),y1,k1,scale),[[u0+uw*s0,v0],[u0+uw*s1,v0],[u0+uw*s1b,v1],[u0+uw*s0b,v1]]),material);
      }
      continue;
     }
     batch.add(quad(pt(a,y0,k0,scale),pt(b,y0,k0,scale),pt(b,y1,k1,scale),pt(a,y1,k1,scale),[[u0,v0],[u1,v0],[u1,v1],[u0,v1]]),material);
    }
-   // Ribs at the corners follow the tapering shell.
-   for(let l=0;l<levels.length-1;l++){const [y0,k0]=levels[l],[y1,k1]=levels[l+1];batch.add(beam(new THREE.Vector3(...pt(a,y0,k0,1.012)),new THREE.Vector3(...pt(a,y1,k1,1.012)),.09),frame);}
-   // Burnt heat-shield skirt.
-   batch.add(quad(pt(a,-.05,1.05),pt(b,-.05,1.05),pt(b,.5,1.02),pt(a,.5,1.02)),burnt);
+   if(material===hull){
+    // Ribs at the corners follow the tapering shell.
+    for(let l=0;l<levels.length-1;l++){const [y0,k0]=levels[l],[y1,k1]=levels[l+1];batch.add(beam(new THREE.Vector3(...pt(a,y0,k0,1.012)),new THREE.Vector3(...pt(a,y1,k1,1.012)),.09),frame);}
+    batch.add(quad(pt(a,-.05,1.05),pt(b,-.05,1.05),pt(b,.5,1.02),pt(a,.5,1.02)),burnt);
+   }
   }
   batch.add(new THREE.CylinderGeometry(1.25*.46*scale,1.25*.46*scale,.02,16),material,X,cy(4.35),Z);
  }
- // Door frame, warm light strip and interior glow.
- for(const s of [-1,1]){box(frame,X+s*1.0,cy(1.22),Z+2.98,.14,2.2,.32);box(orange,X+s*1.09,cy(1.25),Z+3.1,.05,1.9,.04);}
- box(frame,X,cy(2.36),Z+2.98,2.14,.16,.34);box(warm,X,cy(2.25),Z+3.1,1.7,.05,.05);
+ // Door frame, warm light strip.
+ for(const s of [-1,1]){box(frame,X+s*1.0,cy(1.22),Z+2.98,.14,2.2,.32);box(orange,X+s*1.09,cy(1.25),Z+3.1,.05,1.9,.04);box(frame,X+s*1.0,cy(1.22),Z+2.74,.18,2.2,.12);}
+ box(frame,X,cy(2.36),Z+2.98,2.14,.16,.34);box(warm,X,cy(2.25),Z+3.1,1.7,.05,.05);box(frame,X,cy(2.36),Z+2.74,2.1,.14,.12);
  // Ramp with grating and rails.
  {
   const r0=new THREE.Vector3(X,cy(.2),Z+3.3),r1=new THREE.Vector3(X,heightAt(X,Z+5.6)+.03,Z+5.6);
@@ -180,22 +179,23 @@ export function createWorld(scene:THREE.Scene){
   for(const s of [-1,1]){batch.add(beam(new THREE.Vector3(X+s*.98,r0.y+.02,r0.z),new THREE.Vector3(X+s*.98,r1.y+.02,r1.z),.07,.12),orange);}
   box(frame,X,cy(.09),Z+3.45,2.1,.18,.4);
  }
- // Landing legs: strut, polished piston, pad.
+ // Landing legs: strut, polished piston, pad. Upper mounts sit on the hull skin, never inside the cabin.
  for(const sx of [-1,1])for(const zz of [-2.1,2.1]){
-  const top=new THREE.Vector3(X+sx*2.35,cy(1.7),Z+zz),foot=new THREE.Vector3(X+sx*3.35,heightAt(X+sx*3.35,Z+zz*1.12)+.14,Z+zz*1.12);
+  const top=new THREE.Vector3(X+sx*2.56,cy(1.7),Z+zz),foot=new THREE.Vector3(X+sx*3.35,heightAt(X+sx*3.35,Z+zz*1.12)+.14,Z+zz*1.12);
   const mid=top.clone().lerp(foot,.45);
   batch.add(rod(top,mid,.13),frame);batch.add(rod(mid,foot,.08),steel);
-  batch.add(rod(top.clone().setY(cy(.6)),mid,.05),steel);
+  batch.add(rod(new THREE.Vector3(X+sx*2.6,cy(.6),Z+zz),mid,.05),steel);box(frame,X+sx*2.55,cy(1.7),Z+zz,.12,.36,.36);
   batch.add(new THREE.CylinderGeometry(.42,.5,.14,14),frame,foot.x,foot.y-.05,foot.z);box(orange,foot.x,foot.y+.04,foot.z,.3,.05,.3);
  }
- // Portholes on both flanks with warm interior light.
+ // Portholes on both flanks (outer bezel + inner trim ring).
  for(const s of [-1,1]){
   batch.add(new THREE.TorusGeometry(.34,.07,8,20),frame,X+s*2.46,cy(2.25),Z-.2,1,1,1,0,Math.PI/2,0);
   batch.add(new THREE.CircleGeometry(.33,20),glass,X+s*2.44,cy(2.25),Z-.2,1,1,1,0,s*Math.PI/2,0);
-  // Side service panel and vents.
+  batch.add(new THREE.TorusGeometry(.36,.06,8,20),frame,X+s*2.29,cy(2.25),Z-.2,1,1,1,0,Math.PI/2,0);
+  batch.add(new THREE.CircleGeometry(.33,20),glass,X+s*2.31,cy(2.25),Z-.2,1,1,1,0,-s*Math.PI/2,0);
   box(frame,X+s*2.47,cy(1.05),Z+1.2,.04,.8,1.1);for(let i=0;i<5;i++)box(steel,X+s*2.5,cy(.78+i*.13),Z+1.2,.03,.05,.95);
-  // RCS thruster blocks at the shoulder.
-  box(frame,X+s*2.18,cy(3.55),Z-1.6,.3,.3,.4);batch.add(new THREE.CylinderGeometry(.05,.09,.18,8),burnt,X+s*2.36,cy(3.55),Z-1.6,1,1,1,0,0,s*Math.PI/2);
+  // RCS thruster blocks sit proud of the shoulder skin.
+  box(frame,X+s*2.29,cy(3.55),Z-1.6,.26,.3,.4);batch.add(new THREE.CylinderGeometry(.05,.09,.18,8),burnt,X+s*2.47,cy(3.55),Z-1.6,1,1,1,0,0,s*Math.PI/2);
  }
  // Roof: hatch, radiator, antenna mast with blinking light and a small dish.
  batch.add(new THREE.CylinderGeometry(.48,.52,.18,16),frame,X,cy(4.45),Z);batch.add(new THREE.CylinderGeometry(.34,.34,.08,16),steel,X,cy(4.57),Z);
@@ -203,24 +203,72 @@ export function createWorld(scene:THREE.Scene){
  batch.add(rod(new THREE.Vector3(X+.9,cy(3.9),Z-.9),new THREE.Vector3(X+.9,cy(6.1),Z-.9),.035,6),frame);
  box(redLight,X+.9,cy(6.15),Z-.9,.09,.09,.09);
  batch.add(new THREE.SphereGeometry(.28,12,6,0,Math.PI*2,0,Math.PI/2.4),steel,X+.9,cy(5.2),Z-.9,1,1,1,Math.PI*.6,0,0);
- // Interior: floor grating, berth, console, bottles, lockers, ceiling light ring.
- batch.add(new THREE.PlaneGeometry(4.4,5.4),grate,X,cy(.16),Z,1,1,1,-Math.PI/2,0,0);
- box(frame,38.12,cy(.39),39.5,.78,.62,2.5);box(fabric,38.12,cy(.77),39.5,.74,.16,2.42);
- box(mat('pillow',{color:'#c9cbc0',roughness:.95}),38.12,cy(.9),38.55,.62,.12,.42);box(mat('blanket',{color:'#9a6b45',roughness:.95}),38.12,cy(.87),40.1,.76,.06,1.1);
- box(frame,41.35,cy(.87),37.7,1.3,1.6,.65);
- batch.add(new THREE.PlaneGeometry(1.02,.51),screenMat,41.35,cy(1.31),38.035);
- box(steel,41.35,cy(.81),38.21,1.25,.07,.46);
- for(let i=0;i<5;i++)box(i===4?orange:frame,40.9+i*.2,cy(.86),38.3,.09,.04,.1);
- box(cool,41.35,cy(1.62),38.04,1,.03,.02);
- for(let i=0;i<2;i++){
-  const bx=38.9+i*.49;
-  batch.add(new THREE.CylinderGeometry(.19,.19,.98,16),steel,bx,cy(.72),37.55);batch.add(new THREE.SphereGeometry(.19,16,8),steel,bx,cy(1.21),37.55);batch.add(new THREE.SphereGeometry(.19,16,8),steel,bx,cy(.23),37.55);
-  batch.add(new THREE.CylinderGeometry(.055,.055,.15,8),frame,bx,cy(1.43),37.55);box(orange,bx,cy(1.51),37.55,.17,.04,.09);box(orange,bx,cy(.99),37.745,.29,.13,.02);
-  box(frame,bx,cy(.9),37.4,.43,.06,.12);
+
+ // ---------- Capsule interior ----------
+ {
+  const rb=(w:number,hh:number,d:number,r:number)=>new RoundedBoxGeometry(w,hh,d,2,r);
+  const panelDark=mat('panelDark',{color:'#2c3538',roughness:.6,metalness:.4});
+  const rubber=mat('rubber',{color:'#1d2224',roughness:.9});
+  const white=mat('whitePlastic',{color:'#d7d9d3',roughness:.55});
+  const strap=mat('strap',{color:'#b8622c',roughness:.8});
+  const cushion=mat('cushion',{color:'#5f6f66',roughness:.95});
+  // Floor: octagonal grating that meets the walls everywhere (B3 showed sand at the corners).
+  {const fv:number[]=[],fu:number[]=[],k=.955;for(let i=0;i<8;i++){const a=ring[i],b=ring[(i+1)%8];for(const p of [[0,0],a,b]){const x=X+p[0]*k,z=Z+p[1]*k;fv.push(x,cy(.16),z);fu.push(x/1.1,z/1.1);}}
+   const g=surface(fv,undefined,fu);batch.add(g,floorGrate);}
+  // Kick plate and a handrail band around the cabin.
+  for(let i=0;i<8;i++){const a=ring[i],b=ring[(i+1)%8];if(i===0)continue;
+   batch.add(quad(pt(a,.16,.95),pt(b,.16,.95),pt(b,.5,.945),pt(a,.5,.945)),panelDark);
+   batch.add(quad(pt(a,.5,.947),pt(b,.5,.947),pt(b,.53,.946),pt(a,.53,.946)),steel);}
+  // Ceiling: service beams, light panel and cable runs.
+  for(const z of [38.2,39.9,41.6])box(frame,X,cy(3.9),z,3.1,.08,.1);
+  box(frame,X,cy(3.97),Z,.9,.05,2.4);box(warm,X,cy(3.93),Z,.7,.02,2.1);
+  batch.add(new THREE.TorusGeometry(1.15,.035,6,40),cool,X,cy(3.72),Z,1,1,1,Math.PI/2,0,0);
+  for(const s of [-1,1])batch.add(rod(new THREE.Vector3(X+s*1.55,cy(3.62),37.6),new THREE.Vector3(X+s*1.55,cy(3.62),42.3),.035,6),rubber);
+  // Berth on the left wall: frame, drawers, mattress, pillow, folded blanket, straps, shelf and lamp.
+  box(frame,38.12,cy(.42),39.5,.8,.52,2.5);
+  for(let i=0;i<2;i++){box(panelDark,38.53,cy(.42),38.85+i*1.3,.02,.38,1.1);box(steel,38.55,cy(.46),38.85+i*1.3,.03,.04,.4);}
+  batch.add(rb(.76,.18,2.42,.06),cushion,38.12,cy(.77),39.5);
+  batch.add(rb(.58,.12,.4,.05),white,38.12,cy(.92),38.52);
+  batch.add(rb(.74,.07,.9,.03),mat('blanket',{color:'#9a6b45',roughness:.95}),38.12,cy(.89),40.35);
+  for(const z of [39.2,40.0])box(strap,38.12,cy(.87),z,.8,.02,.07);
+  box(frame,37.84,cy(1.5),39.1,.3,.04,1.5);box(frame,37.84,cy(1.44),38.4,.3,.12,.03);box(frame,37.84,cy(1.44),39.8,.3,.12,.03);
+  box(white,37.84,cy(1.6),38.7,.22,.16,.26);batch.add(new THREE.CylinderGeometry(.06,.06,.2,10),steel,37.84,cy(1.62),39.2);box(mat('book',{color:'#35505a',roughness:.8}),37.84,cy(1.58),39.55,.2,.12,.08);
+  box(warm,37.72,cy(1.32),40.55,.04,.08,.22);box(frame,37.7,cy(1.32),40.55,.04,.14,.3);
+  // Back wall: console with bezel, keyboard deck, status lights and cable loom.
+  box(frame,41.35,cy(.66),37.75,1.3,1.1,.6);
+  batch.add(rb(1.3,.7,.12,.03),panelDark,41.35,cy(1.55),37.5,1,1,1,-.12,0,0);
+  batch.add(new THREE.PlaneGeometry(1.02,.51),screenMat,41.35,cy(1.56),37.575,1,1,1,-.12,0,0);
+  box(steel,41.35,cy(1.22),38.02,1.28,.05,.42,0,0,-.1);
+  for(let r=0;r<2;r++)for(let i=0;i<8;i++)box(i===7&&r===0?orange:rubber,40.88+i*.135,cy(1.26),37.93+r*.13,.1,.03,.08,0,0,-.1);
+  for(let i=0;i<3;i++)box(i===1?beacon:cool,41.96,cy(1.0-i*.14),38.06,.05,.05,.02);
+  box(panelDark,41.35,cy(.55),38.06,1.1,.6,.02);for(let i=0;i<4;i++)box(steel,41.35,cy(.35+i*.12),38.075,.9,.02,.01);
+  for(const dx of [-.4,-.33,.35])batch.add(rod(new THREE.Vector3(41.35+dx,cy(1.9),37.45),new THREE.Vector3(41.35+dx,cy(3.6),37.6),.025,6),rubber);
+  // Oxygen bottle rack with clamps and regulators (visual only; no simulated oxygen).
+  box(frame,39.15,cy(.2),37.55,1.02,.08,.46);
+  for(let i=0;i<2;i++){
+   const bx=38.9+i*.49;
+   batch.add(new THREE.CylinderGeometry(.19,.19,.98,20),steel,bx,cy(.72),37.55);batch.add(new THREE.SphereGeometry(.19,20,10,0,Math.PI*2,0,Math.PI/2),steel,bx,cy(1.21),37.55);
+   batch.add(new THREE.CylinderGeometry(.055,.055,.15,8),frame,bx,cy(1.43),37.55);box(orange,bx,cy(1.51),37.55,.17,.04,.09);batch.add(new THREE.CylinderGeometry(.05,.05,.04,10),steel,bx,cy(1.36),37.72,1,1,1,Math.PI/2,0,0);
+   for(const y of [.5,1.0])batch.add(new THREE.TorusGeometry(.2,.025,6,20),frame,bx,cy(y),37.55,1,1,1,Math.PI/2,0,0);
+   box(orange,bx,cy(.85),37.745,.22,.1,.01);
+  }
+  box(frame,39.15,cy(1.0),37.3,1.02,.08,.06);
+  // Tall locker between bottles and console.
+  box(panelDark,40.2,cy(1.3),37.42,.62,2.2,.28);box(white,40.2,cy(1.3),37.565,.54,2.08,.02);
+  for(let i=0;i<6;i++)box(frame,40.2,cy(2.05+i*.05),37.58,.36,.015,.01);
+  box(steel,40.42,cy(1.25),37.59,.03,.34,.03);box(orange,40.2,cy(.4),37.58,.54,.05,.01);
+  // Right wall: equipment rack with cases, first-aid kit and the EVA helmet.
+  for(const z of [39.1,40.9])box(frame,41.98,cy(1.0),z,.06,1.7,.06);
+  for(const y of [.35,.95,1.55])box(frame,41.98,cy(y),40,.5,.04,1.86);
+  box(mat('caseA',{color:'#5d6b62',roughness:.7,metalness:.3}),41.98,cy(.52),39.55,.42,.3,.7);box(mat('caseB',{color:'#3f4a4e',roughness:.6,metalness:.3}),41.98,cy(.5),40.45,.42,.26,.6);
+  box(white,41.98,cy(1.1),39.5,.36,.26,.46);box(strap,41.79,cy(1.1),39.5,.01,.18,.06);box(strap,41.79,cy(1.1),39.5,.01,.06,.18);
+  box(mat('caseC',{color:'#6c5b44',roughness:.8}),41.98,cy(1.08),40.4,.4,.22,.7);
+  batch.add(new THREE.SphereGeometry(.18,20,14),white,41.95,cy(1.76),39.8);
+  batch.add(new THREE.SphereGeometry(.17,20,10,-Math.PI*.35,Math.PI*.7,Math.PI*.3,Math.PI*.38),mat('visor',{color:'#2a2f33',roughness:.05,metalness:.9,emissive:'#3a2a12',emissiveIntensity:.25}),41.95,cy(1.77),39.8,1.03,1.03,1.03,0,0,0);
+  batch.add(new THREE.TorusGeometry(.14,.03,8,18),frame,41.95,cy(1.6),39.8,1,1,1,Math.PI/2,0,0);
+  // Handrails by the door.
+  for(const s of [-1,1])batch.add(rod(new THREE.Vector3(X+s*1.25,cy(.9),42.55),new THREE.Vector3(X+s*1.25,cy(2.0),42.55),.025,8),steel);
  }
- box(frame,40.2,cy(1.3),37.42,.62,2.2,.28);box(steel,40.2,cy(1.3),37.57,.56,2.1,.02);box(orange,40.4,cy(1.3),37.585,.03,.3,.02);
- batch.add(new THREE.TorusGeometry(1.1,.05,6,32),warm,X,cy(3.8),Z,1,1,1,Math.PI/2,0,0);
- for(const z of [38.2,39.9,41.6])box(frame,X,cy(3.86),z,3.65,.07,.08);
  // Supply crates (colliders in world.ts).
  for(const [x,z,w,hh,d] of [[44.8,41.4,1.2,.8,.85],[35.5,43.6,.9,.7,.9]]){
   const y=heightAt(x,z);box(mat('crate',{color:'#5d6b62',roughness:.7,metalness:.3}),x,y+hh/2,z,w,hh,d);
@@ -257,18 +305,32 @@ export function createWorld(scene:THREE.Scene){
   place(136,-.4,72,4,9,7,.4,snowy[1]);
   for(let i=0;i<9;i++){const x=109+rng()*6,z=72+(rng()<.5?-1:1)*(4+rng()*3);place(x,heightAt(x,z)-.1,z,.4+rng()*1.1,.3+rng()*.9,.4+rng()*1,rng()*6);}
  }
- // ---------- Ice pocket ----------
- for(let i=0;i<16;i++){
-  const a=rng()*6.28,d=Math.sqrt(rng())*6,x=30+Math.cos(a)*d,z=80+Math.sin(a)*d;
-  batch.add(chiseledRock(300+i,{detail:1,base:'#ffffff',dust:'#ffffff',dark:'#8fb0ba',cuts:6}),ice,x,heightAt(x,z)-.08,z,.5+rng()*1.1,.18+rng()*.6,.5+rng()*.9,0,rng()*6,0);
- }
- // ---------- Ore outcrops ----------
+ // ---------- Ice pocket: buried slabs, leaning shards and frost rubble ----------
  {
-  const hostI=chiseledRock(610,{strata:3}),hostC=chiseledRock(620,{dust:'#6f8f7c',strata:2});
-  let x=67,z=65,y=heightAt(x,z);batch.add(hostI,rock,x,y-.05,z,1.8,1.7,1.5,0,.3,0,'#cfd3d6');
-  for(let i=0;i<9;i++){const a=i/9*6.28+rng()*.4;batch.add(chiseledRock(700+i,{detail:1,cuts:10,lumpy:.05}),iron,x+Math.cos(a)*1.25,y+.35+rng()*.9,z+Math.sin(a)*1.05,.35+rng()*.25,.1+rng()*.08,.22,rng()*.8,a,.5+rng()*.5);}
-  x=83;z=55;y=heightAt(x,z);batch.add(hostC,rock,x,y-.05,z,1.8,1.6,1.5,0,.9,0,'#d6d0c8');
-  for(let i=0;i<11;i++){const a=rng()*6.28,r=.9+rng()*.5;batch.add(chiseledRock(800+i,{detail:1,cuts:2,lumpy:.35}),copper,x+Math.cos(a)*r,y+.25+rng()*1.1,z+Math.sin(a)*r*.85,.14+rng()*.18,.12+rng()*.16,.14+rng()*.16,rng(),rng()*6,rng());}
+  const slab=(i:number)=>chiseledRock(300+i,{detail:2,base:'#ffffff',dust:'#f4fbff',dark:'#6f98a8',cuts:7,flatTop:.45,lumpy:.12});
+  const shard=(i:number)=>chiseledRock(340+i,{detail:1,base:'#ffffff',dust:'#ffffff',dark:'#7fa6b4',cuts:6,taper:.72,lumpy:.06});
+  for(let i=0;i<9;i++){const a=i/9*6.28+rng()*.5,d=1.5+rng()*4.5,x=30+Math.cos(a)*d,z=80+Math.sin(a)*d;
+   batch.add(slab(i),ice,x,heightAt(x,z)-.25,z,.8+rng()*1.3,.35+rng()*.5,.7+rng()*1.1,(rng()-.5)*.25,rng()*6,(rng()-.5)*.25);}
+  for(let i=0;i<7;i++){const a=rng()*6.28,d=2+rng()*5,x=30+Math.cos(a)*d,z=80+Math.sin(a)*d,lean=.18+rng()*.25;
+   batch.add(shard(i),ice,x,heightAt(x,z)-.2,z,.28+rng()*.3,1+rng()*1.4,.25+rng()*.25,Math.cos(a)*lean,rng()*6,-Math.sin(a)*lean);}
+  for(let i=0;i<26;i++){const a=rng()*6.28,d=rng()*8,x=30+Math.cos(a)*d,z=80+Math.sin(a)*d,s=.08+rng()*.18;
+   batch.add(boulders[i%6],ice,x,heightAt(x,z)-s*.3,z,s,s*.6,s,0,rng()*6,0,'#e8f4f8');}
+ }
+ // ---------- Ore outcrops: veins lie on the host surface ----------
+ {
+  const I=oreOutcrop(610,{strata:3,base:'#4a4038',dust:'#8a6a50',dark:'#2a2320'},{freq:2.2,width:.05,blobs:.74,lift:.018,crystals:.12,stain:'#7a3f22'});
+  let x=67,z=65,y=heightAt(x,z);
+  batch.add(I.host,rock,x,y-.1,z,1.8,1.7,1.5,0,.3,0);batch.add(I.veins,iron,x,y-.1,z,1.8,1.7,1.5,0,.3,0);
+  const I2=oreOutcrop(611,{strata:2,base:'#4a4038',dust:'#8a6a50',dark:'#2a2320'},{freq:2.6,width:.045,blobs:.76,lift:.018,crystals:.1,stain:'#7a3f22'});
+  batch.add(I2.host,rock,x+2.1,heightAt(x+2.1,z-1.2)-.08,z-1.2,.8,.7,.7,0,1.9,0);batch.add(I2.veins,iron,x+2.1,heightAt(x+2.1,z-1.2)-.08,z-1.2,.8,.7,.7,0,1.9,0);
+  const C=oreOutcrop(620,{strata:2,base:'#3c4640',dust:'#6f8f7c',dark:'#232a27'},{freq:1.8,width:.045,blobs:.72,lift:.02,crystals:.22,stain:'#3f8f78'});
+  x=83;z=55;y=heightAt(x,z);
+  batch.add(C.host,rock,x,y-.1,z,1.8,1.6,1.5,0,.9,0);batch.add(C.veins,copper,x,y-.1,z,1.8,1.6,1.5,0,.9,0);
+  const C2=oreOutcrop(622,{strata:2,base:'#3c4640',dust:'#6f8f7c',dark:'#232a27'},{freq:2.4,width:.05,blobs:.74,lift:.02,crystals:.2,stain:'#3f8f78'});
+  batch.add(C2.host,rock,x-1.9,heightAt(x-1.9,z+1.1)-.08,z+1.1,.9,.6,.8,0,2.4,0);batch.add(C2.veins,copper,x-1.9,heightAt(x-1.9,z+1.1)-.08,z+1.1,.9,.6,.8,0,2.4,0);
+  // Loose weathered pieces resting on the ground (sunk slightly, never hovering).
+  for(const [ox,oz,m] of [[67,65,iron],[83,55,copper]] as const)for(let i=0;i<7;i++){const a=rng()*6.28,d=1.6+rng()*1.8,px=ox+Math.cos(a)*d,pz=oz+Math.sin(a)*d,s=.1+rng()*.14;
+   const piece=oreOutcrop(900+i+(m===iron?0:20),{detail:1,cuts:7},{freq:3,width:.1,blobs:.6,lift:.01,crystals:0}),ry=rng()*6,py=heightAt(px,pz)-s*.35;batch.add(piece.host,rock,px,py,pz,s,s*.8,s,0,ry,0,m===iron?'#8a7466':'#6f8a80');batch.add(piece.veins,m,px,py,pz,s,s*.8,s,0,ry,0);}
  }
 
  // ---------- Local vegetation: low rosettes, 5–9 folded leaves, swaying in the wind ----------
@@ -289,13 +351,15 @@ export function createWorld(scene:THREE.Scene){
   }
   const g=surface(gv);g.setAttribute('color',new THREE.Float32BufferAttribute(gc,3));g.setAttribute('sway',new THREE.Float32BufferAttribute(gs,1));
   const m=new THREE.MeshStandardMaterial({vertexColors:true,side:THREE.DoubleSide,roughness:.82});
-  m.onBeforeCompile=s=>{s.uniforms.uWind=windUniform;s.vertexShader='attribute float sway;uniform float uWind;\n'+s.vertexShader.replace('#include <begin_vertex>',`#include <begin_vertex>
+  const grassMat=m;grassMat.onBeforeCompile=s=>{s.uniforms.uWind=windUniform;s.vertexShader='attribute float sway;uniform float uWind;\n'+s.vertexShader.replace('#include <begin_vertex>',`#include <begin_vertex>
    vec3 ip=instanceMatrix[3].xyz;float w=sway*sway;transformed.x+=sin(uWind*1.6+ip.x*.35+ip.z*.2)*.07*w;transformed.z+=cos(uWind*1.2+ip.x*.2)*.05*w;`);};
+  useBakedShade(grassMat,bakeUniforms,grassMat.onBeforeCompile);
   const inst=new THREE.InstancedMesh(g,m,GRASS.length);
   GRASS.forEach((p,i)=>{dummy.position.set(p.x,heightAt(p.x,p.z)-.02,p.z);dummy.scale.setScalar(p.s*1.35);dummy.rotation.set(0,p.rotation,0);dummy.updateMatrix();inst.setMatrixAt(i,dummy.matrix);inst.setColorAt(i,color.setHSL(.2+rng()*.06,.12+rng()*.1,.62+rng()*.3));});
   inst.receiveShadow=true;inst.castShadow=true;scene.add(inst);
  }
- const meshes=batch.finish(scene,m=>({cast:!noShadow.has(m)&&m!==caveInner,receive:!noShadow.has(m)}));
+ const meshes=batch.finish(scene,m=>({cast:!noShadow.has(m)&&m!==caveInner&&m!==cliffRock,receive:!noShadow.has(m)}));
+ for(const m of cache.values())if(!noShadow.has(m))useBakedShade(m,bakeUniforms);
 
  // ---------- Sky, light, fog, atmosphere ----------
  const sky=createSky();scene.add(sky.mesh);
@@ -305,10 +369,12 @@ export function createWorld(scene:THREE.Scene){
  const sc=sun.shadow.camera;sc.left=-42;sc.right=42;sc.top=42;sc.bottom=-42;sc.near=1;sc.far=260;sun.shadow.bias=-.0004;sun.shadow.normalBias=.04;
  const doorLight=new THREE.PointLight('#ffb870',9,13,1.7);doorLight.position.set(40,cy(1.8),43.8);scene.add(doorLight);
  const interior=new THREE.PointLight('#ffd3a0',3.2,6.5,1.6);interior.position.set(40,cy(3.3),39.8);scene.add(interior);
- const fog=new THREE.FogExp2(lin(.8,.68,.53),.0026);scene.fog=fog;
+ const fog=new THREE.FogExp2(lin(.8,.68,.53),.0022);scene.fog=fog;
  const D={sun:new THREE.Color('#ffd9a8'),hemiSky:new THREE.Color('#bcd3dc'),hemiGround:new THREE.Color('#8a7358'),fog:lin(.8,.68,.53),dust:new THREE.Color('#fff1d6')};
  const N={sun:new THREE.Color('#8fa9d6'),hemiSky:new THREE.Color('#5f7896'),hemiGround:new THREE.Color('#2b2f36'),fog:lin(.07,.1,.15),dust:new THREE.Color('#a9c4e6')};
- const sunDay=new THREE.Vector3(.93,.22,.3).normalize(),moon=new THREE.Vector3(.5,.55,.67).normalize();
+ const sunDay=new THREE.Vector3(.88,.36,.32).normalize(),moon=new THREE.Vector3(.5,.55,.67).normalize();
+ {const extra=[{x:100,z:103,r:3.2,top:heightAt(100,103)+18},{x:106.5,z:104.2,r:2.6,top:heightAt(106.5,104.2)+14},...[115,120,125,130,135].map(x=>({x,z:72,r:8,top:9.5}))];
+  const bake=bakeSunShade(sunDay,extra);bakeUniforms.uBake.value=bake.texture;bakeUniforms.uBakeMin.value.copy(bake.min);bakeUniforms.uBakeSize.value.copy(bake.size);}
  let nightTarget=0,k=-1,time=0,screenClock=0,envDirty=true,quality:Quality='standard';
  const pmremTarget:{rt:THREE.WebGLRenderTarget|null}={rt:null};
  const envScene=new THREE.Scene();const envSky=createSky();envScene.add(envSky.mesh);
@@ -316,24 +382,33 @@ export function createWorld(scene:THREE.Scene){
   sky.uniforms.night.value=v;sky.uniforms.sunDir.value.copy(sunDay).lerp(moon,v).normalize();
   sun.color.copy(D.sun).lerp(N.sun,v);sun.intensity=THREE.MathUtils.lerp(3.4,.5,v);
   hemi.color.copy(D.hemiSky).lerp(N.hemiSky,v);hemi.groundColor.copy(D.hemiGround).lerp(N.hemiGround,v);hemi.intensity=THREE.MathUtils.lerp(1.15,.6,v);
-  fog.color.copy(D.fog).lerp(N.fog,v);fog.density=THREE.MathUtils.lerp(.0028,.0042,v);
+  bakeUniforms.uBakeAmount.value=1-v;
+  fog.color.copy(D.fog).lerp(N.fog,v);fog.density=THREE.MathUtils.lerp(.0022,.0038,v);
   dust.uniforms.tint.value.copy(D.dust).lerp(N.dust,v);dust.uniforms.opacity.value=THREE.MathUtils.lerp(.28,.22,v);
   doorLight.intensity=THREE.MathUtils.lerp(9,16,v);interior.intensity=THREE.MathUtils.lerp(3.2,4.2,v);
   warm.emissiveIntensity=THREE.MathUtils.lerp(2.6,3.4,v);glass.emissiveIntensity=THREE.MathUtils.lerp(.5,1.8,v);
  }
  function setNight(night:boolean,instant=false){nightTarget=night?1:0;if(instant){k=nightTarget;applyNight(k);envDirty=true;}}
- function setQuality(q:Quality){quality=q;sun.castShadow=q!=='low';const size=q==='high'?2048:1024;if(sun.shadow.mapSize.x!==size){sun.shadow.mapSize.set(size,size);sun.shadow.map?.dispose();sun.shadow.map=null as unknown as THREE.WebGLRenderTarget;}dust.points.visible=q!=='low';}
- const snapped=new THREE.Vector3();
+ function setQuality(q:Quality){quality=q;sun.castShadow=q!=='low';const size=q==='high'?2048:1024,ext=q==='high'?60:42;
+  if(sun.shadow.mapSize.x!==size||sc.right!==ext){sun.shadow.mapSize.set(size,size);sc.left=sc.bottom=-ext;sc.right=sc.top=ext;sc.updateProjectionMatrix();sun.shadow.map?.dispose();sun.shadow.map=null as unknown as THREE.WebGLRenderTarget;}
+  dust.points.visible=q!=='low';terrain.setQuality(q);}
+ const snapped=new THREE.Vector3(),lx=new THREE.Vector3(),ly=new THREE.Vector3(),up=new THREE.Vector3(0,1,0),fwd=new THREE.Vector3(),center=new THREE.Vector3();let terrainBudget=24;
  function update(dt:number,camera:THREE.Camera,renderer:THREE.WebGLRenderer){
   time+=dt;windUniform.value=time;sky.uniforms.time.value=time;dust.uniforms.time.value=time;dust.uniforms.origin.value.copy(camera.position);
   if(k!==nightTarget){const step=dt*.55;k=Math.abs(nightTarget-k)<=step?nightTarget:k+Math.sign(nightTarget-k)*step;applyNight(k);if(k===nightTarget)envDirty=true;}
   if(envDirty){envDirty=false;envSky.uniforms.night.value=sky.uniforms.night.value;envSky.uniforms.sunDir.value.copy(sky.uniforms.sunDir.value);const gen=new THREE.PMREMGenerator(renderer);const rt=gen.fromScene(envScene,0,.1,1000);gen.dispose();pmremTarget.rt?.dispose();pmremTarget.rt=rt;scene.environment=rt.texture;scene.environmentIntensity=THREE.MathUtils.lerp(.55,.25,k);}
-  // Shadow frustum follows the viewer, snapped to texels to avoid shimmering.
-  const texel=84/sun.shadow.mapSize.x;snapped.set(Math.round(camera.position.x/texel)*texel,Math.round(camera.position.y/texel)*texel,Math.round(camera.position.z/texel)*texel);
-  sun.target.position.copy(snapped);sun.position.copy(snapped).addScaledVector(sky.uniforms.sunDir.value,130);
+  // Shadow frustum follows the viewer, shifted ahead of it and snapped to whole texels
+  // *in light space* (B3 snapped world axes, which still shimmered while walking).
+  const L=sky.uniforms.sunDir.value as THREE.Vector3;lx.crossVectors(up,L).normalize();ly.crossVectors(L,lx);
+  camera.getWorldDirection(fwd);fwd.y=0;if(fwd.lengthSq()>1e-6)fwd.normalize();
+  center.copy(camera.position).addScaledVector(fwd,sc.right*.45);
+  const texel=(sc.right-sc.left)/sun.shadow.mapSize.x,px=Math.round(center.dot(lx)/texel)*texel,py=Math.round(center.dot(ly)/texel)*texel,pz=center.dot(L);
+  snapped.copy(lx).multiplyScalar(px).addScaledVector(ly,py).addScaledVector(L,pz);
+  sun.target.position.copy(snapped);sun.position.copy(snapped).addScaledVector(L,130);sun.target.updateMatrixWorld();
+  terrain.update(camera.position,terrainBudget);terrainBudget=1;
   const blink=(Math.sin(time*3)>.6?1:0);redLight.emissiveIntensity=.3+blink*3.5;beacon.emissiveIntensity=1.2+Math.sin(time*2.2)*.8;holo.opacity=.55+Math.sin(time*1.7)*.2;
   screenClock-=dt;if(screenClock<=0&&camera.position.distanceTo(interior.position)<14){screenClock=.25;screen.draw(time,k>.5);}
  }
  applyNight(0);setQuality('standard');
- return{setNight,setQuality,update,followSky:(_p:THREE.Vector3)=>{},landmarks:LANDMARKS,grassCount:GRASS.length,meshes,get quality(){return quality;},get nightValue(){return k;}};
+ return{setNight,setQuality,update,followSky:(_p:THREE.Vector3)=>{},landmarks:LANDMARKS,grassCount:GRASS.length,meshes,terrain,get quality(){return quality;},get nightValue(){return k;}};
 }

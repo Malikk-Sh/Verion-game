@@ -4,15 +4,15 @@ import { installFullscreen } from './fullscreen';
 import { createWorld, type Quality } from './scene';
 import { Character, type Input } from './controller';
 import { Ambience } from './audio';
-import { boxes, EYE, FIXED_DT, heightAt, LANDMARKS, ROUTE, SIZE, type Landmark } from './world';
+import { boxes, EYE, FIXED_DT, heightAt, LANDMARKS, ROUTE, MIN, MAX, SIZE, type Landmark } from './world';
 const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
 const canvas=el<HTMLCanvasElement>('world');
 const error=(message:string)=>{el('error-text').textContent=message;el('error').hidden=false;document.body.dataset.ready='error';};
 
-type Settings={quality:Quality;sound:boolean};
+type Settings={quality:Quality;sound:boolean;bob:boolean;fov:number};
 function loadSettings():Settings{
- const fallback:Settings={quality:'standard',sound:true};
- try{const s=JSON.parse(localStorage.getItem('vireon.settings')||'{}');return {quality:['low','standard','high'].includes(s.quality)?s.quality:fallback.quality,sound:typeof s.sound==='boolean'?s.sound:fallback.sound};}catch{return fallback;}
+ const fallback:Settings={quality:'standard',sound:true,bob:true,fov:70};
+ try{const s=JSON.parse(localStorage.getItem('vireon.settings')||'{}');return {quality:['low','standard','high'].includes(s.quality)?s.quality:fallback.quality,sound:typeof s.sound==='boolean'?s.sound:fallback.sound,bob:typeof s.bob==='boolean'?s.bob:fallback.bob,fov:typeof s.fov==='number'&&s.fov>=60&&s.fov<=95?Math.round(s.fov):fallback.fov};}catch{return fallback;}
 }
 const saveSettings=(s:Settings)=>{try{localStorage.setItem('vireon.settings',JSON.stringify(s));}catch{/* settings are optional */}};
 const QUALITY_LABEL:Record<Quality,string>={low:'Графика: экономная',standard:'Графика: стандарт',high:'Графика: высокая'};
@@ -31,7 +31,7 @@ function boot(){
  let joyX=0,joyY=0,runToggle=false,joyPointer:number|null=null,lookPointer:number|null=null,lastX=0,lastY=0;
  let started=false,running=false,night=false,selected='grass',nearest:Landmark|undefined,activeTime=0,accumulator=0,last=performance.now(),lastUI=0;
  const TITLE_OFFSET=-.42;
- let frames:number[]=[],showMetrics=false,wake=0,bob=0,stride=0,fov=68,titleTime=0,lastObjective='';
+ let frames:number[]=[],showMetrics=false,wake=0,bob=0,stride=0,fov=70,titleTime=0,lastObjective='',settingsReturn='welcome';
  const visited=new Set<string>(),discovered=new Set<string>();let dialog='welcome';
  const insideCapsule=(x=actor.x,z=actor.z)=>x>37.5&&x<42.5&&z>37&&z<43.1;
 
@@ -41,6 +41,8 @@ function boot(){
   renderer.setPixelRatio(q==='high'?Math.min(devicePixelRatio,1.5):1);resize();
   el('quality-label').textContent=QUALITY_LABEL[q];
  }
+ function applyBob(on:boolean){settings.bob=on;saveSettings(settings);el('bob-label').textContent=on?'Покачивание: вкл.':'Покачивание: выкл.';el('bob-toggle').setAttribute('aria-pressed',String(on));}
+ function applyFov(v:number){settings.fov=Math.max(60,Math.min(95,Math.round(v)));saveSettings(settings);el<HTMLInputElement>('fov-range').value=String(settings.fov);el('fov-value').textContent=`${settings.fov}°`;}
  function applySound(on:boolean){settings.sound=on;saveSettings(settings);audio.setEnabled(on);el('sound-label').textContent=on?'Звук: вкл.':'Звук: выкл.';el('sound-toggle').setAttribute('aria-pressed',String(on));}
 
  const updateRun=()=>{input.run=runToggle||keys.has('ShiftLeft')||keys.has('ShiftRight');el('run').setAttribute('aria-pressed',String(input.run));};
@@ -48,7 +50,8 @@ function boot(){
  function setDialog(which:string|null){
   clearInput();accumulator=0;last=performance.now();running=which===null;dialog=which||'';
   el('veil').hidden=which===null;
-  for(const id of ['welcome','paused','map-panel','info-panel'])el(id).hidden=id!==which;
+  for(const id of ['welcome','paused','settings','map-panel','info-panel'])el(id).hidden=id!==which;
+  document.body.dataset.dialog=which??'';
   document.body.dataset.running=String(running);
   if(which==='map-panel')drawMap();
   if(running)audio.resume();
@@ -79,6 +82,11 @@ function boot(){
  el('reset').onclick=()=>{actor.reset();resume();};
  el('quality-toggle').onclick=()=>{const order:Quality[]=['low','standard','high'];applyQuality(order[(order.indexOf(settings.quality)+1)%3]);};
  el('sound-toggle').onclick=()=>applySound(!settings.sound);
+ el('bob-toggle').onclick=()=>applyBob(!settings.bob);
+ el<HTMLInputElement>('fov-range').addEventListener('input',e=>applyFov(Number((e.target as HTMLInputElement).value)));
+ const openSettings=()=>{audio.tone('ui');settingsReturn=started?'paused':'welcome';setDialog('settings');};
+ el('title-settings').onclick=openSettings;el('settings-button').onclick=openSettings;
+ el('settings-back').onclick=()=>{audio.tone('ui');setDialog(settingsReturn);};
  const setNight=(value:boolean,instant=false)=>{night=value;world.setNight(night,instant);el('light-text').textContent=night?'Ночь':'День';el('light-icon').innerHTML=`<svg><use href="#i-${night?'moon':'sun'}"/></svg>`;el('day').setAttribute('aria-pressed',String(night));};
  el('day').onclick=()=>{audio.tone('ui');setNight(!night);};
  el('map-button').onclick=()=>{audio.tone('ui');setDialog('map-panel');};el('close-map').onclick=resume;
@@ -101,7 +109,7 @@ function boot(){
  }
  el('inspect').onclick=inspect;
  addEventListener('keydown',event=>{
-  if(event.code==='Escape'){event.preventDefault();if(started){if(running)pause();else resume();}return;}
+  if(event.code==='Escape'){event.preventDefault();if(dialog==='settings'){setDialog(settingsReturn);return;}if(started){if(running)pause();else resume();}return;}
   if(event.code==='KeyM'&&started&&!event.repeat){event.preventDefault();if(dialog==='map-panel')resume();else setDialog('map-panel');return;}
   if(!running)return;
   if(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','ShiftLeft','ShiftRight','KeyE'].includes(event.code))event.preventDefault();
@@ -123,25 +131,35 @@ function boot(){
  canvas.addEventListener('contextmenu',event=>event.preventDefault());
 
  // ---------- Holographic map (mirrored x so it matches the first-person view: east = −x) ----------
+ let mapBase:HTMLCanvasElement|null=null;
+ const MAP=480,MARGIN=18,MS=(MAP-2*MARGIN)/SIZE,mpx=(x:number)=>MARGIN+(MAX-x)*MS,mpy=(z:number)=>MAP-MARGIN-(z-MIN)*MS;
+ function mapTerrain(){
+  // Rendered once: relief shading, height tint and 4 m contours for the whole 560 m square.
+  const c=document.createElement('canvas');c.width=c.height=MAP;const ctx=c.getContext('2d')!;ctx.fillStyle='#061518';ctx.fillRect(0,0,MAP,MAP);
+  const S=2,N=SIZE/S;
+  for(let j=0;j<N;j++)for(let i=0;i<N;i++){const x=MIN+i*S,z=MIN+j*S,h=heightAt(x,z),e=heightAt(x+S,z)-heightAt(x-S,z)-(heightAt(x,z+S)-heightAt(x,z-S)),shade=Math.max(-10,Math.min(14,e*6));
+   const band=Math.floor(h/4)!==Math.floor(heightAt(x+S,z)/4)||Math.floor(h/4)!==Math.floor(heightAt(x,z+S)/4);
+   ctx.fillStyle=band?`rgba(127,230,218,${h>30?.28:.4})`:`hsl(${182-Math.min(40,h)*.8} ${20+Math.min(30,Math.max(0,h))}% ${Math.max(4,10+Math.min(40,h)*.55+shade)}%)`;
+   ctx.fillRect(mpx(x+S),mpy(z+S),S*MS+.6,S*MS+.6);}
+  ctx.strokeStyle='rgba(127,230,218,.09)';ctx.lineWidth=1;for(let v=MIN;v<=MAX;v+=80){ctx.beginPath();ctx.moveTo(mpx(v),mpy(MIN));ctx.lineTo(mpx(v),mpy(MAX));ctx.moveTo(mpx(MIN),mpy(v));ctx.lineTo(mpx(MAX),mpy(v));ctx.stroke();}
+  ctx.strokeStyle='rgba(242,180,96,.35)';ctx.setLineDash([2,4]);ctx.strokeRect(mpx(160),mpy(160),160*MS,160*MS);ctx.setLineDash([]);
+  ctx.font='600 8px ui-monospace,monospace';ctx.fillStyle='rgba(242,180,96,.6)';ctx.textAlign='left';ctx.fillText('ДОЛИНА ПРИБЫТИЯ',mpx(160)+3,mpy(160)+10);
+  return c;
+ }
  function drawMap(){
-  const m=el<HTMLCanvasElement>('map'),ctx=m.getContext('2d')!;ctx.fillStyle='#061518';ctx.fillRect(0,0,480,480);
-  const margin=24,s=432/SIZE,px=(x:number)=>margin+(SIZE-x)*s,py=(z:number)=>480-margin-z*s;
-  for(let z=0;z<SIZE;z+=2)for(let x=0;x<SIZE;x+=2){const h=heightAt(x,z);ctx.fillStyle=`hsl(${178-h*3} ${22+h*2}% ${9+Math.max(0,h)*2.2}%)`;ctx.fillRect(px(x+2),py(z+2),2*s+.6,2*s+.6);}
-  // Contour lines every 1 m.
-  ctx.fillStyle='rgba(127,230,218,.35)';
-  for(let z=0;z<SIZE-1;z++)for(let x=0;x<SIZE-1;x++){const a=Math.floor(heightAt(x,z)),b=Math.floor(heightAt(x+1,z)),c=Math.floor(heightAt(x,z+1));if(a!==b||a!==c)ctx.fillRect(px(x+1),py(z+1),1.2,1.2);}
-  ctx.strokeStyle='rgba(127,230,218,.1)';ctx.lineWidth=1;for(let i=0;i<=160;i+=20){ctx.beginPath();ctx.moveTo(px(i),py(0));ctx.lineTo(px(i),py(160));ctx.moveTo(px(0),py(i));ctx.lineTo(px(160),py(i));ctx.stroke();}
-  ctx.strokeStyle='rgba(242,180,96,.55)';ctx.setLineDash([4,6]);ctx.beginPath();['capsule',...ROUTE].forEach((id,i)=>{const p=LANDMARKS.find(x=>x.id===id)!;i?ctx.lineTo(px(p.x),py(p.z)):ctx.moveTo(px(p.x),py(p.z));});ctx.stroke();ctx.setLineDash([]);
-  ctx.strokeStyle='rgba(127,230,218,.6)';ctx.strokeRect(px(66),py(52),16*s,16*s);
+  const m=el<HTMLCanvasElement>('map'),ctx=m.getContext('2d')!;mapBase??=mapTerrain();ctx.drawImage(mapBase,0,0);
+  ctx.strokeStyle='rgba(242,180,96,.55)';ctx.setLineDash([4,6]);ctx.beginPath();['capsule',...ROUTE].forEach((id,i)=>{const p=LANDMARKS.find(x=>x.id===id)!;i?ctx.lineTo(mpx(p.x),mpy(p.z)):ctx.moveTo(mpx(p.x),mpy(p.z));});ctx.stroke();ctx.setLineDash([]);
   ctx.font='600 9px ui-monospace,monospace';ctx.textAlign='center';
-  for(const p of LANDMARKS){const sel=p.id===selected;ctx.save();ctx.translate(px(p.x),py(p.z));ctx.rotate(Math.PI/4);ctx.fillStyle=sel?'#f2b460':visited.has(p.id)?'rgba(127,230,218,.5)':'#bfeee6';const r=sel?6:4;ctx.fillRect(-r,-r,r*2,r*2);ctx.restore();
-   if(sel){ctx.strokeStyle='rgba(242,180,96,.5)';ctx.beginPath();ctx.arc(px(p.x),py(p.z),12,0,Math.PI*2);ctx.stroke();}
-   ctx.fillStyle=sel?'#f2b460':'#d7f3ee';ctx.fillText(p.short,px(p.x),py(p.z)-13);}
-  const x=px(actor.x),y=py(actor.z);ctx.save();ctx.translate(x,y);ctx.rotate(-actor.yaw);
-  ctx.fillStyle='rgba(127,230,218,.14)';ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,40,-Math.PI/2-.6,-Math.PI/2+.6);ctx.fill();
-  ctx.beginPath();ctx.moveTo(0,-10);ctx.lineTo(6,7);ctx.lineTo(0,4);ctx.lineTo(-6,7);ctx.closePath();ctx.fillStyle='#ffffff';ctx.fill();ctx.restore();
-  ctx.font='600 10px ui-monospace,monospace';ctx.fillStyle='rgba(215,236,230,.7)';ctx.textAlign='left';ctx.fillText('С ↑',27,17);ctx.fillText('0',24,475);ctx.textAlign='right';ctx.fillText('160 м',457,475);
-  el('landmark-list').replaceChildren(...LANDMARKS.map(p=>{const button=document.createElement('button');button.textContent=p.name;button.setAttribute('aria-pressed',String(p.id===selected));const span=document.createElement('span');span.textContent=visited.has(p.id)?'✓':'◇';button.append(span);button.onclick=()=>{selected=p.id;audio.tone('ui');resume();updateUI();};return button;}));
+  for(const p of LANDMARKS){const sel=p.id===selected;ctx.save();ctx.translate(mpx(p.x),mpy(p.z));ctx.rotate(Math.PI/4);ctx.fillStyle=sel?'#f2b460':visited.has(p.id)?'rgba(127,230,218,.5)':'#bfeee6';const r=sel?5:3;ctx.fillRect(-r,-r,r*2,r*2);ctx.restore();
+   if(sel){ctx.strokeStyle='rgba(242,180,96,.5)';ctx.beginPath();ctx.arc(mpx(p.x),mpy(p.z),11,0,Math.PI*2);ctx.stroke();}
+   const far=Math.hypot(p.x-80,p.z-80)>100;if(far||sel){ctx.fillStyle=sel?'#f2b460':'#d7f3ee';ctx.fillText(p.short,mpx(p.x),mpy(p.z)-11);}}
+  const x=mpx(actor.x),y=mpy(actor.z);ctx.save();ctx.translate(x,y);ctx.rotate(-actor.yaw);
+  ctx.fillStyle='rgba(127,230,218,.16)';ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,34,-Math.PI/2-.6,-Math.PI/2+.6);ctx.fill();
+  ctx.beginPath();ctx.moveTo(0,-9);ctx.lineTo(5.5,6);ctx.lineTo(0,3.5);ctx.lineTo(-5.5,6);ctx.closePath();ctx.fillStyle='#ffffff';ctx.fill();ctx.restore();
+  ctx.font='600 10px ui-monospace,monospace';ctx.fillStyle='rgba(215,236,230,.75)';ctx.textAlign='left';ctx.fillText('С ↑',MARGIN+2,MARGIN+10);
+  // Scale bar: 100 m.
+  ctx.fillRect(MAP-MARGIN-100*MS,MAP-MARGIN+6,100*MS,2);ctx.textAlign='right';ctx.fillText('100 м',MAP-MARGIN,MAP-MARGIN+2);
+  el('landmark-list').replaceChildren(...LANDMARKS.map(p=>{const button=document.createElement('button');const d=Math.round(Math.hypot(p.x-actor.x,p.z-actor.z));button.innerHTML='';const name=document.createElement('b');name.textContent=p.name;const meta=document.createElement('small');meta.textContent=`${d} м`;button.append(name,meta);button.setAttribute('aria-label',p.name);button.setAttribute('aria-pressed',String(p.id===selected));const span=document.createElement('span');span.textContent=visited.has(p.id)?'✓':'◇';button.append(span);button.onclick=()=>{selected=p.id;audio.tone('ui');resume();updateUI();};return button;}));
  }
  // ---------- Compass strip ----------
  const compass=el<HTMLCanvasElement>('compass'),cctx=compass.getContext('2d')!;
@@ -164,13 +182,13 @@ function boot(){
   tmp.set(t.x,heightAt(t.x,t.z)+2.4,t.z).project(camera);
   const visible=started&&running&&d>t.radius*.6&&tmp.z<1&&Math.abs(tmp.x)<1.1&&Math.abs(tmp.y)<1.1;
   marker.style.opacity=visible?'1':'0';
-  if(visible){marker.style.transform=`translate(${(tmp.x*.5+.5)*innerWidth}px,${(-tmp.y*.5+.5)*innerHeight}px) translate(-50%,-50%)`;el('marker-distance').textContent=`${Math.round(d)} м`;}
+  if(visible){marker.style.transform=`translate(${(tmp.x*.5+.5)*innerWidth}px,${Math.max(innerHeight<500?92:118,(-tmp.y*.5+.5)*innerHeight)}px) translate(-50%,-50%)`;el('marker-distance').textContent=`${Math.round(d)} м`;}
  }
  function objective(){
   if(insideCapsule())return 'Выйдите из капсулы и осмотритесь';
   if(visited.size===0)return 'Отсканируйте капсулу или ближайшее место — кнопка «Сканировать»';
-  if(visited.size<LANDMARKS.length)return `Исследуйте долину: следуйте метке на компасе (${visited.size} из ${LANDMARKS.length})`;
-  return 'Долина изучена. Возвращайтесь к капсуле';
+  if(visited.size<LANDMARKS.length)return `Исследуйте окрестности: следуйте метке на компасе (${visited.size} из ${LANDMARKS.length})`;
+  return 'Участок изучен. Возвращайтесь к капсуле';
  }
  function updateUI(){
   const target=LANDMARKS.find(p=>p.id===selected)!;
@@ -185,7 +203,7 @@ function boot(){
   el('coords').textContent=`X ${String(Math.round(actor.x)).padStart(3,'0')} · Z ${String(Math.round(actor.z)).padStart(3,'0')}`;
   const o=objective();if(o!==lastObjective){lastObjective=o;el('objective-text').textContent=o;const ob=el('objective');ob.classList.remove('pulse');void ob.offsetWidth;ob.classList.add('pulse');}
  }
- function state(){const sorted=[...frames].sort((a,b)=>a-b);return {ready:true,version:'B3',grassCount:world.grassCount,fullscreen:!!document.fullscreenElement,running,dialog,night,selected,visited:[...visited],activeTime:Number(activeTime.toFixed(3)),position:{x:actor.x,y:actor.y,z:actor.z},yaw:actor.yaw,pitch:actor.pitch,grounded:actor.grounded,input:{...input,joyX,joyY,joyPointer,lookPointer},quality:settings.quality,sound:settings.sound,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0,viewport:{width:innerWidth,height:innerHeight},renderer:renderer.getContext().getParameter(renderer.getContext().VERSION)};}
+ function state(){const sorted=[...frames].sort((a,b)=>a-b);return {ready:true,version:'B4',grassCount:world.grassCount,fullscreen:!!document.fullscreenElement,running,dialog,night,selected,visited:[...visited],activeTime:Number(activeTime.toFixed(3)),position:{x:actor.x,y:actor.y,z:actor.z},yaw:actor.yaw,pitch:actor.pitch,grounded:actor.grounded,input:{...input,joyX,joyY,joyPointer,lookPointer},quality:settings.quality,sound:settings.sound,bob:settings.bob,fov:settings.fov,fineTerrainBlocks:world.terrain.fineBlocks,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0,viewport:{width:innerWidth,height:innerHeight},renderer:renderer.getContext().getParameter(renderer.getContext().VERSION)};}
  Object.defineProperty(window,'__vireon',{value:{getState:state},writable:false});
 
  const draw=(now:number)=>{
@@ -206,22 +224,22 @@ function boot(){
    const a=running?accumulator/FIXED_DT:1;
    wake=Math.max(0,wake-(running?dt:0));const w=wake/2.6,ease=w*w*(3-2*w);
    const moving=running&&(Math.abs(input.forward)+Math.abs(input.right))>.1&&actor.grounded;
-   const bobY=moving?Math.sin(bob*2)*.028:0,bobX=moving?Math.cos(bob)*.018:0;
+   const bobOn=moving&&settings.bob,bobY=bobOn?Math.sin(bob*2)*.028:0,bobX=bobOn?Math.cos(bob)*.018:0;
    viewPos.set(THREE.MathUtils.lerp(actor.previous.x,actor.x,a),THREE.MathUtils.lerp(actor.previous.y,actor.y,a)+EYE+bobY-ease*.25,THREE.MathUtils.lerp(actor.previous.z,actor.z,a));
    viewPos.x+=Math.cos(actor.yaw)*bobX;viewPos.z-=Math.sin(actor.yaw)*bobX;camera.position.copy(viewPos);
    const pitch=actor.pitch-ease*.45;
    viewDirection.set(Math.sin(actor.yaw)*Math.cos(pitch),Math.sin(pitch),Math.cos(actor.yaw)*Math.cos(pitch));camera.lookAt(tmp.copy(viewPos).add(viewDirection));
    if(ease>0)camera.rotateZ(Math.sin(ease*3)*.06*ease);
-   const targetFov=input.run&&moving?74:68;fov+=(targetFov-fov)*Math.min(1,dt*6);if(Math.abs(camera.fov-fov)>.01){camera.fov=fov;camera.updateProjectionMatrix();}
+   const targetFov=settings.fov+(input.run&&moving&&settings.bob?6:0);fov+=(targetFov-fov)*Math.min(1,dt*6);if(Math.abs(camera.fov-fov)>.01){camera.fov=fov;camera.updateProjectionMatrix();}
   }
   world.update(dt,camera,renderer);renderer.render(scene,camera);
   audio.update(dt,started&&insideCapsule()?1:0,world.nightValue);
   if(started){drawCompass(bearing(Math.sin(actor.yaw),Math.cos(actor.yaw)));updateMarker();}
   if(running&&dt>0){frames.push(actualFrameMs);if(frames.length>180)frames.shift();}
-  if(now-lastUI>150){updateUI();lastUI=now;if(showMetrics){const s=state();el('metrics').textContent=`B3 / WebGL2 / DPR ${renderer.getPixelRatio()} / ${settings.quality}\nВызовы: ${s.drawCalls} · треуг.: ${s.triangles}\nКадр p95: ${s.frameP95Ms.toFixed(1)} мс\nX ${actor.x.toFixed(1)} · Z ${actor.z.toFixed(1)}\nЭто замер текущего браузера`;}}
+  if(now-lastUI>150){updateUI();lastUI=now;if(showMetrics){const s=state();const ob=el('objective').getBoundingClientRect();el('metrics').style.top=`${Math.round(ob.bottom+8)}px`;el('metrics').textContent=`B4 / WebGL2 / DPR ${renderer.getPixelRatio()} / ${settings.quality}\nВызовы: ${s.drawCalls} · треуг.: ${s.triangles}\nКадр p95: ${s.frameP95Ms.toFixed(1)} мс\nX ${actor.x.toFixed(1)} · Z ${actor.z.toFixed(1)}\nЭто замер текущего браузера`;}}
   requestAnimationFrame(draw);
  };
- document.body.dataset.started='false';applyQuality(settings.quality);applySound(settings.sound);setNight(false,true);updateUI();
+ document.body.dataset.started='false';applyQuality(settings.quality);applySound(settings.sound);applyBob(settings.bob);applyFov(settings.fov);fov=settings.fov;setNight(false,true);updateUI();
  document.body.dataset.ready='true';document.body.dataset.running='false';requestAnimationFrame(draw);
 }
 try { boot(); } catch(e){ console.error(e);error('Нужен браузер с WebGL 2. Попробуйте обновить браузер или открыть сцену на другом устройстве. '+(e instanceof Error?e.message:'')); }

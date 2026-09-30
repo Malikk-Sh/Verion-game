@@ -50,3 +50,31 @@ export function chiseledRock(seed:number,style:RockStyle={}){
  g.setAttribute('color',new THREE.BufferAttribute(colors,3));
  return g;
 }
+
+/**
+ * Ore outcrop built from one chiselled host. Vein and nugget triangles are copies of the host's
+ * own faces, pushed out a few centimetres along the face normal, so every vein lies exactly on
+ * the rock surface (B3 placed separate nuggets that could float). Same transform for both parts.
+ */
+export function oreOutcrop(seed:number,style:RockStyle,vein:{freq:number;width:number;blobs:number;lift:number;crystals:number;stain?:string}){
+ const host=chiseledRock(seed,{detail:3,...style});
+ const p=host.attributes.position,n=host.attributes.normal,col=host.attributes.color as THREE.BufferAttribute;
+ const out:number[]=[],a=new THREE.Vector3(),b=new THREE.Vector3(),c=new THREE.Vector3(),m=new THREE.Vector3(),nn=new THREE.Vector3();
+ const stain=style&&vein.stain?new THREE.Color(vein.stain):null,tmp=new THREE.Color(),rng=random(seed*31+7);
+ for(let f=0;f<p.count;f+=3){
+  a.fromBufferAttribute(p,f);b.fromBufferAttribute(p,f+1);c.fromBufferAttribute(p,f+2);m.copy(a).add(b).add(c).multiplyScalar(1/3);nn.fromBufferAttribute(n,f);
+  if(m.y<.06)continue;
+  const band=Math.abs(noise3(m.x*vein.freq+seed,m.y*vein.freq*1.7,m.z*vein.freq,seed+3)),blob=noise3(m.x*3+9,m.y*3,m.z*3,seed+11);
+  const isVein=band<vein.width||blob>vein.blobs;
+  const near=Math.max(0,1-band/(vein.width*2.6));
+  if(stain&&near>0)for(let k=0;k<3;k++){tmp.fromBufferAttribute(col,f+k).lerp(stain,near*.7);col.setXYZ(f+k,tmp.r,tmp.g,tmp.b);}
+  if(!isVein)continue;
+  const lift=vein.lift*(.6+rng()*.8);
+  for(const v of [a,b,c])out.push(v.x+nn.x*lift,v.y+nn.y*lift,v.z+nn.z*lift);
+  // Occasional crystal/nugget: a low pyramid standing on the vein face.
+  if(rng()<vein.crystals){const top=m.clone().addScaledVector(nn,lift+.05+rng()*.07);const q=[a,b,c].map(v=>v.clone().lerp(m,.35).addScaledVector(nn,lift));
+   for(let k=0;k<3;k++)out.push(q[k].x,q[k].y,q[k].z,q[(k+1)%3].x,q[(k+1)%3].y,q[(k+1)%3].z,top.x,top.y,top.z);}
+ }
+ const veins=new THREE.BufferGeometry();veins.setAttribute('position',new THREE.Float32BufferAttribute(out,3));veins.computeVertexNormals();
+ col.needsUpdate=true;return {host,veins};
+}

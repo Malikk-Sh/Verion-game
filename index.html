@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="ru">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#081214"><meta name="description" content="Vireon — исследуйте первую долину Верданы. Мобильная 3D-игра о жизни на новых планетах."><title>Vireon · Вердана / B3</title><link rel="icon" href="data:,"></head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#081214"><meta name="description" content="Vireon — исследуйте первую долину Верданы. Мобильная 3D-игра о жизни на новых планетах."><title>Vireon · Вердана / B4</title><link rel="icon" href="data:,"></head>
 <body>
 <svg class="icon-defs" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>
  <symbol id="i-map" viewBox="0 0 24 24"><path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2Zm6-2v16m6-14v16"/></symbol>
@@ -14,6 +14,9 @@
  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5Z"/></symbol>
  <symbol id="i-sound" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4Zm12 0a4 4 0 0 1 0 6m2.5-9a8 8 0 0 1 0 12"/></symbol>
  <symbol id="i-quality" viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5"/></symbol>
+ <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M4.9 4.9 7 7m10 10 2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></symbol>
+ <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+ <symbol id="i-wave" viewBox="0 0 24 24"><path d="M2 12c3-6 5-6 8 0s5 6 8 0 3-4 4-4"/></symbol>
  <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11 12 4l8 7v9h-5v-6H9v6H4Z"/></symbol>
 </defs></svg>
 <canvas id="world" aria-label="Трёхмерная долина Верданы"></canvas>
@@ -32,11 +35,10 @@
  <div id="target-marker" aria-hidden="true"><i></i><span id="marker-distance"></span></div>
  <div id="reticle" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
  <aside id="discovery" hidden><div class="discovery-copy"><span id="discovery-kind" class="mono tiny"></span><strong id="discovery-title"></strong></div><button id="inspect" aria-label="Осмотреть объект"><svg><use href="#i-scan"/></svg>Сканировать <kbd>E</kbd></button></aside>
- <div id="route-status"><span id="progress" class="mono tiny">ОСМОТРЕНО 0 / 9</span><span id="progress-bar" aria-hidden="true"></span></div>
+ <div id="route-status"><span id="progress" class="mono tiny">ОСМОТРЕНО 0 / 12</span><span id="progress-bar" aria-hidden="true"></span></div>
  <div id="joystick" role="group" aria-label="Джойстик движения"><div class="stick-ring"><span class="stick-ticks"></span><div id="stick"></div></div></div>
  <div id="actions"><button id="run" class="hex" aria-pressed="false"><svg><use href="#i-run"/></svg><span>Бег</span></button><button id="jump" class="hex"><svg><use href="#i-jump"/></svg><span>Прыжок</span></button></div>
  <div id="look-hint" class="mono tiny">СВАЙП — ОБЗОР</div>
- <div id="prototype-note" class="mono tiny"><span class="build-tag">B3</span> визуальный образец</div>
  <div id="boot" aria-hidden="true"></div>
 </div>
 <div id="veil" class="veil">
@@ -45,12 +47,24 @@
    <div class="mono tiny kicker">ЭКСПЕДИЦИЯ 01 · ПЛАНЕТА ВЕРДАНА</div>
    <h1 class="wordmark">VIREON</h1>
    <p class="lede">Холодная долина. Одна капсула.<br>Первый шаг человека на новой планете.</p>
-   <button id="start" class="primary">Начать экспедицию <span aria-hidden="true">→</span></button>
+   <div class="title-actions"><button id="start" class="primary">Начать экспедицию <span aria-hidden="true">→</span></button><button id="title-settings" class="secondary" aria-label="Настройки"><svg><use href="#i-gear"/></svg><span>Настройки</span></button></div>
    <p class="help">Телефон: джойстик и свайп. Компьютер: WASD, обзор мышью, Space — прыжок, E — сканер.<br>Лучше всего — в горизонтальном режиме, со звуком.</p>
   </div>
-  <div class="title-foot mono tiny"><span class="build-tag">B3</span> Визуальный образец: мир, модели и интерфейс. Выживание, добыча и сохранения появятся на следующих этапах.</div>
+  <div class="title-foot mono tiny"><span class="build-tag">B4</span> Визуальный образец: мир 560 × 560 м, модели и интерфейс. Выживание, добыча, ровер и сохранения появятся на следующих этапах.</div>
  </section>
- <section id="paused" class="panel pause-panel" hidden><div class="mono tiny kicker">VIREON / МЕНЮ ЭКСПЕДИЦИИ</div><h2 id="pause-title">Пауза</h2><div class="menu-grid"><button id="resume" class="primary">Продолжить <span aria-hidden="true">→</span></button><button id="fullscreen-toggle" class="secondary" aria-pressed="false"><svg><use href="#i-expand"/></svg><span data-fullscreen-label>На весь экран</span></button><button id="quality-toggle" class="secondary"><svg><use href="#i-quality"/></svg><span id="quality-label">Графика: стандарт</span></button><button id="sound-toggle" class="secondary" aria-pressed="true"><svg><use href="#i-sound"/></svg><span id="sound-label">Звук: вкл.</span></button><button id="reset" class="secondary"><svg><use href="#i-home"/></svg><span>К капсуле</span></button><button id="metrics-toggle" class="ghost">Показать показатели сцены</button></div><p id="fullscreen-status" role="status" aria-live="polite"></p><p class="help">«К капсуле» — служебный возврат для осмотра образца, не телепортация будущей игры.</p></section>
+ <section id="paused" class="panel pause-panel" hidden><div class="mono tiny kicker">VIREON / МЕНЮ ЭКСПЕДИЦИИ</div><h2 id="pause-title">Пауза</h2><div class="menu-grid"><button id="resume" class="primary">Продолжить <span aria-hidden="true">→</span></button><button id="settings-button" class="secondary"><svg><use href="#i-gear"/></svg><span>Настройки</span></button><button id="reset" class="secondary"><svg><use href="#i-home"/></svg><span>К капсуле</span></button></div><p class="help">«К капсуле» — служебный возврат для осмотра образца, не телепортация будущей игры.</p></section>
+ <section id="settings" class="panel settings-panel" hidden><div class="panel-heading"><div><div class="mono tiny kicker">VIREON / НАСТРОЙКИ</div><h2>Настройки</h2></div><button id="settings-back" class="icon-button" aria-label="Закрыть настройки">×</button></div>
+  <div class="settings-grid">
+   <button id="fullscreen-toggle" class="secondary" aria-pressed="false"><svg><use href="#i-expand"/></svg><span data-fullscreen-label>На весь экран</span></button>
+   <button id="quality-toggle" class="secondary"><svg><use href="#i-quality"/></svg><span id="quality-label">Графика: стандарт</span></button>
+   <button id="sound-toggle" class="secondary" aria-pressed="true"><svg><use href="#i-sound"/></svg><span id="sound-label">Звук: вкл.</span></button>
+   <button id="bob-toggle" class="secondary" aria-pressed="true"><svg><use href="#i-wave"/></svg><span id="bob-label">Покачивание: вкл.</span></button>
+   <label class="range-row" for="fov-range"><svg><use href="#i-eye"/></svg><span>Поле зрения</span><input id="fov-range" type="range" min="60" max="95" step="1" value="70"><output id="fov-value">70°</output></label>
+   <button id="metrics-toggle" class="ghost">Показать показатели сцены</button>
+  </div>
+  <p id="fullscreen-status" role="status" aria-live="polite"></p>
+  <p class="help">Качество: «экономная» — без теней и пыли; «высокая» — большие тени и чёткость экрана. Покачивание отключает качание камеры и расширение обзора при беге. Настройки сохраняются в этом браузере.</p>
+ </section>
  <section id="map-panel" class="panel map-panel" hidden><div class="panel-heading"><div><div class="mono tiny kicker">ВЕРДАНА / НАВИГАЦИЯ</div><h2>Долина прибытия</h2></div><button id="close-map" class="icon-button" aria-label="Закрыть карту">×</button></div><div class="map-layout"><canvas id="map" width="480" height="480" aria-label="Карта участка и положения игрока"></canvas><div><p class="help">Выберите ориентир — указатель появится на компасе и в мире.</p><div id="landmark-list"></div></div></div></section>
  <section id="info-panel" class="panel scan-panel" hidden><div class="scan-head"><span class="mono tiny kicker" id="info-kind"></span><span class="mono tiny scan-state">СКАН ЗАВЕРШЁН</span></div><h2 id="info-title"></h2><p id="info-text"></p><dl id="info-data"></dl><button id="close-info" class="primary">Продолжить осмотр <span aria-hidden="true">→</span></button></section>
 </div>
