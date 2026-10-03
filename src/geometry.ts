@@ -19,7 +19,7 @@ export class StaticBatch {
   const m=new THREE.Matrix4().compose(new THREE.Vector3(x,y,z),new THREE.Quaternion().setFromEuler(new THREE.Euler(rx,ry,rz)),new THREE.Vector3(sx,sy,sz));
   g.applyMatrix4(m); const list=this.groups.get(material)??[];list.push(g);this.groups.set(material,list);
  }
- finish(scene:THREE.Scene,shadow:(m:THREE.Material)=>{cast:boolean;receive:boolean}=()=>({cast:true,receive:true})){
+ finish(scene:THREE.Object3D,shadow:(m:THREE.Material)=>{cast:boolean;receive:boolean}=()=>({cast:true,receive:true})){
   const meshes:THREE.Mesh[]=[];
   for(const [material,geometries] of this.groups){
    const geometry=mergeGeometries(geometries);if(!geometry)throw new Error('Static geometry merge failed');

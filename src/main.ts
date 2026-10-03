@@ -5,6 +5,15 @@ import { createWorld, type Quality } from './scene';
 import { Character, type Input } from './controller';
 import { Ambience } from './audio';
 import { boxes, EYE, FIXED_DT, heightAt, LANDMARKS, ROUTE, MIN, MAX, SIZE, type Landmark } from './world';
+import { SimClock } from './game/clock';
+import { ITEMS, MATERIALS, TOOLS } from './game/defs';
+import { countItem, type Slot } from './game/inventory';
+import { NODES, NODE_BY_ID } from './game/resources';
+import { newGame, cloneState, SPAWN_POSE, type GameState } from './game/state';
+import { mineTick, pickUp, toolSlot, itemName, REACH, ticksFor, type Mining } from './game/mining';
+import { SaveStore, SaveError, type SlotRecord } from './persist/store';
+import { Saver, type SaverStatus } from './persist/saver';
+import { buildExport, exportText, exportFileName, parseImport, MAX_FILE_BYTES } from './persist/file';
 const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
 const canvas=el<HTMLCanvasElement>('world');
 const error=(message:string)=>{el('error-text').textContent=message;el('error').hidden=false;document.body.dataset.ready='error';};
@@ -29,10 +38,16 @@ function boot(){
  const viewDirection=new THREE.Vector3(),viewPos=new THREE.Vector3(),tmp=new THREE.Vector3();
  const keys=new Set<string>(),input:Input={forward:0,right:0,run:false,jump:false};
  let joyX=0,joyY=0,runToggle=false,joyPointer:number|null=null,lookPointer:number|null=null,lastX=0,lastY=0;
- let started=false,running=false,night=false,selected='grass',nearest:Landmark|undefined,activeTime=0,accumulator=0,last=performance.now(),lastUI=0;
+ let started=false,running=false,night=false,selected='iron',nearest:Landmark|undefined,last=performance.now(),lastUI=0;
+ // ---------- S1 game state: one clock, finite deposits, inventory, saves ----------
+ const clock=new SimClock(),mining:Mining={nodeId:null,ticks:0};
+ const token=(globalThis.crypto?.randomUUID?.()??Math.random().toString(36).slice(2)+Date.now().toString(36));
+ let game:GameState|null=null,store:SaveStore|null=null,saver:Saver|null=null,storeError='',slotId:string|null=null;
+ let holdMine=false,aimNode:string|null=null,aimReason='',mineRatio=0,strikeClock=0,nearDrop:string|null=null,slots:SlotRecord[]=[];
+ const liveDialogs=new Set(['inventory-panel']);
  const TITLE_OFFSET=-.42;
- let frames:number[]=[],showMetrics=false,wake=0,bob=0,stride=0,fov=70,titleTime=0,lastObjective='',settingsReturn='welcome';
- const visited=new Set<string>(),discovered=new Set<string>();let dialog='welcome';
+ let exported=false,autoTarget='',frames:number[]=[],showMetrics=false,wake=0,bob=0,stride=0,fov=70,titleTime=0,lastObjective='',settingsReturn='welcome';
+ const visited=new Set<string>(),discovered=new Set<string>();let dialog='welcome';const ALL_DIALOGS=['welcome','paused','settings','map-panel','info-panel','inventory-panel','saves-panel','lease-panel'];
  const insideCapsule=(x=actor.x,z=actor.z)=>x>37.5&&x<42.5&&z>37&&z<43.1;
 
  // ---------- Settings ----------
@@ -46,17 +61,20 @@ function boot(){
  function applySound(on:boolean){settings.sound=on;saveSettings(settings);audio.setEnabled(on);el('sound-label').textContent=on?'Звук: вкл.':'Звук: выкл.';el('sound-toggle').setAttribute('aria-pressed',String(on));}
 
  const updateRun=()=>{input.run=runToggle||keys.has('ShiftLeft')||keys.has('ShiftRight');el('run').setAttribute('aria-pressed',String(input.run));};
- function clearInput(){keys.clear();joyX=joyY=0;input.forward=input.right=0;input.jump=false;runToggle=false;joyPointer=lookPointer=null;el('stick').style.transform='translate(0,0)';updateRun();}
+ function clearInput(){keys.clear();joyX=joyY=0;holdMine=false;input.forward=input.right=0;input.jump=false;runToggle=false;joyPointer=lookPointer=null;el('stick').style.transform='translate(0,0)';updateRun();}
  function setDialog(which:string|null){
-  clearInput();accumulator=0;last=performance.now();running=which===null;dialog=which||'';
+  clearInput();last=performance.now();running=which===null;dialog=which||'';
+  // The clock runs in play and in the inventory (time does not stop there, SYSTEMS §1); every other dialog freezes it.
+  if(started&&(running||liveDialogs.has(dialog))&&!saver?.halted)clock.start();else clock.stop();
   el('veil').hidden=which===null;
-  for(const id of ['welcome','paused','settings','map-panel','info-panel'])el(id).hidden=id!==which;
+  for(const id of ALL_DIALOGS)el(id).hidden=id!==which;
+  el('veil').classList.toggle('live',liveDialogs.has(dialog));
   document.body.dataset.dialog=which??'';
   document.body.dataset.running=String(running);
-  if(which==='map-panel')drawMap();
+  if(which==='map-panel')drawMap();if(which==='inventory-panel')drawInventory();if(which==='saves-panel')void refreshSlots();if(which==='paused')updatePauseInfo();
   if(running)audio.resume();else if(started&&(which==='paused'||which==='settings'))audio.suspend();
  }
- function pause(reason='Пауза'){if(!started)return;el('pause-title').textContent=reason;setDialog('paused');}
+ function pause(reason='Пауза'){if(!started)return;el('pause-title').textContent=reason;setDialog('paused');void saver?.save();}
  function bootSequence(){
   const lines:[string,string][]=[['Связь с капсулой VE-01','ОК'],['Герметичность шлема','ОК'],['Навигация','ДОЛИНА'],['Сканер местности','АКТИВЕН']];
   const box=el('boot');box.className='';box.replaceChildren(...lines.map(([a,b],i)=>{const d=document.createElement('div');d.style.animationDelay=`${.25+i*.32}s`;d.innerHTML=`${a}<b>${b}</b>`;return d;}));
@@ -65,7 +83,8 @@ function boot(){
   setTimeout(()=>{box.replaceChildren();box.className='';},2800);
  }
  function resume(){
-  if(innerHeight>innerWidth||document.hidden)return;
+  if(innerHeight>innerWidth||document.hidden||!game)return;
+  if(saver?.halted){showHalt();return;}
   const first=!started;started=true;document.body.dataset.started='true';setDialog(null);el('start').blur();
   if(first){audio.start();audio.setEnabled(settings.sound);wake=2.6;bootSequence();}
  }
@@ -74,12 +93,28 @@ function boot(){
   if(portrait&&started)pause('Продолжим в горизонтальном режиме');}
  addEventListener('resize',resize);
  addEventListener('blur',()=>pause('Экспедиция приостановлена'));
- document.addEventListener('visibilitychange',()=>{clearInput();if(document.hidden){pause('Экспедиция приостановлена');audio.suspend();}});
- canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();pause();error('Графический контекст был потерян. Перезагрузите сцену — в этом образце прогресс не сохраняется.');});
+ document.addEventListener('visibilitychange',()=>{clearInput();if(document.hidden){clock.stop();pause('Экспедиция приостановлена');audio.suspend();}});
+ addEventListener('pagehide',()=>{if(slotId&&store&&!saver?.halted){const id=slotId,st=store;void (saver?saver.save():Promise.resolve()).finally(()=>st.releaseLease(id,token)).catch(()=>{});}});
+ canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();pause();error('Графический контекст был потерян. Перезагрузите страницу — мир сохранён на момент последнего автосохранения.');});
  installFullscreen(el<HTMLButtonElement>('fullscreen-toggle'),el('fullscreen-status'));
- el('start').onclick=()=>{audio.start();audio.setEnabled(settings.sound);audio.tone('ui');const f=el('fade');f.classList.add('on');setTimeout(()=>{resume();f.classList.remove('on');},550);};
+ const enter=()=>{audio.start();audio.setEnabled(settings.sound);audio.tone('ui');const f=el('fade');f.classList.add('on');setTimeout(()=>{resume();f.classList.remove('on');},550);};
+ el('start').onclick=()=>{audio.start();void newExpedition().then(ok=>{if(ok)enter();});};
+ el('continue').onclick=()=>{audio.start();if(slots[0])void openSlot(slots[0].id).then(ok=>{if(ok)enter();});};
+ el('title-saves').onclick=()=>{audio.tone('ui');setDialog('saves-panel');};
+ el('saves-button').onclick=()=>{audio.tone('ui');setDialog('saves-panel');};
+ el('close-saves').onclick=()=>{audio.tone('ui');if(started)setDialog('paused');else setDialog('welcome');};
+ el('save-now').onclick=()=>{audio.tone('ui');if(!saver){updatePauseInfo('Хранилище недоступно — используйте экспорт');return;}void saver.save().then(()=>updatePauseInfo());};
+ el('export-current').onclick=()=>{if(game)downloadExport(snapshot(),saver?.revision??0);else el('saves-status').textContent='Нет открытого мира';};
+ el('import-button').onclick=()=>el<HTMLInputElement>('import-file').click();
+ el<HTMLInputElement>('import-file').addEventListener('change',e=>{const input=e.target as HTMLInputElement,file=input.files?.[0];input.value='';if(file)void importFile(file);});
+ el('inventory-button').onclick=()=>{audio.tone('ui');if(dialog==='inventory-panel')resume();else if(running)setDialog('inventory-panel');};
+ el('close-inventory').onclick=()=>{audio.tone('ui');resume();};
+ el('pickup').onclick=()=>{if(!game||!nearDrop||!running)return;const moved=pickUp(game,nearDrop);audio.tone(moved?'item':'warn');toast(moved?'Поднято':'Рюкзак полон',moved?`${moved} предм.`:'Освободите слот');syncDrops();};
+ const mineBtn=el('mine');
+ mineBtn.addEventListener('pointerdown',e=>{e.preventDefault();if(running){holdMine=true;capture(mineBtn,e);}});
+ for(const type of ['pointerup','pointercancel','lostpointercapture'])mineBtn.addEventListener(type,()=>{holdMine=false;});
  el('resume').onclick=resume;el('pause-button').onclick=()=>{audio.tone('ui');pause();};
- el('reset').onclick=()=>{actor.reset();resume();};
+ el('reset').onclick=()=>{if(saver?.halted)return;actor.reset();resume();};
  el('quality-toggle').onclick=()=>{const order:Quality[]=['low','standard','high'];applyQuality(order[(order.indexOf(settings.quality)+1)%3]);};
  el('sound-toggle').onclick=()=>applySound(!settings.sound);
  el('bob-toggle').onclick=()=>applyBob(!settings.bob);
@@ -111,12 +146,14 @@ function boot(){
  addEventListener('keydown',event=>{
   if(event.code==='Escape'){event.preventDefault();if(dialog==='settings'){setDialog(settingsReturn);return;}if(started){if(running)pause();else resume();}return;}
   if(event.code==='KeyM'&&started&&!event.repeat){event.preventDefault();if(dialog==='map-panel')resume();else setDialog('map-panel');return;}
+  if(event.code==='KeyI'&&started&&!event.repeat){event.preventDefault();if(dialog==='inventory-panel')resume();else if(running)setDialog('inventory-panel');return;}
   if(!running)return;
-  if(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','ShiftLeft','ShiftRight','KeyE'].includes(event.code))event.preventDefault();
+  if(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','ShiftLeft','ShiftRight','KeyE','KeyF'].includes(event.code))event.preventDefault();
+  if(event.code==='KeyF')holdMine=true;
   keys.add(event.code);if(event.code==='Space'&&!event.repeat)input.jump=true;
   if(event.code==='KeyE'&&!event.repeat)inspect();updateRun();
  });
- addEventListener('keyup',event=>{keys.delete(event.code);updateRun();});
+ addEventListener('keyup',event=>{keys.delete(event.code);if(event.code==='KeyF')holdMine=false;updateRun();});
  const stick=el('joystick');
  const capture=(target:HTMLElement,event:PointerEvent)=>{try{target.setPointerCapture(event.pointerId);}catch{/* Synthetic pointer events have no OS capture; real pointers do. */}};
  function moveStick(event:PointerEvent){const r=stick.getBoundingClientRect();let x=event.clientX-(r.left+r.width/2),y=event.clientY-(r.top+r.height/2);const len=Math.hypot(x,y),max=39;if(len>max){x*=max/len;y*=max/len;}joyX=x/max;joyY=-y/max;if(Math.abs(joyX)<.1)joyX=0;if(Math.abs(joyY)<.1)joyY=0;el('stick').style.transform=`translate(${x}px,${y}px)`;}
@@ -130,6 +167,175 @@ function boot(){
  for(const type of ['pointerup','pointercancel','lostpointercapture'])canvas.addEventListener(type,releaseLook as EventListener);
  canvas.addEventListener('contextmenu',event=>event.preventDefault());
 
+
+ // ---------- S1: world session, deposits, inventory and saves ----------
+ const fmtTime=(ticks:number)=>{const m=Math.floor(ticks/1200),h=Math.floor(m/60);return h?`${h} ч ${m%60} мин`:`${m} мин`;};
+ const fmtDate=(t:number)=>new Date(t).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+ const dropGroup=new THREE.Group();scene.add(dropGroup);
+ const crateGeo=new THREE.BoxGeometry(.55,.38,.42),crateMat=new THREE.MeshStandardMaterial({color:'#c9682c',roughness:.55,metalness:.2}),strapMat=new THREE.MeshStandardMaterial({color:'#2a3336',roughness:.5,metalness:.5}),strapGeo=new THREE.BoxGeometry(.58,.06,.45);
+ function syncDrops(){
+  dropGroup.clear();if(!game)return;
+  for(const d of game.world.drops){const g=new THREE.Group(),y=heightAt(d.x,d.z);const c=new THREE.Mesh(crateGeo,crateMat);c.position.y=.19;c.castShadow=true;const st=new THREE.Mesh(strapGeo,strapMat);st.position.y=.3;g.add(c,st);g.position.set(d.x,y,d.z);g.rotation.y=(d.x*7+d.z*3)%6.28;dropGroup.add(g);}
+ }
+ function applyNodes(){
+  if(!game)return;
+  for(const n of NODES)world.setNodeAmount(n.id,game.world.nodes[n.id],n.amount);
+  // Colliders follow the deposits: an outcrop that is fully mined no longer blocks the path.
+  for(const o of new Set(NODES.map(n=>n.outcrop))){const left=NODES.filter(n=>n.outcrop===o).reduce((a,n)=>a+game!.world.nodes[n.id],0),id=o+'-outcrop',i=boxes.findIndex(b=>b.id===id);
+   if(left<=0&&i>=0){removedBoxes.set(id,boxes[i]);boxes.splice(i,1);}else if(left>0&&i<0&&removedBoxes.has(id)){boxes.push(removedBoxes.get(id)!);removedBoxes.delete(id);}}
+ }
+ const removedBoxes=new Map<string,typeof boxes[number]>();
+ function snapshot():GameState{
+  const g=game!;g.meta.activeTicks=clock.activeTicks;
+  Object.assign(g.player,{x:actor.x,y:actor.y,z:actor.z,yaw:actor.yaw,pitch:actor.pitch});
+  g.progress={visited:[...visited],discovered:[...discovered],selected};
+  return cloneState(g);
+ }
+ function setSaveStatus(st:SaverStatus|{kind:'none'|'idle';message?:string}){
+  const e=el('save-status');e.dataset.kind=st.kind;
+  e.textContent=st.kind==='saving'?'СОХРАНЕНИЕ…':st.kind==='saved'?`СОХРАНЕНО · РЕВ. ${(st as SaverStatus).revision}`:st.kind==='error'?'ОШИБКА СОХРАНЕНИЯ':st.kind==='lease-lost'?'ЗАПИСЬ ОСТАНОВЛЕНА':st.kind==='none'?'БЕЗ СОХРАНЕНИЯ':'БЕЗ МИРА';
+  if(st.kind==='error'||st.kind==='lease-lost'){audio.tone('warn');if(saver?.halted)showHalt();else toast('Сохранение',st.message??'Ошибка');}
+ }
+ function updatePauseInfo(msg?:string){
+  const st=saver?.status;el('pause-save-info').textContent=msg??(!store?`Хранилище недоступно: ${storeError}. Прогресс не сохраняется — используйте экспорт.`:st?.kind==='saved'?`Сохранено: ревизия ${st.revision}${st.savedAt?' · '+fmtDate(st.savedAt):''} · активное время ${fmtTime(clock.activeTicks)}`:st?.message??'');
+ }
+ /** Quota error or a lost lease: the world stops changing until the player exports or retries. */
+ function showHalt(){
+  const st=saver?.status;if(!st)return;const lost=st.kind==='lease-lost';
+  el('lease-title').textContent=lost?'Мир открыт в другой вкладке':'Не удалось сохранить';
+  el('lease-text').textContent=lost?'Другая вкладка взяла запись этого мира. Здесь изменения остановлены, чтобы не перезаписать её прогресс. Можно скачать копию текущего состояния этой вкладки.':(st.message??'')+' Ничего не удалено. Освободите место (например, удалите ненужные миры через «Сохранения») и повторите.';
+  el('lease-primary').innerHTML=lost?'Перезагрузить <span aria-hidden="true">↻</span>':'Повторить сохранение <span aria-hidden="true">→</span>';
+  el('lease-primary').onclick=lost?()=>location.reload():()=>{void saver?.retry().then(()=>{if(!saver?.halted)setDialog('paused');});};
+  el('lease-export').hidden=false;el('lease-export').onclick=()=>downloadExport(snapshot(),saver?.revision??0);
+  el('lease-back').hidden=lost;el('lease-back').onclick=()=>setDialog('saves-panel');el('lease-back').querySelector('span')!.textContent='Сохранения';
+  setDialog('lease-panel');
+ }
+ function downloadExport(state:GameState,revision:number){
+  try{const blob=new Blob([exportText(buildExport(state,revision,Date.now()))],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=exportFileName(state,new Date());document.body.append(a);a.click();a.remove();exported=true;setTimeout(()=>URL.revokeObjectURL(a.href),20000);
+   el('saves-status').textContent=`Экспорт: ${a.download}`;}catch(e){el('saves-status').textContent='Экспорт не удался: '+(e instanceof Error?e.message:String(e));}
+ }
+ const newId=()=>'w-'+Date.now().toString(36)+'-'+Math.floor(Math.random()*1e9).toString(36);
+ async function initStore(){
+  try{store=await SaveStore.open();}catch(e){store=null;storeError=e instanceof Error?e.message:String(e);}
+  await refreshSlots();
+ }
+ async function refreshSlots(){
+  slots=store?await store.listSlots().catch(()=>[]):[];
+  const has=slots.length>0;el('continue').hidden=!has;el('start').className=has?'secondary':'primary';
+  el('start').innerHTML=has?'<svg><use href="#i-home"/></svg><span>Новая экспедиция</span>':'Новая экспедиция <span aria-hidden="true">→</span>';
+  const info=el('title-continue-info');info.hidden=!has&&!!store;info.textContent=!store?`Хранилище браузера недоступно (${storeError}). Можно играть, но прогресс не сохранится — только экспорт файла.`:has?`${slots[0].name} · ${fmtTime(slots[0].activeTicks)} · ${fmtDate(slots[0].updatedAt)}`:'';
+  const list=el('slot-list');
+  if(!store){list.replaceChildren(Object.assign(document.createElement('p'),{className:'help',textContent:'IndexedDB недоступна: сохранения в браузере выключены. Импорт тоже недоступен; экспорт текущего мира работает.'}));return;}
+  if(!has){list.replaceChildren(Object.assign(document.createElement('p'),{className:'help',textContent:'Сохранённых миров пока нет.'}));return;}
+  list.replaceChildren(...slots.map(sl=>{const row=document.createElement('div');row.className='slot-row';const cur=sl.id===slotId;
+   const info=document.createElement('div');const b=document.createElement('b');b.textContent=sl.name+(cur?' · сейчас':'');const sm=document.createElement('small');sm.textContent=`${fmtTime(sl.activeTicks)} · ревизия ${sl.activeRevision} · ${fmtDate(sl.updatedAt)}`;info.append(b,sm);
+   const play=document.createElement('button');play.className='secondary';play.textContent=cur?'Играть':'Открыть';play.onclick=()=>{if(cur){resume();return;}void openSlot(sl.id).then(ok=>{if(ok)enterOrResume();});};
+   const exp=document.createElement('button');exp.className='secondary';exp.setAttribute('aria-label','Экспорт '+sl.name);exp.innerHTML='<svg><use href="#i-download"/></svg>';exp.onclick=()=>{if(cur&&game){downloadExport(snapshot(),saver?.revision??0);return;}void store!.load(sl.id).then(r=>downloadExport(r.state,r.revision)).catch(e=>{el('saves-status').textContent='Не удалось прочитать мир: '+e.message;});};
+   const del=document.createElement('button');del.className='ghost';del.textContent='Удалить';del.disabled=cur;del.onclick=()=>{if(confirm(`Удалить «${sl.name}» из браузера? Это нельзя отменить. Экспортированные файлы не затрагиваются.`))void store!.deleteSlot(sl.id).then(refreshSlots);};
+   row.append(info,play,exp,del);return row;}));
+ }
+ /** Leaves the current world cleanly: final save, heartbeat off, lease released. */
+ async function closeCurrent(){
+  if(!saver||!store||!slotId)return;
+  if(!saver.halted)await saver.save();saver.stopHeartbeat();await store.releaseLease(slotId,token).catch(()=>{});saver=null;slotId=null;
+ }
+ function startGame(state:GameState,id:string|null,revision:number){
+  game=state;slotId=id;clock.stop();clock.activeTicks=state.meta.activeTicks;mining.nodeId=null;mining.ticks=0;
+  actor.reset();Object.assign(actor,{x:state.player.x,y:state.player.y,z:state.player.z,yaw:state.player.yaw,pitch:state.player.pitch});actor.previous={x:actor.x,y:actor.y,z:actor.z};
+  visited.clear();discovered.clear();state.progress.visited.forEach(v=>visited.add(v));state.progress.discovered.forEach(v=>discovered.add(v));selected=LANDMARKS.some(l=>l.id===state.progress.selected)?state.progress.selected:'iron';
+  applyNodes();syncDrops();
+  if(id&&store){saver=new Saver(store,id,token,revision,state.meta.activeTicks,snapshot,setSaveStatus);saver.startHeartbeat();setSaveStatus(saver.status);}else{saver=null;setSaveStatus({kind:'none'});}
+  updateUI();
+ }
+ async function newExpedition():Promise<boolean>{
+  await closeCurrent();
+  const state=newGame(newId(),(Math.random()*2**32)>>>0,Date.now(),heightAt(SPAWN_POSE.x,SPAWN_POSE.z)+.14,`Экспедиция ${slots.length+1}`);
+  if(!store){startGame(state,null,0);return true;}
+  try{await store.createSlot(state,token);startGame(state,state.meta.worldId,1);await refreshSlots();return true;}
+  catch(e){const err=e instanceof SaveError?e:null;el('title-continue-info').hidden=false;el('title-continue-info').textContent=(err?.code==='quota'?'Недостаточно места для нового мира. ':'Не удалось создать мир: ')+(e instanceof Error?e.message:String(e))+' Игра без сохранения.';startGame(state,null,0);return true;}
+ }
+ async function openSlot(id:string,force=false):Promise<boolean>{
+  if(!store)return false;
+  if(slotId===id&&game)return true;
+  await closeCurrent();
+  let lease=await store.acquireLease(id,token,force).catch(e=>{el('saves-status').textContent=e.message;return null;});
+  if(lease&&!lease.ok&&!(await holderAlive(id)))lease=await store.acquireLease(id,token,true).catch(()=>null);
+  if(!lease)return false;
+  if(!lease.ok){
+   el('lease-title').textContent='Мир открыт в другой вкладке';
+   el('lease-text').textContent=`Этот мир сейчас записывает другая вкладка (или она закрыта меньше 15 секунд назад). Если открыть его здесь, другая вкладка перестанет сохранять изменения.`;
+   el('lease-primary').innerHTML='Открыть здесь <span aria-hidden="true">→</span>';el('lease-primary').onclick=()=>{void openSlot(id,true).then(ok=>{if(ok)enterOrResume();});};
+   el('lease-export').hidden=true;el('lease-back').hidden=false;el('lease-back').querySelector('span')!.textContent='Назад';el('lease-back').onclick=()=>setDialog(started?'paused':'welcome');
+   setDialog('lease-panel');return false;
+  }
+  try{
+   const r=await store.load(id);startGame(r.state,id,r.revision);
+   if(r.recoveredFrom)toast('Восстановлено',`Ревизия ${r.recoveredFrom} повреждена — загружена ${r.revision}`);
+   return true;
+  }catch(e){await store.releaseLease(id,token).catch(()=>{});el('saves-status').textContent='Не удалось загрузить: '+(e instanceof Error?e.message:String(e))+'. Мир не изменён; его можно экспортировать для диагностики.';setDialog('saves-panel');return false;}
+ }
+ const enterOrResume=()=>{if(started)resume();else enter();};
+ // Live-holder probe: a lease left by a reloaded or crashed tab has no one answering, so it is taken silently;
+ // a tab that is really open answers and the player gets the explicit choice (TECHNICAL §9).
+ const leaseChannel=typeof BroadcastChannel==='function'?new BroadcastChannel('vireon-lease'):null;
+ leaseChannel?.addEventListener('message',e=>{const m=e.data as {type:string;slotId:string;nonce:string};if(m?.type==='ping'&&m.slotId===slotId&&saver&&!saver.halted)leaseChannel.postMessage({type:'pong',nonce:m.nonce});});
+ function holderAlive(id:string){
+  if(!leaseChannel)return Promise.resolve(true);
+  return new Promise<boolean>(ok=>{const nonce=Math.random().toString(36).slice(2),on=(e:MessageEvent)=>{if(e.data?.type==='pong'&&e.data.nonce===nonce){leaseChannel.removeEventListener('message',on);ok(true);}};
+   leaseChannel.addEventListener('message',on);leaseChannel.postMessage({type:'ping',slotId:id,nonce});setTimeout(()=>{leaseChannel.removeEventListener('message',on);ok(false);},400);});
+ }
+ async function importFile(file:File){
+  const status=el('saves-status');
+  if(!store){status.textContent='Импорт недоступен без хранилища браузера';return;}
+  if(file.size>MAX_FILE_BYTES){status.textContent='Файл больше 64 МиБ — импорт отклонён';return;}
+  try{
+   const {state}=parseImport(await file.text(),file.size);
+   state.meta.worldId=newId();state.meta.name=(state.meta.name+' · импорт').slice(0,48);
+   await store.createSlot(state,'import-'+token);await refreshSlots();
+   status.textContent=`Импортировано как новый мир «${state.meta.name}». Существующие миры не изменены.`;audio.tone('item');
+  }catch(e){status.textContent='Импорт отклонён: '+(e instanceof Error?e.message:String(e));audio.tone('warn');}
+ }
+ function drawInventory(){
+  if(!game)return;const inv=game.player.inventory,detail=el('inventory-detail');
+  const eq=(label:string,value:string)=>{const d=document.createElement('div');const s=document.createElement('small');s.className='mono';s.textContent=label;const b=document.createElement('b');b.textContent=value;d.append(s,b);return d;};
+  const ti=toolSlot(inv),tool=ti>=0?inv[ti]:inv.find(x=>x&&TOOLS[x.itemId]);
+  el('equipment').replaceChildren(eq('КОСТЮМ','Базовый скафандр'),...game.player.bottles.map((b,i)=>eq(`БАЛЛОН ${i+1}`,b?`${ITEMS[b.itemId].name} · ${Math.round((b.milliGU??0)/1000)} GU`:'— пусто')),eq('ИНСТРУМЕНТ',tool?`${itemName(tool.itemId)} · ${tool.durability}/${TOOLS[tool.itemId].durability}`:'нет'));
+  el('inventory-grid').replaceChildren(...inv.map((sl:Slot,i)=>{const c=document.createElement('button');c.className='inv-slot';c.setAttribute('role','listitem');
+   if(!sl){c.classList.add('empty');c.setAttribute('aria-label',`Слот ${i+1}: пусто`);c.onclick=()=>{detail.textContent=`Слот ${i+1}: пусто`;};return c;}
+   const n=document.createElement('b');n.textContent=itemName(sl.itemId);c.append(n);
+   if(sl.durability!==undefined){const bar=document.createElement('i');bar.style.setProperty('--d',String(sl.durability/TOOLS[sl.itemId].durability));c.append(bar);if(!sl.durability)c.classList.add('broken');}
+   else{const k=document.createElement('span');k.className='mono';k.textContent='×'+sl.count;c.append(k);}
+   c.dataset.item=sl.itemId;c.setAttribute('aria-label',`${itemName(sl.itemId)}${sl.durability!==undefined?`, прочность ${sl.durability}`:`, ${sl.count} шт.`}`);
+   c.onclick=()=>{detail.textContent=sl.durability!==undefined?`${itemName(sl.itemId)}: прочность ${sl.durability}/${TOOLS[sl.itemId].durability} блоков. Добывает камень, Fe, Cu, лёд и грунт.`:`${itemName(sl.itemId)} ×${sl.count} (стак до ${ITEMS[sl.itemId].stack}). Переработка — на этапе выживания.`;};
+   return c;}));
+ }
+ // ---------- Aim: which deposit is under the reticle and within reach ----------
+ const nodeCenter=new THREE.Vector3(),toNode=new THREE.Vector3();
+ function computeAim(){
+  aimNode=null;if(!game||!started)return;let best=Infinity;
+  for(const n of NODES){if(game.world.nodes[n.id]<=0)continue;const k=.42+.58*game.world.nodes[n.id]/n.amount,r=n.radius*k;
+   nodeCenter.set(n.x,heightAt(n.x,n.z)+n.height*k*.5,n.z);toNode.copy(nodeCenter).sub(camera.position);
+   const along=toNode.dot(viewDirection),perp=Math.sqrt(Math.max(0,toNode.lengthSq()-along*along)),horiz=Math.hypot(actor.x-n.x,actor.z-n.z)-r;
+   // Ray hits the deposit's bounding sphere within reach, or the player stands right next to it facing it (easier on touch).
+   const hit=along>0&&perp<r+.25&&along-r<=REACH,close=horiz<1.3&&along>0&&perp<r+1.1;
+   if((hit||close)&&along<best){best=along;aimNode=n.id;}}
+ }
+ function updateAimUI(){
+  const box=el('aim'),btn=el('mine'),n=aimNode?NODE_BY_ID.get(aimNode):undefined;
+  box.hidden=!n||!running;btn.hidden=!n||!running;document.body.dataset.aim=String(!!n);
+  if(!n||!game)return;const left=game.world.nodes[n.id],m=MATERIALS[n.material],ti=toolSlot(game.player.inventory);
+  el('aim-kind').textContent=m.label.toUpperCase()+' · '+(ti>=0?`${(ticksFor(n.material,TOOLS[game.player.inventory[ti]!.itemId].timeMul)/20).toFixed(1)} с/блок`:'нет инструмента');
+  el('aim-name').textContent=n.name;el('aim-meta').textContent=aimReason||`ОСТАЛОСЬ ${left} / ${n.amount} · ${itemName(n.itemId).toUpperCase()}`;
+  box.classList.toggle('blocked',!!aimReason);(el('aim-bar').firstElementChild as HTMLElement).style.transform=`scaleX(${mineRatio})`;btn.style.setProperty('--p',String(mineRatio));
+ }
+ function onMined(ev:Extract<ReturnType<typeof mineTick>,{kind:'block'}>){
+  const n=NODE_BY_ID.get(ev.nodeId)!;audio.tone('item');applyNodes();
+  if(ev.toGround){syncDrops();toast('Рюкзак полон',`${itemName(ev.itemId)} оставлена на земле`);}
+  else toast(`+1 · осталось ${ev.left}`,itemName(ev.itemId));
+  if(!ev.left){toast('Запас исчерпан',n.name);}
+  if(ev.toolBroke){audio.tone('warn');toast('Инструмент сломан',itemName('tool_stone')+' · ремонт появится с крафтом');}
+  if(dialog==='inventory-panel')drawInventory();
+ }
  // ---------- Holographic map (mirrored x so it matches the first-person view: east = −x) ----------
  let mapBase:HTMLCanvasElement|null=null;
  const MAP=480,MARGIN=18,MS=(MAP-2*MARGIN)/SIZE,mpx=(x:number)=>MARGIN+(MAX-x)*MS,mpy=(z:number)=>MAP-MARGIN-(z-MIN)*MS;
@@ -184,14 +390,25 @@ function boot(){
   marker.style.opacity=visible?'1':'0';
   if(visible){marker.style.transform=`translate(${(tmp.x*.5+.5)*innerWidth}px,${Math.max(innerHeight<500?92:118,(-tmp.y*.5+.5)*innerHeight)}px) translate(-50%,-50%)`;el('marker-distance').textContent=`${Math.round(d)} м`;}
  }
+ const mined=(item:string)=>!!game&&NODES.some(n=>n.itemId===item&&game!.world.nodes[n.id]<n.amount);
  function objective(){
-  if(visited.size>=LANDMARKS.length)return insideCapsule()||Math.hypot(actor.x-40,actor.z-40)<8?'Маршрут завершён: все места осмотрены. Спасибо, что прошли B4':'Участок изучен. Возвращайтесь к капсуле';
   if(insideCapsule())return 'Выйдите из капсулы и осмотритесь';
+  if(game){
+   if(!mined('iron_raw'))return 'Добудьте железную руду: подойдите к выходу (метка на компасе) и удерживайте «Добыть» [F]';
+   if(!mined('copper_raw'))return 'Отлично. Теперь медь — медный выход восточнее железного';
+   if(!mined('ice'))return 'Наберите лёд у ледяной глыбы в низине на севере';
+   if(!mined('stone'))return 'Соберите камень у осыпи слева от капсулы';
+   if(!exported)return 'Ресурсы найдены. Откройте меню — сохраните мир и попробуйте экспорт файла';
+  }
+  if(visited.size>=LANDMARKS.length)return insideCapsule()||Math.hypot(actor.x-40,actor.z-40)<8?'Маршрут завершён: все места осмотрены':'Участок изучен. Возвращайтесь к капсуле';
   if(visited.size===0)return 'Отсканируйте капсулу или ближайшее место — кнопка «Сканировать»';
   if(visited.size<LANDMARKS.length)return `Исследуйте окрестности: следуйте метке на компасе (${visited.size} из ${LANDMARKS.length})`;
   return 'Участок изучен. Возвращайтесь к капсуле';
  }
  function updateUI(){
+  if(game){const want=!mined('iron_raw')?'iron':!mined('copper_raw')?'copper':!mined('ice')?'ice':!mined('stone')?'capsule':null;if(want&&autoTarget!==want){autoTarget=want;selected=want;}}
+  nearDrop=null;if(game)for(const d of game.world.drops)if(Math.hypot(d.x-actor.x,d.z-actor.z)<2.2){nearDrop=d.id;break;}
+  el('pickup').hidden=!nearDrop||!running;
   const target=LANDMARKS.find(p=>p.id===selected)!;
   const d=Math.hypot(actor.x-target.x,actor.z-target.z);el('target-name').textContent=target.name;el('target-distance').textContent=`${Math.round(d)} м`;
   const angle=Math.atan2(target.x-actor.x,target.z-actor.z)-actor.yaw;(document.querySelector('.nav-arrow') as HTMLElement).style.transform=`rotate(${-angle}rad)`;
@@ -204,17 +421,28 @@ function boot(){
   el('coords').textContent=`X ${String(Math.round(actor.x)).padStart(3,'0')} · Z ${String(Math.round(actor.z)).padStart(3,'0')}`;
   const o=objective();if(o!==lastObjective){lastObjective=o;el('objective-text').textContent=o;const ob=el('objective');ob.classList.remove('pulse');void ob.offsetWidth;ob.classList.add('pulse');}
  }
- function state(){const sorted=[...frames].sort((a,b)=>a-b);return {ready:true,version:'B4',grassCount:world.grassCount,fullscreen:!!document.fullscreenElement,running,dialog,night,selected,visited:[...visited],activeTime:Number(activeTime.toFixed(3)),position:{x:actor.x,y:actor.y,z:actor.z},yaw:actor.yaw,pitch:actor.pitch,grounded:actor.grounded,input:{...input,joyX,joyY,joyPointer,lookPointer},quality:settings.quality,sound:settings.sound,bob:settings.bob,fov:settings.fov,fineTerrainBlocks:world.terrain.fineBlocks,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0,viewport:{width:innerWidth,height:innerHeight},renderer:renderer.getContext().getParameter(renderer.getContext().VERSION)};}
- Object.defineProperty(window,'__vireon',{value:{getState:state},writable:false});
+ function state(){const sorted=[...frames].sort((a,b)=>a-b);return {ready:true,version:'S1',slotId,revision:saver?.revision??0,saveStatus:saver?.status.kind??(game?'none':'idle'),halted:!!saver?.halted,activeTicks:clock.activeTicks,clockRunning:clock.running,aimNode,mineRatio,nodes:game?{...game.world.nodes}:null,inventory:game?game.player.inventory.filter(Boolean).map(s=>({...s})):[],drops:game?game.world.drops.length:0,storage:!!store,grassCount:world.grassCount,fullscreen:!!document.fullscreenElement,running,dialog,night,selected,visited:[...visited],activeTime:clock.activeSeconds,position:{x:actor.x,y:actor.y,z:actor.z},yaw:actor.yaw,pitch:actor.pitch,grounded:actor.grounded,input:{...input,joyX,joyY,joyPointer,lookPointer},quality:settings.quality,sound:settings.sound,bob:settings.bob,fov:settings.fov,fineTerrainBlocks:world.terrain.fineBlocks,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0,viewport:{width:innerWidth,height:innerHeight},renderer:renderer.getContext().getParameter(renderer.getContext().VERSION)};}
+ const dev=!!(import.meta as unknown as {env?:{DEV?:boolean}}).env?.DEV;
+ Object.defineProperty(window,'__vireon',{value:{getState:state,save:()=>saver?.save(),snapshot:()=>game?snapshot():null,
+  // Development-only verification helper; absent from production and standalone builds.
+  ...(dev?{teleport:(x:number,z:number,yaw:number,pitch=-.2)=>{actor.x=x;actor.z=z;actor.y=heightAt(x,z);actor.yaw=yaw;actor.pitch=pitch;actor.previous={x,y:actor.y,z};}}:{})},writable:false});
 
  const draw=(now:number)=>{
   const actualFrameMs=now-last;const dt=Math.min(actualFrameMs/1000,.25);last=now;
   if(running){
    input.forward=(keys.has('KeyW')||keys.has('ArrowUp')?1:0)-(keys.has('KeyS')||keys.has('ArrowDown')?1:0)+joyY;
    input.right=(keys.has('KeyD')||keys.has('ArrowRight')?1:0)-(keys.has('KeyA')||keys.has('ArrowLeft')?1:0)+joyX;
-   accumulator+=dt;while(accumulator>=FIXED_DT){const px=actor.x,pz=actor.z;actor.step(FIXED_DT,input);input.jump=false;activeTime+=FIXED_DT;accumulator-=FIXED_DT;
-    const moved=Math.hypot(actor.x-px,actor.z-pz);if(actor.grounded&&moved>0){stride+=moved;bob+=moved*(input.run?2.4:2.9);if(stride>(input.run?.82:.68)){stride=0;audio.step(input.run,insideCapsule());}}}
+  }else{input.forward=input.right=0;input.jump=false;}
+  // One accepted clock drives everything: ≤5 fixed 50 ms steps per frame, nothing while paused/hidden.
+  const steps=clock.advance(actualFrameMs);
+  for(let i=0;i<steps;i++){const px=actor.x,pz=actor.z;actor.step(FIXED_DT,input);input.jump=false;
+   const moved=Math.hypot(actor.x-px,actor.z-pz);if(actor.grounded&&moved>0){stride+=moved;bob+=moved*(input.run?2.4:2.9);if(stride>(input.run?.82:.68)){stride=0;audio.step(input.run,insideCapsule());}}
+   if(game){game.player.x=actor.x;game.player.z=actor.z;const ev=mineTick(game,mining,running?aimNode:null,running&&holdMine);
+    aimReason=ev.kind==='blocked'?ev.reason:'';mineRatio=ev.kind==='progress'?ev.ratio:0;
+    if(ev.kind==='progress'){strikeClock-=FIXED_DT;if(strikeClock<=0){strikeClock=.45;audio.strike(NODE_BY_ID.get(ev.nodeId)!.material==='ice');}}else strikeClock=0;
+    if(ev.kind==='block')onMined(ev);}
   }
+  if(game&&saver)saver.tick(clock.activeTicks);
   if(!started){
    // Title cinematic: a slow arc around the capsule with the spires behind.
    // Title shot: low, slow orbit; capsule sits in the right third, horizon and sky stay in frame.
@@ -222,7 +450,7 @@ function boot(){
    const h0=heightAt(cx,cz),ya=Math.atan2(40-cz,40-cx)+TITLE_OFFSET;
    camera.position.set(cx,h0+1.9+Math.sin(titleTime*.07)*.25,cz);camera.lookAt(cx+Math.cos(ya)*30,h0+5.2,cz+Math.sin(ya)*30);
   }else{
-   const a=running?accumulator/FIXED_DT:1;
+   const a=clock.running?clock.alpha:1;
    wake=Math.max(0,wake-(running?dt:0));const w=wake/2.6,ease=w*w*(3-2*w);
    const moving=running&&(Math.abs(input.forward)+Math.abs(input.right))>.1&&actor.grounded;
    const bobOn=moving&&settings.bob,bobY=bobOn?Math.sin(bob*2)*.028:0,bobX=bobOn?Math.cos(bob)*.018:0;
@@ -237,12 +465,13 @@ function boot(){
   const frozen=started&&(dialog==='paused'||dialog==='settings');
   world.update(frozen?0:dt,camera,renderer);renderer.render(scene,camera);
   if(!frozen)audio.update(dt,started&&insideCapsule()?1:0,world.nightValue);
-  if(started){drawCompass(bearing(Math.sin(actor.yaw),Math.cos(actor.yaw)));updateMarker();}
+  if(started){drawCompass(bearing(Math.sin(actor.yaw),Math.cos(actor.yaw)));updateMarker();computeAim();updateAimUI();}
   if(running&&dt>0){frames.push(actualFrameMs);if(frames.length>180)frames.shift();}
-  if(now-lastUI>150){updateUI();lastUI=now;if(showMetrics){const s=state();const ob=el('objective').getBoundingClientRect();el('metrics').style.top=`${Math.round(ob.bottom+8)}px`;el('metrics').textContent=`B4 / WebGL2 / DPR ${renderer.getPixelRatio()} / ${settings.quality}\nВызовы: ${s.drawCalls} · треуг.: ${s.triangles}\nКадр p95: ${s.frameP95Ms.toFixed(1)} мс\nX ${actor.x.toFixed(1)} · Z ${actor.z.toFixed(1)}\nЭто замер текущего браузера`;}}
+  if(now-lastUI>150){updateUI();lastUI=now;if(showMetrics){const s=state();const ob=el('objective').getBoundingClientRect();el('metrics').style.top=`${Math.round(ob.bottom+8)}px`;el('metrics').textContent=`S1 / WebGL2 / DPR ${renderer.getPixelRatio()} / ${settings.quality}\nВызовы: ${s.drawCalls} · треуг.: ${s.triangles}\nКадр p95: ${s.frameP95Ms.toFixed(1)} мс\nX ${actor.x.toFixed(1)} · Z ${actor.z.toFixed(1)}\nЭто замер текущего браузера`;}}
   requestAnimationFrame(draw);
  };
  document.body.dataset.started='false';applyQuality(settings.quality);applySound(settings.sound);applyBob(settings.bob);applyFov(settings.fov);fov=settings.fov;setNight(false,true);updateUI();
- document.body.dataset.ready='true';document.body.dataset.running='false';requestAnimationFrame(draw);
+ document.body.dataset.running='false';requestAnimationFrame(draw);
+ void initStore().then(()=>{document.body.dataset.ready='true';});
 }
 try { boot(); } catch(e){ console.error(e);error('Нужен браузер с WebGL 2. Попробуйте обновить браузер или открыть сцену на другом устройстве. '+(e instanceof Error?e.message:'')); }

@@ -1,4 +1,4 @@
-/** Browser verification of B4. Starts its own server, so no shared daemon is required. */
+/** Browser verification of the B4 scene and UI, still valid for S1 (see verify_s1.mjs for S1 systems). Starts its own server, so no shared daemon is required. */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -25,7 +25,7 @@ try {
  await page.goto('http://127.0.0.1:5173');await page.waitForFunction(()=>document.body.dataset.ready==='true');
  assert.equal(await page.locator('vite-error-overlay').count(),0);await page.waitForTimeout(1500);await page.screenshot({path:'artifacts/b4-welcome.png'});check('Development page loads, WebGL2 initializes, no error overlay');
  await page.click('#title-settings');assert.equal((await state()).dialog,'settings');assert.equal(await page.locator('#settings').isVisible(),true);await page.screenshot({path:'artifacts/b4-title-settings.png'});await page.click('#settings-back');assert.equal((await state()).dialog,'welcome');check('Settings open from the title screen and return to it');
- await page.click('#start');await page.waitForFunction(()=>window.__vireon.getState().running);assert.equal((await state()).version,'B4');
+ await page.click('#start');await page.waitForFunction(()=>window.__vireon.getState().running);assert.equal((await state()).version,'S1');
  await page.click('#inspect');assert.equal((await state()).dialog,'info-panel');assert.ok((await state()).visited.includes('capsule'));await page.click('#close-info');check('Inspection opens a real landmark card and records visit');
  assert.equal((await state()).grassCount,244);check('Scene contains 244 tufts, versus 1218 in B1');
  const before=await state();await page.keyboard.down('KeyW');await page.waitForFunction(z=>window.__vireon.getState().position.z>z+5,before.position.z,{timeout:240000});await page.keyboard.up('KeyW');
@@ -61,7 +61,7 @@ try {
  await page.setViewportSize({width:667,height:320});await page.screenshot({path:'artifacts/b4-compact.png'});
  const overlap=await page.evaluate(()=>{const ids=['discovery','joystick','actions'];const rs=ids.map(id=>document.getElementById(id).getBoundingClientRect());return rs.slice(1).some(r=>rs[0].width>0&&r.left<rs[0].right&&r.right>rs[0].left&&r.top<rs[0].bottom&&r.bottom>rs[0].top);});assert.equal(overlap,false);check('Compact 667×320 landscape keeps discovery clear of movement controls');
  await page.click('#pause-button');await page.click('#settings-button');const smallSettings=await page.evaluate(()=>Array.from(document.querySelectorAll('#settings button, #settings .range-row')).filter(b=>b.getClientRects().length&&b.getBoundingClientRect().height<47).map(b=>b.id||b.className));assert.deepEqual(smallSettings,[]);await page.screenshot({path:'artifacts/b4-compact-settings.png'});await page.click('#settings-back');await page.click('#resume');check('Compact 667×320 settings keep 48 px touch targets');
- await page.goto(pathToFileURL(resolve('artifacts/vireon-verdana-b4.html')).href);await page.waitForFunction(()=>document.body.dataset.ready==='true');await page.click('#start');assert.equal((await state()).running,true);check('Standalone HTML initializes and starts from file://');
+ await page.goto(pathToFileURL(resolve('artifacts/vireon-verdana-s1.html')).href);await page.waitForFunction(()=>document.body.dataset.ready==='true');await page.click('#start');assert.equal((await state()).running,true);check('Standalone HTML initializes and starts from file://');
  const requests=await page.evaluate(()=>performance.getEntriesByType('resource').map(r=>r.name).filter(n=>n.startsWith('http')));assert.deepEqual(requests,[]);check('Standalone requires no remote runtime resources');
  // Rejected and unavailable fullscreen are explicit UI states, never false success.
  await page.click('#pause-button');await page.click('#settings-button');await page.evaluate(()=>{document.documentElement.requestFullscreen=()=>Promise.reject(new Error('test denial'));});await page.click('#fullscreen-toggle');await page.waitForFunction(()=>document.getElementById('fullscreen-status').textContent.includes('не разрешил'));assert.equal((await state()).fullscreen,false);check('Fullscreen denial leaves scene usable and displays a clear message');

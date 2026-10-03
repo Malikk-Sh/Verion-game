@@ -12,12 +12,12 @@ export const FIXED_DT = 1 / 20;
 export type Point = { x: number; z: number };
 export type Landmark = Point & { id: string; name: string; short: string; kind: string; radius: number; description: string };
 export const LANDMARKS: Landmark[] = [
- {id:'capsule', name:'Посадочная капсула',short:'КАПСУЛА',kind:'Убежище',x:40,z:40,radius:7,description:'Начало маршрута. Войдите внутрь и проверьте ширину прохода. Кислород и герметичность появятся на следующем игровом этапе.'},
+ {id:'capsule', name:'Посадочная капсула',short:'КАПСУЛА',kind:'Убежище',x:40,z:40,radius:7,description:'Убежище и точка сохранения. Слева от выхода — каменная осыпь (48 блоков камня). Кислород и герметичность появятся на этапе выживания.'},
  {id:'base',name:'Площадка будущей базы',short:'БАЗА',kind:'16 × 16 м',x:58,z:44,radius:11,description:'Ровный участок 16 × 16 метров. Угловые метки показывают место для строительства; база здесь ещё не построена.'},
  {id:'grass',name:'Местная трава',short:'ТРАВА',kind:'Растительность',x:44,z:57,radius:5,description:'Первый заметный ресурс. Пучки служат проверкой силуэта и масштаба. Сбор пищи в этом макете ещё не подключён.'},
- {id:'iron',name:'Железный выход',short:'ЖЕЛЕЗО',kind:'Поверхностная руда',x:67,z:65,radius:6,description:'Бурая порода с тёмными металлическими прожилками и ржавыми потёками. Рядом лежат выветренные обломки. Добычи в этом образце пока нет.'},
- {id:'copper',name:'Медный выход',short:'МЕДЬ',kind:'Поверхностная руда',x:83,z:55,radius:6,description:'Тёмно-зелёная порода с медными жилами, мелкими самородками и зелёной патиной вокруг. Жилы лежат на поверхности камня. Добычи в этом образце пока нет.'},
- {id:'ice',name:'Ледяное углубление',short:'ЛЁД',kind:'Будущий источник воды',x:30,z:80,radius:8,description:'Вмёрзшие плиты и наклонные ледяные осколки в низине, вокруг — иней. Сюда ведёт пологий спуск. Воду здесь пока нельзя добыть.'},
+ {id:'iron',name:'Железный выход',short:'ЖЕЛЕЗО',kind:'Поверхностная руда',x:67,z:65,radius:6,description:'Бурая порода с тёмными металлическими прожилками и ржавыми потёками. Два выхода: 32 и 16 блоков железной руды. Добыча мультитулом — 4 с на блок; запас не восстанавливается.'},
+ {id:'copper',name:'Медный выход',short:'МЕДЬ',kind:'Поверхностная руда',x:83,z:55,radius:6,description:'Тёмно-зелёная порода с медными жилами и зелёной патиной. Два выхода: 22 и 10 блоков медной руды, 4 с на блок. Запас конечен.'},
+ {id:'ice',name:'Ледяное углубление',short:'ЛЁД',kind:'Будущий источник воды',x:30,z:80,radius:8,description:'Вмёрзшие плиты и осколки в низине. На краю — отдельная глыба чистого льда: 24 куска, 1,5 с на кусок. Электролиз появится на этапе выживания.'},
  {id:'spire',name:'Раздвоенная скала',short:'ОРИЕНТИР',kind:'Дальний ориентир',x:102,z:104,radius:15,description:'Узнаваемый силуэт для возвращения и исследования. Камни имеют упрощённые столкновения; на вершину идти не требуется.'},
  {id:'cave',name:'Вход в пещеру',short:'ПЕЩЕРА',kind:'Пробный проход',x:115,z:72,radius:9,description:'Внутрь можно войти. Короткий закрытый проход проверяет высоту и ширину; шахта, раскопки и враги появятся позже.'},
  {id:'basin',name:'Будущий водоём',short:'НИЗИНА',kind:'Сухая низина',x:100,z:132,radius:14,description:'Зарезервированная сухая область 24 × 20 метров. В макете воды нет; место не пересекается с пещерой или базой.'},
@@ -162,6 +162,9 @@ export function makeColliders(){
  for(const [i,r] of ROCKS.entries())boxes.push(box('rock-'+i,r.x,heightAt(r.x,r.z)+r.sy*.51,r.z,r.s*1.4,r.sy*1.02,r.s*1.4));
  boxes.push(box('iron-outcrop',67,heightAt(67,65)+.7,65,3.6,1.7,3));
  boxes.push(box('copper-outcrop',83,heightAt(83,55)+.7,55,3.6,1.7,3));
+ // S1 deposits; a collider is removed once every node of its outcrop is mined out.
+ boxes.push(box('stone-outcrop',30,heightAt(30,52)+.45,52,2.2,.9,2.2));
+ boxes.push(box('ice-outcrop',33,heightAt(33,76.5)+.5,76.5,1.8,1,1.8));
  // Footprint of the rotated formation (geometry spans ±w × ±d): axis-aligned bounds of its elliptical base.
  for(const [i,f] of FORMATIONS.entries()){const c=Math.cos(f.rotation),s=Math.sin(f.rotation),hx=Math.hypot(f.w*c,f.d*s),hz=Math.hypot(f.w*s,f.d*c);boxes.push(box('formation-'+i,f.x,f.base+f.h/2,f.z,hx*1.9,f.h,hz*1.9));}
  boxes.push(box('spire-a',100,heightAt(100,103)+8,103,5,16,6));

@@ -318,19 +318,28 @@ export function createWorld(scene:THREE.Scene){
   for(let i=0;i<26;i++){const a=rng()*6.28,d=rng()*8,x=30+Math.cos(a)*d,z=80+Math.sin(a)*d,s=.08+rng()*.18;
    batch.add(boulders[i%6],ice,x,heightAt(x,z)-s*.3,z,s,s*.6,s,0,rng()*6,0,'#e8f4f8');}
  }
- // ---------- Ore outcrops: veins lie on the host surface ----------
+ // ---------- Mineable deposits (S1): each node is its own group so it shrinks as it is mined ----------
+ const nodeGroups=new Map<string,THREE.Group>();
+ const deposit=(id:string,x:number,z:number,build:(b:StaticBatch)=>void)=>{const b=new StaticBatch();build(b);const g=new THREE.Group();g.name='node-'+id;g.position.set(x,heightAt(x,z),z);b.finish(g);scene.add(g);nodeGroups.set(id,g);};
  {
   const I=oreOutcrop(610,{strata:3,base:'#4a4038',dust:'#8a6a50',dark:'#2a2320'},{freq:2.2,width:.05,blobs:.74,lift:.018,crystals:.12,stain:'#7a3f22'});
-  let x=67,z=65,y=heightAt(x,z);
-  batch.add(I.host,rock,x,y-.1,z,1.8,1.7,1.5,0,.3,0);batch.add(I.veins,iron,x,y-.1,z,1.8,1.7,1.5,0,.3,0);
+  deposit('iron-a',67,65,b=>{b.add(I.host,rock,0,-.1,0,1.8,1.7,1.5,0,.3,0);b.add(I.veins,iron,0,-.1,0,1.8,1.7,1.5,0,.3,0);});
   const I2=oreOutcrop(611,{strata:2,base:'#4a4038',dust:'#8a6a50',dark:'#2a2320'},{freq:2.6,width:.045,blobs:.76,lift:.018,crystals:.1,stain:'#7a3f22'});
-  batch.add(I2.host,rock,x+2.1,heightAt(x+2.1,z-1.2)-.08,z-1.2,.8,.7,.7,0,1.9,0);batch.add(I2.veins,iron,x+2.1,heightAt(x+2.1,z-1.2)-.08,z-1.2,.8,.7,.7,0,1.9,0);
+  deposit('iron-b',69.1,63.8,b=>{b.add(I2.host,rock,0,-.08,0,.8,.7,.7,0,1.9,0);b.add(I2.veins,iron,0,-.08,0,.8,.7,.7,0,1.9,0);});
   const C=oreOutcrop(620,{strata:2,base:'#3c4640',dust:'#6f8f7c',dark:'#232a27'},{freq:1.8,width:.045,blobs:.72,lift:.02,crystals:.22,stain:'#3f8f78'});
-  x=83;z=55;y=heightAt(x,z);
-  batch.add(C.host,rock,x,y-.1,z,1.8,1.6,1.5,0,.9,0);batch.add(C.veins,copper,x,y-.1,z,1.8,1.6,1.5,0,.9,0);
+  deposit('copper-a',83,55,b=>{b.add(C.host,rock,0,-.1,0,1.8,1.6,1.5,0,.9,0);b.add(C.veins,copper,0,-.1,0,1.8,1.6,1.5,0,.9,0);});
   const C2=oreOutcrop(622,{strata:2,base:'#3c4640',dust:'#6f8f7c',dark:'#232a27'},{freq:2.4,width:.05,blobs:.74,lift:.02,crystals:.2,stain:'#3f8f78'});
-  batch.add(C2.host,rock,x-1.9,heightAt(x-1.9,z+1.1)-.08,z+1.1,.9,.6,.8,0,2.4,0);batch.add(C2.veins,copper,x-1.9,heightAt(x-1.9,z+1.1)-.08,z+1.1,.9,.6,.8,0,2.4,0);
-  // Loose weathered pieces resting on the ground (sunk slightly, never hovering).
+  deposit('copper-b',81.1,56.1,b=>{b.add(C2.host,rock,0,-.08,0,.9,.6,.8,0,2.4,0);b.add(C2.veins,copper,0,-.08,0,.9,.6,.8,0,2.4,0);});
+  // Scree heap of loose blocks beside the capsule: the guaranteed stone.
+  deposit('stone-a',30,52,b=>{const pr=random(5203);b.add(boulders[2],rock,0,-.12,0,1.15,.95,1.05,0,.4,0,'#b9ad9c');
+   for(let i=0;i<9;i++){const a=i/9*6.28+pr()*.5,d=.8+pr()*.6,s=.28+pr()*.3;b.add(boulders[i%6],rock,Math.cos(a)*d,-.08,Math.sin(a)*d,s*1.2,s,s*1.1,0,pr()*6,0,i%2?'#a89c8c':'#c2b6a4');}});
+  // A free-standing block of clear ice at the rim of the frozen hollow.
+  deposit('ice-a',33,76.5,b=>{const pr=random(7310);
+   for(let i=0;i<5;i++){const g=chiseledRock(330+i,{detail:2,base:'#ffffff',dust:'#f4fbff',dark:'#6f98a8',cuts:7,flatTop:.7,lumpy:.1}),a=i*1.3,d=i?.55:0,s=i?.45+pr()*.2:.9;b.add(g,ice,Math.cos(a)*d,-.15,Math.sin(a)*d,s,s*(i?1.1:1.25),s*.9,(pr()-.5)*.3,pr()*6,(pr()-.5)*.3);}});
+ }
+ const setNodeAmount=(id:string,left:number,amount:number)=>{const g=nodeGroups.get(id);if(!g)return;g.visible=left>0;g.scale.setScalar(.42+.58*Math.max(0,left)/amount);};
+ {
+ // Loose weathered pieces resting on the ground (sunk slightly, never hovering).
   for(const [ox,oz,m] of [[67,65,iron],[83,55,copper]] as const)for(let i=0;i<7;i++){const a=rng()*6.28,d=1.6+rng()*1.8,px=ox+Math.cos(a)*d,pz=oz+Math.sin(a)*d,s=.1+rng()*.14;
    const piece=oreOutcrop(900+i+(m===iron?0:20),{detail:1,cuts:7},{freq:3,width:.1,blobs:.6,lift:.01,crystals:0}),ry=rng()*6,py=heightAt(px,pz)-s*.35;batch.add(piece.host,rock,px,py,pz,s,s*.8,s,0,ry,0,m===iron?'#8a7466':'#6f8a80');batch.add(piece.veins,m,px,py,pz,s,s*.8,s,0,ry,0);}
  }
@@ -412,5 +421,5 @@ export function createWorld(scene:THREE.Scene){
   screenClock-=dt;if(screenClock<=0&&camera.position.distanceTo(interior.position)<14){screenClock=.25;screen.draw(time,k>.5);}
  }
  applyNight(0);setQuality('standard');
- return{setNight,setQuality,update,followSky:(_p:THREE.Vector3)=>{},landmarks:LANDMARKS,grassCount:GRASS.length,meshes,terrain,get quality(){return quality;},get nightValue(){return k;}};
+ return{setNight,setQuality,update,setNodeAmount,nodeGroups,followSky:(_p:THREE.Vector3)=>{},landmarks:LANDMARKS,grassCount:GRASS.length,meshes,terrain,get quality(){return quality;},get nightValue(){return k;}};
 }
