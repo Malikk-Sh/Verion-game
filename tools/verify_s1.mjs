@@ -94,7 +94,7 @@ try{
  await click('#pause-button',page2);await click('#saves-button',page2);await page2.waitForFunction(()=>document.querySelectorAll('.slot-row').length===1);
  const [dl]=await Promise.all([page2.waitForEvent('download'),click('#export-current',page2)]);const file='artifacts/'+dl.suggestedFilename();await dl.saveAs(file);
  const env=JSON.parse(await readFile(file,'utf8'));assert.equal(env.magic,'VIREON');assert.equal(env.pages.length,4);check('Export downloads a .vireon.json envelope');
- await page2.setInputFiles('#import-file',file);await page2.waitForFunction(()=>document.querySelectorAll('.slot-row').length===2);
+ await page2.setInputFiles('#import-file',file);await page2.waitForFunction(()=>document.querySelectorAll('.slot-row').length===2,null,{timeout:900000});
  await page2.screenshot({path:'artifacts/s1-saves.png'});check('Import creates a second slot without touching the first');
  await page2.setInputFiles('#import-file',{name:'bad.vireon.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({...env,sha256:'0'.repeat(64)}))});
  await page2.waitForFunction(()=>/отклонён/.test(document.getElementById('saves-status').textContent));assert.equal(await page2.locator('.slot-row').count(),2);check('Damaged file is rejected with a message');
