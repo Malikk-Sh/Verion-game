@@ -13,7 +13,9 @@ import { newGame, cloneState, SPAWN_POSE, type GameState } from './game/state';
 import { mineTick, pickUp, toolSlot, itemName, REACH, ticksFor, type Mining } from './game/mining';
 import { SaveStore, SaveError, type SlotRecord } from './persist/store';
 import { Saver, type SaverStatus } from './persist/saver';
-import { buildExport, exportText, exportFileName, parseImport, MAX_FILE_BYTES } from './persist/file';
+import { buildExport, exportText, exportFileName, MAX_FILE_BYTES } from './persist/file';
+import { importSlot } from './persist/import';
+import { openSavedSlot } from './persist/open';
 const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
 const canvas=el<HTMLCanvasElement>('world');
 const error=(message:string)=>{el('error-text').textContent=message;el('error').hidden=false;document.body.dataset.ready='error';};
@@ -239,12 +241,12 @@ function boot(){
   if(!saver||!store||!slotId)return;
   if(!saver.halted)await saver.save();saver.stopHeartbeat();await store.releaseLease(slotId,token).catch(()=>{});saver=null;slotId=null;
  }
- function startGame(state:GameState,id:string|null,revision:number){
+ function startGame(state:GameState,id:string|null,revision:number,baseRevision=revision){
   game=state;slotId=id;clock.stop();clock.activeTicks=state.meta.activeTicks;mining.nodeId=null;mining.ticks=0;
   actor.reset();Object.assign(actor,{x:state.player.x,y:state.player.y,z:state.player.z,yaw:state.player.yaw,pitch:state.player.pitch});actor.previous={x:actor.x,y:actor.y,z:actor.z};
   visited.clear();discovered.clear();state.progress.visited.forEach(v=>visited.add(v));state.progress.discovered.forEach(v=>discovered.add(v));selected=LANDMARKS.some(l=>l.id===state.progress.selected)?state.progress.selected:'iron';
   applyNodes();syncDrops();
-  if(id&&store){saver=new Saver(store,id,token,revision,state.meta.activeTicks,snapshot,setSaveStatus);saver.startHeartbeat();setSaveStatus(saver.status);}else{saver=null;setSaveStatus({kind:'none'});}
+  if(id&&store){saver=new Saver(store,id,token,revision,state.meta.activeTicks,snapshot,setSaveStatus,baseRevision);saver.startHeartbeat();setSaveStatus(saver.status);}else{saver=null;setSaveStatus({kind:'none'});}
   updateUI();
  }
  async function newExpedition():Promise<boolean>{
@@ -257,22 +259,19 @@ function boot(){
  async function openSlot(id:string,force=false):Promise<boolean>{
   if(!store)return false;
   if(slotId===id&&game)return true;
-  await closeCurrent();
-  let lease=await store.acquireLease(id,token,force).catch(e=>{el('saves-status').textContent=e.message;return null;});
-  if(lease&&!lease.ok&&!(await holderAlive(id)))lease=await store.acquireLease(id,token,true).catch(()=>null);
-  if(!lease)return false;
-  if(!lease.ok){
-   el('lease-title').textContent='Мир открыт в другой вкладке';
-   el('lease-text').textContent=`Этот мир сейчас записывает другая вкладка (или она закрыта меньше 15 секунд назад). Если открыть его здесь, другая вкладка перестанет сохранять изменения.`;
-   el('lease-primary').innerHTML='Открыть здесь <span aria-hidden="true">→</span>';el('lease-primary').onclick=()=>{void openSlot(id,true).then(ok=>{if(ok)enterOrResume();});};
-   el('lease-export').hidden=true;el('lease-back').hidden=false;el('lease-back').querySelector('span')!.textContent='Назад';el('lease-back').onclick=()=>setDialog(started?'paused':'welcome');
-   setDialog('lease-panel');return false;
-  }
   try{
-   const r=await store.load(id);startGame(r.state,id,r.revision);
+   const r=await openSavedSlot(store,id,token,force,holderAlive,closeCurrent);
+   if(!r){
+    el('lease-title').textContent='Мир открыт в другой вкладке';
+    el('lease-text').textContent=`Этот мир сейчас записывает другая вкладка (или она закрыта меньше 15 секунд назад). Если открыть его здесь, другая вкладка перестанет сохранять изменения.`;
+    el('lease-primary').innerHTML='Открыть здесь <span aria-hidden="true">→</span>';el('lease-primary').onclick=()=>{void openSlot(id,true).then(ok=>{if(ok)enterOrResume();});};
+    el('lease-export').hidden=true;el('lease-back').hidden=false;el('lease-back').querySelector('span')!.textContent='Назад';el('lease-back').onclick=()=>setDialog(started?'paused':'welcome');
+    setDialog('lease-panel');return false;
+   }
+   startGame(r.state,id,r.revision,r.baseRevision);
    if(r.recoveredFrom)toast('Восстановлено',`Ревизия ${r.recoveredFrom} повреждена — загружена ${r.revision}`);
    return true;
-  }catch(e){await store.releaseLease(id,token).catch(()=>{});el('saves-status').textContent='Не удалось загрузить: '+(e instanceof Error?e.message:String(e))+'. Мир не изменён; его можно экспортировать для диагностики.';setDialog('saves-panel');return false;}
+  }catch(e){el('saves-status').textContent='Не удалось загрузить: '+(e instanceof Error?e.message:String(e))+'. Мир не изменён; его можно экспортировать для диагностики.';setDialog('saves-panel');return false;}
  }
  const enterOrResume=()=>{if(started)resume();else enter();};
  // Live-holder probe: a lease left by a reloaded or crashed tab has no one answering, so it is taken silently;
@@ -289,10 +288,8 @@ function boot(){
   if(!store){status.textContent='Импорт недоступен без хранилища браузера';return;}
   if(file.size>MAX_FILE_BYTES){status.textContent='Файл больше 64 МиБ — импорт отклонён';return;}
   try{
-   const {state}=parseImport(await file.text(),file.size);
-   state.meta.worldId=newId();state.meta.name=(state.meta.name+' · импорт').slice(0,48);
-   await store.createSlot(state,'import-'+token);await refreshSlots();
-   status.textContent=`Импортировано как новый мир «${state.meta.name}». Существующие миры не изменены.`;audio.tone('item');
+   const slot=await importSlot(store,await file.text(),newId(),file.size);await refreshSlots();
+   status.textContent=`Импортировано как новый мир «${slot.name}». Существующие миры не изменены.`;audio.tone('item');
   }catch(e){status.textContent='Импорт отклонён: '+(e instanceof Error?e.message:String(e));audio.tone('warn');}
  }
  function drawInventory(){

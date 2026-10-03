@@ -14,7 +14,7 @@ export class Saver {
  private timer: ReturnType<typeof setInterval> | null = null;
  halted = false;
  status: SaverStatus;
- constructor(private store: SaveStore, readonly slotId: string, readonly token: string, public revision: number, activeTicks: number, private snapshot: () => GameState, private onStatus: (s: SaverStatus) => void = () => {}) {
+ constructor(private store: SaveStore, readonly slotId: string, readonly token: string, public revision: number, activeTicks: number, private snapshot: () => GameState, private onStatus: (s: SaverStatus) => void = () => {}, private baseRevision = revision) {
   this.lastTicks = activeTicks; this.status = { kind: 'saved', revision };
  }
  startHeartbeat() {
@@ -33,8 +33,8 @@ export class Saver {
   const state = this.snapshot();
   this.lastTicks = state.meta.activeTicks;
   this.set({ kind: 'saving', revision: this.revision });
-  this.inflight = this.store.commit(this.slotId, this.token, this.revision, state).then(rev => {
-   this.revision = rev; this.set({ kind: 'saved', revision: rev, savedAt: Date.now() });
+  this.inflight = this.store.commit(this.slotId, this.token, this.baseRevision, state).then(rev => {
+   this.baseRevision = this.revision = rev; this.set({ kind: 'saved', revision: rev, savedAt: Date.now() });
   }, (e: unknown) => {
    const err = e instanceof SaveError ? e : new SaveError('unknown', String(e));
    if (err.code === 'lease') { this.leaseLost(); return; }

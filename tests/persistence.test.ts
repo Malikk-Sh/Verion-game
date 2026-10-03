@@ -4,6 +4,8 @@ import { IDBFactory } from 'fake-indexeddb';
 import { SaveStore, SaveError, LEASE_EXPIRY_MS } from '../src/persist/store.ts';
 import { Saver } from '../src/persist/saver.ts';
 import { buildExport, exportText, parseImport, ImportError } from '../src/persist/file.ts';
+import { importSlot } from '../src/persist/import.ts';
+import { openSavedSlot } from '../src/persist/open.ts';
 import { newGame, cloneState, type GameState } from '../src/game/state.ts';
 import { mineTick, type Mining } from '../src/game/mining.ts';
 
@@ -18,14 +20,22 @@ test('V17: export → import into a new slot preserves state and the next produc
  const text = exportText(buildExport(s, 1, 5));
  const { state } = parseImport(text);
  assert.deepEqual(state, s);
- const imported = cloneState(state); imported.meta.worldId = 'w-import'; imported.meta.name = 'Копия';
- await store.createSlot(imported, 'tok2');
- const loaded = (await store.load('w-import')).state;
+ const slot = await importSlot(store, text, 'w-import');
+ assert.equal(slot.name, s.meta.name + ' · импорт');
+ assert.equal(slot.lease, null, 'import does not invent a writer for a closed world');
+ const r = await openSavedSlot(store, 'w-import', 'tok2', false, async () => { assert.fail('free imported slot must not probe another tab'); }, async () => {});
+ assert.ok(r, 'the imported world opens immediately without forcing the lease');
+ const loaded = r.state;
  assert.deepEqual({ ...loaded, meta: { ...loaded.meta, worldId: 'w-a', name: s.meta.name } }, s);
  assert.equal((await store.load('w-a')).state.meta.worldId, 'w-a', 'original slot untouched');
  // Same next result: mine one more block on both.
  const a = mine(cloneState(s), 'iron-a', 80), b = mine(cloneState(loaded), 'iron-a', 80);
  assert.deepEqual(a.player.inventory, b.player.inventory); assert.deepEqual(a.world.nodes, b.world.nodes);
+ const saver = new Saver(store, 'w-import', 'tok2', r.revision, loaded.meta.activeTicks, () => cloneState(b), () => {}, r.baseRevision);
+ await saver.save();
+ assert.equal(saver.status.kind, 'saved'); assert.equal(saver.revision, 2);
+ assert.deepEqual((await store.load('w-import')).state, b, 'an imported world remains writable');
+ assert.deepEqual(parseImport(exportText(buildExport(b, 2, 6))).state, b, 'its final name survives another export/import');
  // Damaged or future files are rejected without side effects.
  assert.throws(() => parseImport(text.replace('\\"count\\":3', '\\"count\\":4')), ImportError);
  assert.throws(() => parseImport(text.replace('"formatVersion":1', '"formatVersion":2')), /более новой/);
@@ -59,10 +69,107 @@ test('V18: keeps three revisions, garbage-collects the rest, recovers from a dam
  const active = await new Promise<any>(ok => { const g = db.transaction('revisionManifests').objectStore('revisionManifests').get('w-gc#6'); g.onsuccess = () => ok(g.result); });
  await new Promise<void>(ok => { const t = db.transaction('statePages', 'readwrite'), st = t.objectStore('statePages'), key = 'w-gc:world:' + active.pages.world; st.get(key).onsuccess = (e: any) => { const v = e.target.result; v.data = v.data.replace('"stone-a":', '"stone-a":1,"x":'); st.put(v); }; t.oncomplete = () => ok(); });
  const r = await store.load('w-gc'); assert.equal(r.revision, 5); assert.equal(r.recoveredFrom, 6); assert.match(r.error!, /повреждена/);
+ assert.equal(r.baseRevision, 6, 'the damaged head is still the expected base; reading does not mutate it');
+ let recovered = mine(cloneState(r.state), 'ice-a', 30); recovered.meta.activeTicks += 600;
+ const saver = new Saver(store, 'w-gc', 't', r.revision, r.state.meta.activeTicks, () => cloneState(recovered), () => {}, r.baseRevision);
+ await saver.save();
+ assert.equal(saver.halted, false); assert.equal(saver.status.kind, 'saved'); assert.equal(saver.revision, 7);
+ assert.deepEqual((await store.load('w-gc')).state, recovered, 'recovered progress is saved as a new revision');
+ await assert.rejects(store.readRevision('w-gc', 6), /повреждена/, 'the damaged revision is not overwritten');
+ recovered = mine(cloneState(recovered), 'ice-a', 30); recovered.meta.activeTicks += 600;
+ await saver.save(); assert.equal(saver.revision, 8, 'subsequent saves advance the expected base too');
+ await assert.rejects(store.commit('w-gc', 't', r.baseRevision, r.state), (e: any) => e.code === 'conflict', 'a stale recovery cannot overwrite a newer commit');
  // Damage every kept revision: an explicit error, not a silent fresh world.
  await new Promise<void>(ok => { const t = db.transaction('statePages', 'readwrite'), st = t.objectStore('statePages'); st.openCursor().onsuccess = (e: any) => { const c = e.target.result; if (!c) return; if (c.value.kind === 'world') { c.value.data += ' '; c.update(c.value); } c.continue(); }; t.oncomplete = () => ok(); });
  db.close();
  await assert.rejects(store.load('w-gc'), (e: any) => e instanceof SaveError && e.code === 'corrupt');
+});
+
+test('V17: repeated imports and 48-character names remain valid; rejected imports leave no slot', async () => {
+ const store = await open(new IDBFactory());
+ const original = played(); original.meta.name = 'А'.repeat(48);
+ await store.createSlot(original, 'A');
+ await importSlot(store, exportText(buildExport(original, 1, 0)), 'w-long');
+ const long = await store.load('w-long'); assert.equal(long.state.meta.name.length, 48);
+ const normal = played('w-normal');
+ await importSlot(store, exportText(buildExport(normal, 1, 0)), 'w-first');
+ const first = await store.load('w-first');
+ await importSlot(store, exportText(buildExport(first.state, first.revision, 0)), 'w-second');
+ assert.equal((await store.load('w-second')).state.meta.name, normal.meta.name + ' · импорт · импорт');
+ const before = await store.listSlots();
+ await assert.rejects(importSlot(store, 'not-json', 'w-rejected'), ImportError);
+ await assert.rejects(importSlot(store, exportText(buildExport(normal, 1, 0)), 'invalid/id'), /worldId/);
+ assert.deepEqual(await store.listSlots(), before, 'validation completes before any new slot is written');
+ assert.deepEqual((await store.load(original.meta.worldId)).state, original, 'source world remains untouched');
+ store.close();
+});
+
+test('V18: reproducing the damaged page after recovery writes readable progress', async () => {
+ const f = new IDBFactory(), store = await open(f), initial = played('w-repeat');
+ await store.createSlot(initial, 'A');
+ const next = mine(cloneState(initial), 'copper-a', 80); next.meta.activeTicks += 600;
+ await store.commit('w-repeat', 'A', 1, next);
+ const db: IDBDatabase = await new Promise(ok => { const r = f.open('vireon', 1); r.onsuccess = () => ok(r.result); });
+ const manifest = await new Promise<any>(ok => { const r = db.transaction('revisionManifests').objectStore('revisionManifests').get('w-repeat#2'); r.onsuccess = () => ok(r.result); });
+ await new Promise<void>((ok, fail) => {
+  const t = db.transaction('statePages', 'readwrite'), pages = t.objectStore('statePages');
+  const request = pages.get('w-repeat:world:' + manifest.pages.world);
+  request.onsuccess = () => { const p = request.result; p.data += ' '; pages.put(p); };
+  t.oncomplete = () => ok(); t.onabort = () => fail(t.error);
+ });
+ db.close();
+ const loaded = await store.load('w-repeat'); assert.equal(loaded.revision, 1); assert.equal(loaded.baseRevision, 2);
+ const repeated = mine(cloneState(loaded.state), 'copper-a', 80); repeated.meta.activeTicks += 600;
+ assert.deepEqual(repeated, next, 'repeating the action produces the same content hash as the damaged page');
+ const saver = new Saver(store, 'w-repeat', 'A', loaded.revision, loaded.state.meta.activeTicks, () => repeated, () => {}, loaded.baseRevision);
+ await saver.save(); assert.equal(saver.status.kind, 'saved');
+ const reopened = await store.load('w-repeat'); assert.equal(reopened.revision, 3); assert.deepEqual(reopened.state, repeated);
+ store.close();
+});
+
+for (const failure of ['busy', 'missing', 'corrupt'] as const) test(`V20: ${failure} target leaves the current world attached and writable`, async () => {
+ const f = new IDBFactory(), store = await open(f), original = played('w-current');
+ await store.createSlot(original, 'A');
+ if (failure !== 'missing') await store.createSlot(played('w-target'), failure === 'busy' ? 'B' : null);
+ if (failure === 'corrupt') {
+  const db: IDBDatabase = await new Promise(ok => { const r = f.open('vireon', 1); r.onsuccess = () => ok(r.result); });
+  await new Promise<void>((ok, fail) => {
+   const t = db.transaction('statePages', 'readwrite'), pages = t.objectStore('statePages');
+   pages.index('slotId').openCursor('w-target').onsuccess = (e: any) => { const c = e.target.result; if (!c) return; c.value.data += ' '; c.update(c.value); c.continue(); };
+   t.oncomplete = () => ok(); t.onabort = () => fail(t.error);
+  });
+  db.close();
+ }
+ let current = cloneState(original), saver: Saver | null = new Saver(store, 'w-current', 'A', 1, original.meta.activeTicks, () => cloneState(current));
+ const attached = saver; let detached = false;
+ const leave = async () => { detached = true; await saver!.save(); saver!.stopHeartbeat(); await store.releaseLease('w-current', 'A'); saver = null; };
+ if (failure === 'busy') assert.equal(await openSavedSlot(store, 'w-target', 'A', false, async () => true, leave), null);
+ else await assert.rejects(openSavedSlot(store, 'w-target', 'A', false, async () => true, leave), (e: any) => e.code === failure);
+ assert.equal(detached, false); assert.equal(saver, attached, 'Back → resume keeps the same autosaver');
+ assert.equal((await store.getSlot('w-current'))!.lease!.token, 'A');
+ if (failure === 'corrupt') assert.equal((await store.getSlot('w-target'))!.lease, null, 'failed loading releases only the target');
+ if (failure === 'busy') assert.equal((await store.getSlot('w-target'))!.lease!.token, 'B', 'cancellation does not steal the target');
+ current = mine(cloneState(current), 'copper-a', 80); current.meta.activeTicks += 600;
+ await saver!.save(); assert.equal(saver!.status.kind, 'saved');
+ assert.deepEqual((await store.load('w-current')).state, current, 'progress after returning to the original world is durable');
+ store.close();
+});
+
+test('V20: a successful switch loads the target before closing the current writer', async () => {
+ const store = await open(new IDBFactory()), original = played('w-current'), target = played('w-target');
+ await store.createSlot(original, 'A'); await store.createSlot(target, null);
+ const next = mine(cloneState(original), 'copper-a', 80);
+ const saver = new Saver(store, 'w-current', 'A', 1, original.meta.activeTicks, () => next);
+ let detached = false;
+ const loaded = await openSavedSlot(store, 'w-target', 'A', false, async () => true, async () => {
+  assert.equal((await store.getSlot('w-target'))!.lease!.token, 'A');
+  assert.deepEqual((await store.load('w-target')).state, target);
+  await saver.save(); saver.stopHeartbeat(); await store.releaseLease('w-current', 'A'); detached = true;
+ });
+ assert.ok(loaded); assert.equal(detached, true); assert.deepEqual(loaded.state, target);
+ assert.equal((await store.getSlot('w-current'))!.lease, null);
+ assert.deepEqual((await store.load('w-current')).state, next, 'final current-world progress is saved before switching');
+ store.close();
 });
 test('V19: quota failure is honest: no data lost, writes halted, export still possible', async () => {
  const f = new IDBFactory(), store = await open(f), s0 = played('w-q'); await store.createSlot(s0, 'tok');

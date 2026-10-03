@@ -14,6 +14,8 @@ export const LEASE_EXPIRY_MS = 15000;
 export type Lease = { token: string; heartbeatAt: number };
 export type SlotRecord = { id: string; name: string; createdAt: number; updatedAt: number; activeTicks: number; activeRevision: number; revisions: number[]; lease: Lease | null };
 export type Manifest = { key: string; slotId: string; revision: number; baseRevision: number; snapshotTick: number; savedAt: number; formatVersion: 1; pages: Record<PageKind, string> };
+/** `revision` identifies the loaded snapshot; `baseRevision` is the head the next commit must check. */
+export type LoadedSlot = { state: GameState; revision: number; baseRevision: number; savedAt: number; recoveredFrom?: number; error?: string };
 type StoredPage = Page & { key: string; slotId: string };
 export type SaveErrorCode = 'quota' | 'lease' | 'conflict' | 'unavailable' | 'corrupt' | 'missing' | 'unknown';
 export class SaveError extends Error { constructor(public code: SaveErrorCode, message: string) { super(message); this.name = 'SaveError'; } }
@@ -76,14 +78,14 @@ export class SaveStore {
  }
 
  // ---------- Writing ----------
- /** Creates a new slot with revision 1 and gives `token` its lease. The id must be new. */
- async createSlot(state: GameState, token: string): Promise<SlotRecord> {
+ /** Creates revision 1; `null` leaves an imported slot free until somebody opens it. The id must be new. */
+ async createSlot(state: GameState, token: string | null): Promise<SlotRecord> {
   const id = state.meta.worldId;
   if (await this.getSlot(id)) throw new SaveError('conflict', 'Мир с таким идентификатором уже существует');
   const pages = this.encode(state);
   await this.writePages(id, pages);
   const t = this.tx(['worldSlots', 'revisionManifests'], 'readwrite');
-  const now = this.now(), slot: SlotRecord = { id, name: state.meta.name, createdAt: now, updatedAt: now, activeTicks: state.meta.activeTicks, activeRevision: 1, revisions: [1], lease: { token, heartbeatAt: now } };
+  const now = this.now(), slot: SlotRecord = { id, name: state.meta.name, createdAt: now, updatedAt: now, activeTicks: state.meta.activeTicks, activeRevision: 1, revisions: [1], lease: token === null ? null : { token, heartbeatAt: now } };
   try {
    if (await req(t.objectStore('worldSlots').get(id))) { t.abort(); throw new SaveError('conflict', 'Мир с таким идентификатором уже существует'); }
    t.objectStore('revisionManifests').put(this.manifest(id, 1, 0, state, pages));
@@ -122,7 +124,10 @@ export class SaveStore {
    try {
     this.faults?.('page');
     const t = this.tx(['statePages'], 'readwrite'), s = t.objectStore('statePages'), key = pageKey(slotId, p);
-    if (!(await req(s.getKey(key)))) s.put({ ...p, key, slotId } satisfies StoredPage);
+    const existing = await req(s.get(key)) as StoredPage | undefined;
+    // A key alone is insufficient after corruption. Reuse only the exact encoded content;
+    // a new valid snapshot can restore bytes that belong to this hash without losing state.
+    if (!existing || existing.data !== p.data || existing.hash !== p.hash || existing.kind !== p.kind) s.put({ ...p, key, slotId } satisfies StoredPage);
     await done(t);
    } catch (e) { throw wrap(e); }
   }
@@ -157,12 +162,12 @@ export class SaveStore {
   return { state: decodePages(pages, manifest.pages), manifest, pages };
  }
  /** Loads the active revision; if it is damaged, falls back to an older kept one and says so. */
- async load(slotId: string): Promise<{ state: GameState; revision: number; savedAt: number; recoveredFrom?: number; error?: string }> {
+ async load(slotId: string): Promise<LoadedSlot> {
   const slot = await this.getSlot(slotId);
   if (!slot) throw new SaveError('missing', 'Мир не найден');
   let firstError = '';
   for (const rev of slot.revisions) {
-   try { const r = await this.readRevision(slotId, rev); return { state: r.state, revision: rev, savedAt: r.manifest.savedAt, ...(rev !== slot.activeRevision ? { recoveredFrom: slot.activeRevision, error: firstError } : {}) }; }
+   try { const r = await this.readRevision(slotId, rev); return { state: r.state, revision: rev, baseRevision: slot.activeRevision, savedAt: r.manifest.savedAt, ...(rev !== slot.activeRevision ? { recoveredFrom: slot.activeRevision, error: firstError } : {}) }; }
    catch (e) { firstError ||= e instanceof Error ? e.message : String(e); }
   }
   throw new SaveError('corrupt', 'Все сохранённые ревизии повреждены: ' + firstError);
