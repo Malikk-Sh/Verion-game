@@ -1,6 +1,6 @@
 import { canonical, sha256 } from './canonical';
 import { decodePages, encodePages, PAGE_KINDS, type Page } from './pages';
-import { CONTENT_VERSION, GENERATOR_VERSION } from '../game/defs';
+import { CONTENT_VERSION, GENERATOR_VERSION, LEGACY_CONTENT_VERSIONS } from '../game/defs';
 import type { GameState } from '../game/state';
 /** `.vireon.json` export/import envelope (TECHNICAL §9). The hash detects damage; it is not anti-cheat. */
 export const MAGIC = 'VIREON';
@@ -26,7 +26,8 @@ export function parseImport(text: string, byteLength = text.length): { state: Ga
  if (!e || typeof e !== 'object' || e.magic !== MAGIC) throw new ImportError('Это не файл сохранения Vireon');
  if (typeof e.formatVersion !== 'number' || e.formatVersion > FORMAT_VERSION) throw new ImportError('Файл создан более новой версией игры; обновите игру. Файл не изменён');
  if (e.formatVersion !== FORMAT_VERSION) throw new ImportError('Неподдерживаемая версия формата');
- if (e.contentVersion !== CONTENT_VERSION || e.generatorVersion !== GENERATOR_VERSION) throw new ImportError('Неподдерживаемая версия контента или генератора');
+ // Files of an older content version are accepted and migrated by sanitizeState (e.g. 1.0.0 → 1.1.0).
+ if ((e.contentVersion !== CONTENT_VERSION && !(LEGACY_CONTENT_VERSIONS as readonly string[]).includes(e.contentVersion)) || e.generatorVersion !== GENERATOR_VERSION) throw new ImportError('Неподдерживаемая версия контента или генератора');
  if (!Array.isArray(e.pages) || e.pages.length !== PAGE_KINDS.length || !e.manifest || typeof e.manifest !== 'object') throw new ImportError('Повреждена структура файла');
  const pages: Page[] = e.pages.map(p => ({ kind: p?.kind, hash: p?.hash, data: p?.data }) as Page);
  const manifest: ExportManifest = { worldId: String(e.manifest.worldId), name: String(e.manifest.name), revision: Number(e.manifest.revision), snapshotTick: Number(e.manifest.snapshotTick), pages: { ...e.manifest.pages } };

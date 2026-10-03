@@ -14,7 +14,8 @@ const fresh = () => newGame('w-test', 1234, 1, .5);
 test('item definitions match docs/data/catalog.json', () => {
  const cat = JSON.parse(readFileSync('docs/data/catalog.json', 'utf8'));
  for (const [id, d] of Object.entries(ITEMS)) { assert.ok(cat.items[id], id); assert.equal(cat.items[id].name, d.name); assert.equal(cat.items[id].stack, d.stack); }
- assert.ok(cat.items.suit, 'starting suit id exists');
+ for (const p of ['suit_helmet', 'suit_chest', 'suit_legs', 'suit_boots']) assert.equal(cat.items[p].kind, 'equipment', p);
+ assert.equal(cat.items.suit, undefined, 'single suit item replaced by four parts (D30)'); assert.equal(cat.version, '1.1.0');
 });
 test('valley deposits match the WORLD §2 guarantee (48 Fe, 32 Cu, 48 stone, 24 ice)', () => {
  const sum = (id: string) => NODES.filter(n => n.itemId === id).reduce((a, n) => a + n.amount, 0);

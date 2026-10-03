@@ -158,10 +158,13 @@ jetpack_1|Jetpack I
 jetpack_2|Jetpack II
 grapple|Крюк-кошка
 claws|Когти
-suit|Базовый скафандр
-suit_pressure|Скафандр с усилением давления
-suit_heat|Скафандр с усилением жары
-suit_combined|Совмещённый скафандр
+suit_helmet|Базовый шлем
+suit_chest|Базовый нагрудник
+suit_legs|Базовые поножи
+suit_boots|Базовые ботинки
+suit_pressure|Нагрудник с усилением давления
+suit_heat|Нагрудник с усилением жары
+suit_combined|Совмещённый нагрудник
 underwear_1|Термобельё I
 underwear_2|Термобельё II
 bottle_1|Баллон I
@@ -322,12 +325,12 @@ C('jetpack_1','fabricator',{'velite':6,'steel':4,'motor':2,'circuit_adv':1,'gas_
 C('jetpack_2','fabricator',{'jetpack_1':1,'velite':8,'circuit_adv':2,'cryo_shell':1},t=30,tech='velite')
 C('grapple','workbench',{'iron':4,'fiber':12,'motor':1},tech='power')
 C('claws','fabricator',{'steel':4,'shell':1},tech='steel')
-C('suit','workbench',{'iron':6,'cloth':4,'seal':2})
+R('craft_suit','workbench',{'iron':6,'cloth':4,'seal':2},{'suit_helmet':1,'suit_chest':1,'suit_legs':1,'suit_boots':1},8,0,'start','core','Комплект из четырёх независимых частей костюма (D30); цена прежнего базового скафандра.')
 C('underwear_1','workbench',{'cloth':6,'fiber':4})
 C('underwear_2','fabricator',{'underwear_1':1,'cloth':4,'cryo_shell':1},tech='velite')
-C('suit_pressure','fabricator',{'suit':1,'steel':4,'velite':4,'shell':1},tech='velite')
-C('suit_heat','fabricator',{'suit':1,'steel':4,'velite':4,'cryo_shell':1},tech='velite')
-C('suit_combined','fabricator',{'suit_pressure':1,'suit_heat':1},tech='velite',note='Потребляет два костюма; возвращает установленные баллоны/когти в инвентарь, свойства объединяет. Цена одинакова в любом порядке.')
+C('suit_pressure','fabricator',{'suit_chest':1,'steel':4,'velite':4,'shell':1},tech='velite')
+C('suit_heat','fabricator',{'suit_chest':1,'steel':4,'velite':4,'cryo_shell':1},tech='velite')
+C('suit_combined','fabricator',{'suit_pressure':1,'suit_heat':1},tech='velite',note='Потребляет два нагрудника; возвращает установленные баллоны/когти в инвентарь, свойства объединяет. Цена одинакова в любом порядке.')
 C('bottle_2','fabricator',{'bottle_1':1,'steel':2,'seal':1},tech='steel')
 C('bottle_3','fabricator',{'bottle_2':1,'velite':2,'seal':1},tech='velite')
 C('pick_iron','workbench',{'iron':3,'fiber':2})
@@ -353,7 +356,7 @@ for r in recipes:
  for i in (*r['inputs'],*r['outputs']): assert i in items,(r['id'],i)
  assert r['station']=='hand' or r['station'] in items,r
 assert len({r['id'] for r in recipes})==len(recipes)
-data={'version':'1.0.0','status':'baseline_design_not_playtested','units':{'EU':'условная энергия','GU':'условная единица конкретного газа','WU':'условная единица воды','FU':'условная единица нефтепродукта'},'items':items,'recipes':recipes}
+data={'version':'1.1.0','status':'baseline_design_not_playtested','units':{'EU':'условная энергия','GU':'условная единица конкретного газа','WU':'условная единица воды','FU':'условная единица нефтепродукта'},'items':items,'recipes':recipes}
 (ROOT/'docs/data/catalog.json').write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n')
 lines=['# Каталог предметов и рецептов — GDD 1.0','', '**Статус:** принятый по делегированию исходный баланс, не результат игрового теста. Единственный численный источник рецептов — [catalog.json](../data/catalog.json). Генератор таблицы: `tools/build_design_catalog.py`.','', 'Все новые баллоны, баки, аккумуляторы, ракеты и jetpack создаются пустыми. Улучшение переносит фактический остаток в пределах новой ёмкости; лишнее требует свободной тары, иначе крафт запрещён. Модифицированные предметы нельзя стакать. `hand` — ручной крафт. Время ручного крафта не ставит мир на паузу. Изготовление корпуса на верстаке/станции не расходует EU; рабочие операции машин расходуют указанную мощность. Помещение/свет/культура и природный источник являются дополнительными условиями, описанными в системной спецификации.','', 'Операции компоста, плавки и электролиза перечислены здесь; просеивание, выращивание, добыча, генерация энергии, ремонт и планетарные эффекты имеют формулы в соседних разделах. Нет скрытого рецепта получения любого предмета через универсальную валюту.','', '## Рецепты','', '| ID | Где | Вход | Выход | Секунды | EU/с | Технология / объём |','| --- | --- | --- | --- | ---: | ---: | --- |']
 def desc(d):return ', '.join(f'{v} × {items[k]["name"]}' for k,v in d.items()) or '—'

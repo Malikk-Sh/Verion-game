@@ -6,7 +6,8 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { fbm, ridged, noise2 } from './noise';
 import { groundTextures, hullTextures, gratingTexture, consoleScreen, panelTexture } from './textures';
 import { createSky, createDust } from './sky';
-import { Terrain, bakeSunShade, useBakedShade } from './terrain';
+import { Terrain, createShadeBaker, useBakedShade } from './terrain';
+import { CYCLE_S, nightAmount, sunDirection } from './game/daycycle';
 
 export type Quality = 'low'|'standard'|'high';
 const lin=(r:number,g:number,b:number)=>new THREE.Color().setRGB(r,g,b,THREE.LinearSRGBColorSpace);
@@ -87,7 +88,7 @@ export function createWorld(scene:THREE.Scene){
   out.multiplyScalar(.93+noise2(x*.7,z*.7,19)*.07);
   return out;
  };
- const bakeUniforms={uBake:{value:null as unknown as THREE.Texture},uBakeMin:{value:new THREE.Vector2()},uBakeSize:{value:new THREE.Vector2(1,1)},uBakeAmount:{value:1}};
+ const bakeUniforms={uBake:{value:null as unknown as THREE.Texture},uBake2:{value:null as unknown as THREE.Texture},uBakeMix:{value:0},uBakeMin:{value:new THREE.Vector2()},uBakeSize:{value:new THREE.Vector2(1,1)},uBakeAmount:{value:1}};
  useBakedShade(terrainMat,bakeUniforms,antiTile);
  const terrain=new Terrain(terrainMat,groundColor);scene.add(terrain.group);
  // ---------- Outer mountains beyond the walkable square ----------
@@ -117,7 +118,7 @@ export function createWorld(scene:THREE.Scene){
  const tones=['#ffffff','#e9e4dc','#d8dcdc','#f2e8da'];
  ROCKS.forEach((r,i)=>{const h=heightAt(r.x,r.z);batch.add(boulders[i%6],rock,r.x,h-.12,r.z,r.s*.72,r.sy*1.02,r.s*.66,(rng()-.5)*.12,r.rotation,(rng()-.5)*.12,tones[i%4]);});
  // Large formations outside the valley (colliders in world.ts). They do not cast shadow-map shadows:
- // their shadows are baked into the ground (bakeSunShade), so they never pop at the frustum edge.
+ // their shadows are baked into the ground (createShadeBaker), so they never pop at the frustum edge.
  for(const [i,f] of FORMATIONS.entries())batch.add(cliffs[f.shape],cliffRock,f.x,f.base-1.2,f.z,f.w,f.h+1.2,f.d,0,f.rotation,0,i%2?'#d4d2cf':'#ffffff');
  // Twin spires — the valley's signature landmark: two leaning slabs with rubble.
  for(const [x,z,hh,w,lean,ry] of [[100,103,19,2.7,.07,.3],[106.5,104.2,14.5,2.2,-.1,1.2]]){
@@ -383,30 +384,48 @@ export function createWorld(scene:THREE.Scene){
  const fog=new THREE.FogExp2(lin(.8,.68,.53),.0022);scene.fog=fog;
  const D={sun:new THREE.Color('#ffd9a8'),hemiSky:new THREE.Color('#bcd3dc'),hemiGround:new THREE.Color('#8a7358'),fog:lin(.8,.68,.53),dust:new THREE.Color('#fff1d6')};
  const N={sun:new THREE.Color('#8fa9d6'),hemiSky:new THREE.Color('#5f7896'),hemiGround:new THREE.Color('#2b2f36'),fog:lin(.07,.1,.15),dust:new THREE.Color('#a9c4e6')};
- const sunDay=new THREE.Vector3(.88,.36,.32).normalize(),moon=new THREE.Vector3(.5,.55,.67).normalize();
- {const extra=[{x:100,z:103,r:3.2,top:heightAt(100,103)+18},{x:106.5,z:104.2,r:2.6,top:heightAt(106.5,104.2)+14},...[115,120,125,130,135].map(x=>({x,z:72,r:8,top:9.5}))];
-  const bake=bakeSunShade(sunDay,extra);bakeUniforms.uBake.value=bake.texture;bakeUniforms.uBakeMin.value.copy(bake.min);bakeUniforms.uBakeSize.value.copy(bake.size);}
- let nightTarget=0,k=-1,time=0,screenClock=0,envDirty=true,quality:Quality='standard';
+ const moon=new THREE.Vector3(.5,.55,.67).normalize(),sunTrue=new THREE.Vector3(),lightDir=new THREE.Vector3(),lastBake=new THREE.Vector3(),lastEnv=new THREE.Vector3();
+ // Baked terrain/formation shade follows the moving sun: rebuilt a few rows per frame, then cross-faded.
+ const baker=createShadeBaker([{x:100,z:103,r:3.2,top:heightAt(100,103)+18},{x:106.5,z:104.2,r:2.6,top:heightAt(106.5,104.2)+14},...[115,120,125,130,135].map(x=>({x,z:72,r:8,top:9.5}))]);
+ bakeUniforms.uBakeMin.value.copy(baker.min);bakeUniforms.uBakeSize.value.copy(baker.size);
+ let fading=false;
+ /** Synchronous full bake (start-up and time skips). */
+ function bakeNow(dir:THREE.Vector3){baker.begin(dir);baker.step(baker.N);const t=baker.flip();bakeUniforms.uBake.value=t;bakeUniforms.uBake2.value=t;bakeUniforms.uBakeMix.value=0;fading=false;lastBake.copy(dir);}
+ let k=0,phase=-1,targetPhase=0,time=0,screenClock=0,envDirty=true,quality:Quality='standard';
  const pmremTarget:{rt:THREE.WebGLRenderTarget|null}={rt:null};
  const envScene=new THREE.Scene();const envSky=createSky();envScene.add(envSky.mesh);
- function applyNight(v:number){
-  sky.uniforms.night.value=v;sky.uniforms.sunDir.value.copy(sunDay).lerp(moon,v).normalize();
-  sun.color.copy(D.sun).lerp(N.sun,v);sun.intensity=THREE.MathUtils.lerp(3.4,.5,v);
+ const warmNoon=new THREE.Color('#fff1dc');
+ /** Applies the light of a day phase `t` (seconds in the 960 s Verdana cycle). */
+ function applyPhase(t:number){
+  const [x,y,z]=sunDirection(t);sunTrue.set(x,y,z);const v=nightAmount(t);k=v;
+  // Directional light: the sun (kept just above the horizon in twilight), the moon at night.
+  lightDir.copy(sunTrue);if(lightDir.y<.06){lightDir.y=.06;lightDir.normalize();}
+  lightDir.lerp(moon,v).normalize();
+  sky.uniforms.night.value=v;sky.uniforms.sunDir.value.copy(lightDir);
+  const high=THREE.MathUtils.smoothstep(sunTrue.y,.15,.7);
+  sun.color.copy(D.sun).lerp(warmNoon,high*.6).lerp(N.sun,v);sun.intensity=THREE.MathUtils.lerp(3.4*(.82+.18*high),.5,v);
   hemi.color.copy(D.hemiSky).lerp(N.hemiSky,v);hemi.groundColor.copy(D.hemiGround).lerp(N.hemiGround,v);hemi.intensity=THREE.MathUtils.lerp(1.15,.6,v);
   bakeUniforms.uBakeAmount.value=1-v;
   fog.color.copy(D.fog).lerp(N.fog,v);fog.density=THREE.MathUtils.lerp(.0022,.0038,v);
   dust.uniforms.tint.value.copy(D.dust).lerp(N.dust,v);dust.uniforms.opacity.value=THREE.MathUtils.lerp(.28,.22,v);
   doorLight.intensity=THREE.MathUtils.lerp(9,16,v);interior.intensity=THREE.MathUtils.lerp(3.2,4.2,v);
   warm.emissiveIntensity=THREE.MathUtils.lerp(2.6,3.4,v);glass.emissiveIntensity=THREE.MathUtils.lerp(.5,1.8,v);
+  if(lightDir.angleTo(lastEnv)>.05){lastEnv.copy(lightDir);envDirty=true;}
  }
- function setNight(night:boolean,instant=false){nightTarget=night?1:0;if(instant){k=nightTarget;applyNight(k);envDirty=true;}}
+ const wrapS=(d:number)=>((d%CYCLE_S)+CYCLE_S*1.5)%CYCLE_S-CYCLE_S/2;
+ /** Sets the day phase. Small steps follow the clock; a large jump (Sun/Moon skip, load) is animated over ≈1.5 s unless `instant`. */
+ function setTime(t:number,instant=false){targetPhase=((t%CYCLE_S)+CYCLE_S)%CYCLE_S;if(instant||phase<0){phase=targetPhase;applyPhase(phase);bakeNow(lightDir);envDirty=true;}}
  function setQuality(q:Quality){quality=q;sun.castShadow=q!=='low';const size=q==='high'?2048:1024,ext=q==='high'?60:42;
   if(sun.shadow.mapSize.x!==size||sc.right!==ext){sun.shadow.mapSize.set(size,size);sc.left=sc.bottom=-ext;sc.right=sc.top=ext;sc.updateProjectionMatrix();sun.shadow.map?.dispose();sun.shadow.map=null as unknown as THREE.WebGLRenderTarget;}
   dust.points.visible=q!=='low';terrain.setQuality(q);}
  const snapped=new THREE.Vector3(),lx=new THREE.Vector3(),ly=new THREE.Vector3(),up=new THREE.Vector3(0,1,0),fwd=new THREE.Vector3(),center=new THREE.Vector3();let terrainBudget=24;
  function update(dt:number,camera:THREE.Camera,renderer:THREE.WebGLRenderer){
   sky.mesh.position.copy(camera.position);time+=dt;windUniform.value=time;sky.uniforms.time.value=time;dust.uniforms.time.value=time;dust.uniforms.origin.value.copy(camera.position);
-  if(k!==nightTarget){const step=dt*.55;k=Math.abs(nightTarget-k)<=step?nightTarget:k+Math.sign(nightTarget-k)*step;applyNight(k);if(k===nightTarget)envDirty=true;}
+  if(phase!==targetPhase){const d=wrapS(targetPhase-phase);phase=Math.abs(d)<=Math.max(2,dt*320)?targetPhase:((phase+Math.sign(d)*dt*320)%CYCLE_S+CYCLE_S)%CYCLE_S;applyPhase(phase);}
+  // Incremental re-bake when the light has turned by more than ~1.5°; then a 1.5 s cross-fade.
+  if(fading){bakeUniforms.uBakeMix.value=Math.min(1,bakeUniforms.uBakeMix.value+dt/1.5);if(bakeUniforms.uBakeMix.value>=1){bakeUniforms.uBake.value=bakeUniforms.uBake2.value;bakeUniforms.uBakeMix.value=0;fading=false;}}
+  else if(baker.busy){if(baker.step(10)){bakeUniforms.uBake2.value=baker.flip();bakeUniforms.uBakeMix.value=0;fading=true;}}
+  else if(k<.98&&lightDir.angleTo(lastBake)>.026){lastBake.copy(lightDir);baker.begin(lightDir);}
   if(envDirty){envDirty=false;envSky.uniforms.night.value=sky.uniforms.night.value;envSky.uniforms.sunDir.value.copy(sky.uniforms.sunDir.value);const gen=new THREE.PMREMGenerator(renderer);const rt=gen.fromScene(envScene,0,.1,1000);gen.dispose();pmremTarget.rt?.dispose();pmremTarget.rt=rt;scene.environment=rt.texture;scene.environmentIntensity=THREE.MathUtils.lerp(.55,.25,k);}
   // Shadow frustum follows the viewer, shifted ahead of it and snapped to whole texels
   // *in light space* (B3 snapped world axes, which still shimmered while walking).
@@ -420,6 +439,6 @@ export function createWorld(scene:THREE.Scene){
   const blink=(Math.sin(time*3)>.6?1:0);redLight.emissiveIntensity=.3+blink*3.5;beacon.emissiveIntensity=1.2+Math.sin(time*2.2)*.8;holo.opacity=.55+Math.sin(time*1.7)*.2;
   screenClock-=dt;if(screenClock<=0&&camera.position.distanceTo(interior.position)<14){screenClock=.25;screen.draw(time,k>.5);}
  }
- applyNight(0);setQuality('standard');
- return{setNight,setQuality,update,setNodeAmount,nodeGroups,followSky:(_p:THREE.Vector3)=>{},landmarks:LANDMARKS,grassCount:GRASS.length,meshes,terrain,get quality(){return quality;},get nightValue(){return k;}};
+ setQuality('standard');
+ return{setTime,setQuality,sunLight:sun,hemiLight:hemi,get sunDirection(){return sunTrue;},update,setNodeAmount,nodeGroups,followSky:(_p:THREE.Vector3)=>{},landmarks:LANDMARKS,grassCount:GRASS.length,meshes,terrain,get quality(){return quality;},get nightValue(){return k;}};
 }

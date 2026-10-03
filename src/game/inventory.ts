@@ -1,10 +1,10 @@
 import { ITEMS } from './defs';
-/** One inventory slot. Items with state (tools, bottles) always have count 1. */
+/** One inventory slot. Items with state (tools, tanks) always have count 1 and never stack. */
 export type Slot = { itemId: string; count: number; durability?: number; milliGU?: number } | null;
 export const INVENTORY_SIZE = 24;
 export const emptyInventory = (): Slot[] => Array.from({ length: INVENTORY_SIZE }, () => null);
-const stackOf = (id: string) => ITEMS[id]?.stack ?? 1;
-const stateful = (s: NonNullable<Slot>) => s.durability !== undefined || s.milliGU !== undefined;
+export const stackOf = (id: string) => ITEMS[id]?.stack ?? 1;
+export const stateful = (s: NonNullable<Slot>) => s.durability !== undefined || s.milliGU !== undefined || stackOf(s.itemId) === 1;
 /** How many of `itemId` would fit. */
 export function capacityFor(slots: Slot[], itemId: string) {
  const max = stackOf(itemId); let n = 0;
@@ -29,3 +29,4 @@ export function removeItems(slots: Slot[], itemId: string, count: number): numbe
  return count - left;
 }
 export const countItem = (slots: Slot[], itemId: string) => slots.reduce((n, s) => n + (s && s.itemId === itemId ? s.count : 0), 0);
+export const firstEmpty = (slots: Slot[], from = 0) => { for (let i = from; i < slots.length; i++) if (!slots[i]) return i; for (let i = 0; i < from; i++) if (!slots[i]) return i; return -1; };

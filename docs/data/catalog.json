@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "status": "baseline_design_not_playtested",
   "units": {
     "EU": "условная энергия",
@@ -1037,23 +1037,38 @@
       "kind": "equipment",
       "stack": 1
     },
-    "suit": {
-      "name": "Базовый скафандр",
+    "suit_helmet": {
+      "name": "Базовый шлем",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "suit_chest": {
+      "name": "Базовый нагрудник",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "suit_legs": {
+      "name": "Базовые поножи",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "suit_boots": {
+      "name": "Базовые ботинки",
       "kind": "equipment",
       "stack": 1
     },
     "suit_pressure": {
-      "name": "Скафандр с усилением давления",
+      "name": "Нагрудник с усилением давления",
       "kind": "equipment",
       "stack": 1
     },
     "suit_heat": {
-      "name": "Скафандр с усилением жары",
+      "name": "Нагрудник с усилением жары",
       "kind": "equipment",
       "stack": 1
     },
     "suit_combined": {
-      "name": "Совмещённый скафандр",
+      "name": "Совмещённый нагрудник",
       "kind": "equipment",
       "stack": 1
     },
@@ -4271,13 +4286,16 @@
         "seal": 2
       },
       "outputs": {
-        "suit": 1
+        "suit_helmet": 1,
+        "suit_chest": 1,
+        "suit_legs": 1,
+        "suit_boots": 1
       },
       "seconds": 8,
       "EU_per_second": 0,
       "tech": "start",
       "scope": "core",
-      "note": ""
+      "note": "Комплект из четырёх независимых частей костюма (D30); цена прежнего базового скафандра."
     },
     {
       "id": "craft_underwear_1",
@@ -4316,7 +4334,7 @@
       "id": "craft_suit_pressure",
       "station": "fabricator",
       "inputs": {
-        "suit": 1,
+        "suit_chest": 1,
         "steel": 4,
         "velite": 4,
         "shell": 1
@@ -4334,7 +4352,7 @@
       "id": "craft_suit_heat",
       "station": "fabricator",
       "inputs": {
-        "suit": 1,
+        "suit_chest": 1,
         "steel": 4,
         "velite": 4,
         "cryo_shell": 1
@@ -4362,7 +4380,7 @@
       "EU_per_second": 0,
       "tech": "velite",
       "scope": "core",
-      "note": "Потребляет два костюма; возвращает установленные баллоны/когти в инвентарь, свойства объединяет. Цена одинакова в любом порядке."
+      "note": "Потребляет два нагрудника; возвращает установленные баллоны/когти в инвентарь, свойства объединяет. Цена одинакова в любом порядке."
     },
     {
       "id": "craft_bottle_2",

@@ -7,9 +7,12 @@ import { Ambience } from './audio';
 import { boxes, EYE, FIXED_DT, heightAt, LANDMARKS, ROUTE, MIN, MAX, SIZE, type Landmark } from './world';
 import { SimClock } from './game/clock';
 import { ITEMS, MATERIALS, TOOLS } from './game/defs';
-import { countItem, type Slot } from './game/inventory';
+import { phaseSeconds, isDay, offsetFor, MORNING_S, EVENING_S } from './game/daycycle';
+import { selectHotbar, oxygenGU, oxygenCapacityGU, wornParts } from './game/backpack';
+import { createPanels, cellContent, cellAria } from './ui/panels';
+import { createViewModel } from './viewmodel';
 import { NODES, NODE_BY_ID } from './game/resources';
-import { newGame, cloneState, SPAWN_POSE, type GameState } from './game/state';
+import { newGame, cloneState, SPAWN_POSE, HOTBAR_SIZE, type GameState } from './game/state';
 import { mineTick, pickUp, toolSlot, itemName, REACH, ticksFor, type Mining } from './game/mining';
 import { SaveStore, SaveError, type SlotRecord } from './persist/store';
 import { Saver, type SaverStatus } from './persist/saver';
@@ -40,16 +43,17 @@ function boot(){
  const viewDirection=new THREE.Vector3(),viewPos=new THREE.Vector3(),tmp=new THREE.Vector3();
  const keys=new Set<string>(),input:Input={forward:0,right:0,run:false,jump:false};
  let joyX=0,joyY=0,runToggle=false,joyPointer:number|null=null,lookPointer:number|null=null,lastX=0,lastY=0;
- let started=false,running=false,night=false,selected='iron',nearest:Landmark|undefined,last=performance.now(),lastUI=0;
+ let started=false,running=false,selected='iron',nearest:Landmark|undefined,last=performance.now(),lastUI=0;
  // ---------- S1 game state: one clock, finite deposits, inventory, saves ----------
  const clock=new SimClock(),mining:Mining={nodeId:null,ticks:0};
  const token=(globalThis.crypto?.randomUUID?.()??Math.random().toString(36).slice(2)+Date.now().toString(36));
  let game:GameState|null=null,store:SaveStore|null=null,saver:Saver|null=null,storeError='',slotId:string|null=null;
- let holdMine=false,aimNode:string|null=null,aimReason='',mineRatio=0,strikeClock=0,nearDrop:string|null=null,slots:SlotRecord[]=[];
- const liveDialogs=new Set(['inventory-panel']);
+ let holdMine=false,aimNode:string|null=null,aimReason='',mineRatio=0,strikeClock=0,nearDrop:string|null=null,slots:SlotRecord[]=[],actionKind='none',hudKey='';
+ const liveDialogs=new Set(['inventory-panel','suit-panel']);
+ const hand=createViewModel();
  const TITLE_OFFSET=-.42;
  let exported=false,autoTarget='',frames:number[]=[],showMetrics=false,wake=0,bob=0,stride=0,fov=70,titleTime=0,lastObjective='',settingsReturn='welcome';
- const visited=new Set<string>(),discovered=new Set<string>();let dialog='welcome';const ALL_DIALOGS=['welcome','paused','settings','map-panel','info-panel','inventory-panel','saves-panel','lease-panel'];
+ const visited=new Set<string>(),discovered=new Set<string>();let dialog='welcome';const ALL_DIALOGS=['welcome','paused','settings','map-panel','info-panel','inventory-panel','suit-panel','saves-panel','lease-panel'];
  const insideCapsule=(x=actor.x,z=actor.z)=>x>37.5&&x<42.5&&z>37&&z<43.1;
 
  // ---------- Settings ----------
@@ -73,7 +77,7 @@ function boot(){
   el('veil').classList.toggle('live',liveDialogs.has(dialog));
   document.body.dataset.dialog=which??'';
   document.body.dataset.running=String(running);
-  if(which==='map-panel')drawMap();if(which==='inventory-panel')drawInventory();if(which==='saves-panel')void refreshSlots();if(which==='paused')updatePauseInfo();
+  if(which==='map-panel')drawMap();if(which==='inventory-panel')panels.drawInventory();if(which==='suit-panel')panels.drawSuit();if(which==='saves-panel')void refreshSlots();if(which==='paused')updatePauseInfo();
   if(running)audio.resume();else if(started&&(which==='paused'||which==='settings'))audio.suspend();
  }
  function pause(reason='Пауза'){if(!started)return;el('pause-title').textContent=reason;setDialog('paused');void saver?.save();}
@@ -109,12 +113,40 @@ function boot(){
  el('export-current').onclick=()=>{if(game)downloadExport(snapshot(),saver?.revision??0);else el('saves-status').textContent='Нет открытого мира';};
  el('import-button').onclick=()=>el<HTMLInputElement>('import-file').click();
  el<HTMLInputElement>('import-file').addEventListener('change',e=>{const input=e.target as HTMLInputElement,file=input.files?.[0];input.value='';if(file)void importFile(file);});
- el('inventory-button').onclick=()=>{audio.tone('ui');if(dialog==='inventory-panel')resume();else if(running)setDialog('inventory-panel');};
- el('close-inventory').onclick=()=>{audio.tone('ui');resume();};
- el('pickup').onclick=()=>{if(!game||!nearDrop||!running)return;const moved=pickUp(game,nearDrop);audio.tone(moved?'item':'warn');toast(moved?'Поднято':'Рюкзак полон',moved?`${moved} предм.`:'Освободите слот');syncDrops();};
- const mineBtn=el('mine');
- mineBtn.addEventListener('pointerdown',e=>{e.preventDefault();if(running){holdMine=true;capture(mineBtn,e);}});
- for(const type of ['pointerup','pointercancel','lostpointercapture'])mineBtn.addEventListener(type,()=>{holdMine=false;});
+ // ---------- Inventory / suit screens (live: game time keeps running) ----------
+ const panels=createPanels({game:()=>game,hazard:()=>!insideCapsule(),tone:k=>audio.tone(k),
+  changed:what=>{if(what==='drop')syncDrops();hudKey='';updateHotbar();},
+  show:which=>{if(started&&(running||liveDialogs.has(dialog)))setDialog(which);},close:()=>{void saver?.save();resume();}});
+ const openPanel=(which:'inventory-panel'|'suit-panel')=>{audio.tone('ui');if(dialog===which){void saver?.save();resume();return;}if(running||liveDialogs.has(dialog)){if(which==='inventory-panel'&&dialog!=='suit-panel')panels.reset();setDialog(which);}};
+ el('inventory-button').onclick=()=>openPanel('inventory-panel');
+ el('suit-button').onclick=()=>openPanel('suit-panel');
+ el('close-inventory').onclick=()=>{audio.tone('ui');void saver?.save();resume();};
+ // ---------- Context action: mine (hold) / pick up / scan, decided by the aim and the selected item ----------
+ const actionBtn=el('action');
+ function doAction(){
+  if(!running||!game)return;
+  if(actionKind==='pickup'&&nearDrop){const moved=pickUp(game,nearDrop);audio.tone(moved?'item':'warn');toast(moved?'Поднято':'Рюкзак полон',moved?`${moved} предм.`:'Освободите ячейку');syncDrops();hudKey='';updateHotbar();}
+  else if(actionKind==='scan')inspect();
+ }
+ actionBtn.addEventListener('pointerdown',e=>{e.preventDefault();if(!running)return;if(actionKind==='mine'){holdMine=true;capture(actionBtn,e);}else doAction();});
+ for(const type of ['pointerup','pointercancel','lostpointercapture'])actionBtn.addEventListener(type,()=>{holdMine=false;});
+ actionBtn.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&!e.repeat){e.preventDefault();if(actionKind==='mine')holdMine=true;else doAction();}});
+ actionBtn.addEventListener('keyup',()=>{holdMine=false;});
+ // ---------- Hotbar: the first six cells of the backpack ----------
+ const hotbarSlots=el('hotbar-slots');
+ const hotCells=Array.from({length:HOTBAR_SIZE},(_,i)=>{const b=document.createElement('button');b.className='cell hot';b.dataset.hot=String(i);b.onclick=()=>selectSlot(i);hotbarSlots.append(b);return b;});
+ function selectSlot(i:number){if(!game||!started)return;if(game.player.hotbar!==i)audio.tone('ui');selectHotbar(game,i);mining.nodeId=null;mining.ticks=0;hudKey='';updateHotbar();}
+ function updateHotbar(){
+  if(!game)return;const inv=game.player.inventory,key=JSON.stringify([game.player.hotbar,inv.slice(0,HOTBAR_SIZE)]);
+  if(key===hudKey)return;hudKey=key;
+  hotCells.forEach((c,i)=>{cellContent(c,inv[i],i);c.classList.toggle('active',i===game!.player.hotbar);c.setAttribute('aria-label',cellAria(inv[i],i));c.setAttribute('aria-pressed',String(i===game!.player.hotbar));});
+  const s=inv[game.player.hotbar];
+  el('hotbar-name').textContent=s?ITEMS[s.itemId].name:`Ячейка ${game.player.hotbar+1} пуста`;
+  el('hotbar-meta').textContent=!s?'':s.durability!==undefined?`${s.durability} / ${TOOLS[s.itemId].durability}`:s.milliGU!==undefined?`${Math.round(s.milliGU/1000)} GU`:ITEMS[s.itemId].stack>1?`×${s.count}`:'';
+  hand.setItem(s&&TOOLS[s.itemId]&&(s.durability??0)>0?s.itemId:null);
+  if(dialog==='inventory-panel')panels.drawInventory();
+ }
+ const objBtn=el('objective');objBtn.onclick=()=>{const open=objBtn.getAttribute('aria-expanded')!=='true';objBtn.setAttribute('aria-expanded',String(open));el('objective-detail').hidden=!open;audio.tone('ui');};
  el('resume').onclick=resume;el('pause-button').onclick=()=>{audio.tone('ui');pause();};
  el('reset').onclick=()=>{if(saver?.halted)return;actor.reset();resume();};
  el('quality-toggle').onclick=()=>{const order:Quality[]=['low','standard','high'];applyQuality(order[(order.indexOf(settings.quality)+1)%3]);};
@@ -124,14 +156,17 @@ function boot(){
  const openSettings=()=>{audio.tone('ui');settingsReturn=started?'paused':'welcome';setDialog('settings');};
  el('title-settings').onclick=openSettings;el('settings-button').onclick=openSettings;
  el('settings-back').onclick=()=>{audio.tone('ui');setDialog(settingsReturn);};
- const setNight=(value:boolean,instant=false)=>{night=value;world.setNight(night,instant);el('light-text').textContent=night?'Ночь':'День';el('light-icon').innerHTML=`<svg><use href="#i-${night?'moon':'sun'}"/></svg>`;el('day').setAttribute('aria-pressed',String(night));};
- el('day').onclick=()=>{audio.tone('ui');setNight(!night);};
+ // Day/night follows the game clock (600 s day + 360 s night). The Sun/Moon button skips the light phase only.
+ let shownDay:boolean|null=null;
+ const dayPhase=()=>game?phaseSeconds(clock.activeTicks,game.world.dayOffsetTicks):516;
+ function updateDayButton(){const day=isDay(dayPhase());if(day===shownDay)return;shownDay=day;el('light-text').textContent=day?'День':'Ночь';el('light-icon').innerHTML=`<svg><use href="#i-${day?'sun':'moon'}"/></svg>`;el('day').setAttribute('aria-pressed',String(!day));}
+ function toggleDay(){if(!game||!started||saver?.halted)return;audio.tone('ui');const toNight=isDay(dayPhase());game.world.dayOffsetTicks=offsetFor(clock.activeTicks,toNight?EVENING_S:MORNING_S);world.setTime(dayPhase());updateDayButton();toast(toNight?'Ночь':'Утро',toNight?'Солнце зашло':'Рассвет');}
+ el('day').onclick=toggleDay;
  el('map-button').onclick=()=>{audio.tone('ui');setDialog('map-panel');};el('close-map').onclick=resume;
  el('close-info').onclick=resume;
  el('metrics-toggle').onclick=()=>{showMetrics=!showMetrics;el('metrics').hidden=!showMetrics;el('metrics-toggle').textContent=showMetrics?'Скрыть показатели сцены':'Показать показатели сцены';};
  el('run').onclick=()=>{if(!running)return;runToggle=!runToggle;updateRun();};
  el('jump').onpointerdown=event=>{event.preventDefault();if(running)input.jump=true;};
- el('progress-bar').replaceChildren(...LANDMARKS.map(()=>document.createElement('i')));
 
  function toast(kind:string,text:string){const t=el('toast');t.hidden=true;void t.offsetWidth;el('toast-kind').textContent=kind;el('toast-text').textContent=text;t.hidden=false;}
  function inspect(){
@@ -144,14 +179,16 @@ function boot(){
   if(nearest.id===selected)selected=ROUTE.find(id=>!visited.has(id))??'capsule';
   setDialog('info-panel');updateUI();
  }
- el('inspect').onclick=inspect;
  addEventListener('keydown',event=>{
   if(event.code==='Escape'){event.preventDefault();if(dialog==='settings'){setDialog(settingsReturn);return;}if(started){if(running)pause();else resume();}return;}
   if(event.code==='KeyM'&&started&&!event.repeat){event.preventDefault();if(dialog==='map-panel')resume();else setDialog('map-panel');return;}
-  if(event.code==='KeyI'&&started&&!event.repeat){event.preventDefault();if(dialog==='inventory-panel')resume();else if(running)setDialog('inventory-panel');return;}
+  if(event.code==='KeyI'&&started&&!event.repeat){event.preventDefault();openPanel('inventory-panel');return;}
+  if(event.code==='KeyC'&&started&&!event.repeat){event.preventDefault();openPanel('suit-panel');return;}
   if(!running)return;
+  if(/^Digit[1-6]$/.test(event.code)){event.preventDefault();selectSlot(Number(event.code.slice(5))-1);return;}
+  if(event.code==='KeyN'&&!event.repeat){event.preventDefault();toggleDay();return;}
   if(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','ShiftLeft','ShiftRight','KeyE','KeyF'].includes(event.code))event.preventDefault();
-  if(event.code==='KeyF')holdMine=true;
+  if(event.code==='KeyF'&&!event.repeat){if(actionKind==='mine')holdMine=true;else doAction();}
   keys.add(event.code);if(event.code==='Space'&&!event.repeat)input.jump=true;
   if(event.code==='KeyE'&&!event.repeat)inspect();updateRun();
  });
@@ -163,7 +200,7 @@ function boot(){
  stick.addEventListener('pointermove',event=>{if(joyPointer===event.pointerId){event.preventDefault();moveStick(event);}});
  const releaseStick=(event:PointerEvent)=>{if(joyPointer===event.pointerId){joyPointer=null;joyX=joyY=0;el('stick').style.transform='translate(0,0)';}};
  for(const type of ['pointerup','pointercancel','lostpointercapture'])stick.addEventListener(type,releaseStick as EventListener);
- canvas.addEventListener('pointerdown',event=>{if(!running||lookPointer!==null)return;event.preventDefault();lookPointer=event.pointerId;lastX=event.clientX;lastY=event.clientY;capture(canvas,event);el('look-hint').hidden=true;});
+ canvas.addEventListener('pointerdown',event=>{if(!running||lookPointer!==null)return;event.preventDefault();lookPointer=event.pointerId;lastX=event.clientX;lastY=event.clientY;capture(canvas,event);});
  canvas.addEventListener('pointermove',event=>{if(lookPointer!==event.pointerId||!running)return;actor.yaw-=(event.clientX-lastX)*.004;actor.pitch=Math.max(-1.25,Math.min(1.25,actor.pitch-(event.clientY-lastY)*.003));lastX=event.clientX;lastY=event.clientY;});
  const releaseLook=(event:PointerEvent)=>{if(lookPointer===event.pointerId)lookPointer=null;};
  for(const type of ['pointerup','pointercancel','lostpointercapture'])canvas.addEventListener(type,releaseLook as EventListener);
@@ -195,7 +232,8 @@ function boot(){
  }
  function setSaveStatus(st:SaverStatus|{kind:'none'|'idle';message?:string}){
   const e=el('save-status');e.dataset.kind=st.kind;
-  e.textContent=st.kind==='saving'?'СОХРАНЕНИЕ…':st.kind==='saved'?`СОХРАНЕНО · РЕВ. ${(st as SaverStatus).revision}`:st.kind==='error'?'ОШИБКА СОХРАНЕНИЯ':st.kind==='lease-lost'?'ЗАПИСЬ ОСТАНОВЛЕНА':st.kind==='none'?'БЕЗ СОХРАНЕНИЯ':'БЕЗ МИРА';
+  el('save-text').textContent=st.kind==='saving'?'Сохранение…':st.kind==='saved'?'Сохранено':st.kind==='error'?'Ошибка сохранения':st.kind==='lease-lost'?'Запись остановлена':st.kind==='none'?'Без сохранения':'Без мира';
+  e.title=st.kind==='saved'?`Ревизия ${(st as SaverStatus).revision}`:'';
   if(st.kind==='error'||st.kind==='lease-lost'){audio.tone('warn');if(saver?.halted)showHalt();else toast('Сохранение',st.message??'Ошибка');}
  }
  function updatePauseInfo(msg?:string){
@@ -245,7 +283,7 @@ function boot(){
   game=state;slotId=id;clock.stop();clock.activeTicks=state.meta.activeTicks;mining.nodeId=null;mining.ticks=0;
   actor.reset();Object.assign(actor,{x:state.player.x,y:state.player.y,z:state.player.z,yaw:state.player.yaw,pitch:state.player.pitch});actor.previous={x:actor.x,y:actor.y,z:actor.z};
   visited.clear();discovered.clear();state.progress.visited.forEach(v=>visited.add(v));state.progress.discovered.forEach(v=>discovered.add(v));selected=LANDMARKS.some(l=>l.id===state.progress.selected)?state.progress.selected:'iron';
-  applyNodes();syncDrops();
+  applyNodes();syncDrops();hudKey='';updateHotbar();shownDay=null;world.setTime(phaseSeconds(state.meta.activeTicks,state.world.dayOffsetTicks),true);updateDayButton();panels.reset();
   if(id&&store){saver=new Saver(store,id,token,revision,state.meta.activeTicks,snapshot,setSaveStatus,baseRevision);saver.startHeartbeat();setSaveStatus(saver.status);}else{saver=null;setSaveStatus({kind:'none'});}
   updateUI();
  }
@@ -292,20 +330,6 @@ function boot(){
    status.textContent=`Импортировано как новый мир «${slot.name}». Существующие миры не изменены.`;audio.tone('item');
   }catch(e){status.textContent='Импорт отклонён: '+(e instanceof Error?e.message:String(e));audio.tone('warn');}
  }
- function drawInventory(){
-  if(!game)return;const inv=game.player.inventory,detail=el('inventory-detail');
-  const eq=(label:string,value:string)=>{const d=document.createElement('div');const s=document.createElement('small');s.className='mono';s.textContent=label;const b=document.createElement('b');b.textContent=value;d.append(s,b);return d;};
-  const ti=toolSlot(inv),tool=ti>=0?inv[ti]:inv.find(x=>x&&TOOLS[x.itemId]);
-  el('equipment').replaceChildren(eq('КОСТЮМ','Базовый скафандр'),...game.player.bottles.map((b,i)=>eq(`БАЛЛОН ${i+1}`,b?`${ITEMS[b.itemId].name} · ${Math.round((b.milliGU??0)/1000)} GU`:'— пусто')),eq('ИНСТРУМЕНТ',tool?`${itemName(tool.itemId)} · ${tool.durability}/${TOOLS[tool.itemId].durability}`:'нет'));
-  el('inventory-grid').replaceChildren(...inv.map((sl:Slot,i)=>{const c=document.createElement('button');c.className='inv-slot';c.setAttribute('role','listitem');
-   if(!sl){c.classList.add('empty');c.setAttribute('aria-label',`Слот ${i+1}: пусто`);c.onclick=()=>{detail.textContent=`Слот ${i+1}: пусто`;};return c;}
-   const n=document.createElement('b');n.textContent=itemName(sl.itemId);c.append(n);
-   if(sl.durability!==undefined){const bar=document.createElement('i');bar.style.setProperty('--d',String(sl.durability/TOOLS[sl.itemId].durability));c.append(bar);if(!sl.durability)c.classList.add('broken');}
-   else{const k=document.createElement('span');k.className='mono';k.textContent='×'+sl.count;c.append(k);}
-   c.dataset.item=sl.itemId;c.setAttribute('aria-label',`${itemName(sl.itemId)}${sl.durability!==undefined?`, прочность ${sl.durability}`:`, ${sl.count} шт.`}`);
-   c.onclick=()=>{detail.textContent=sl.durability!==undefined?`${itemName(sl.itemId)}: прочность ${sl.durability}/${TOOLS[sl.itemId].durability} блоков. Добывает камень, Fe, Cu, лёд и грунт.`:`${itemName(sl.itemId)} ×${sl.count} (стак до ${ITEMS[sl.itemId].stack}). Переработка — на этапе выживания.`;};
-   return c;}));
- }
  // ---------- Aim: which deposit is under the reticle and within reach ----------
  const nodeCenter=new THREE.Vector3(),toNode=new THREE.Vector3();
  function computeAim(){
@@ -317,13 +341,26 @@ function boot(){
    const hit=along>0&&perp<r+.25&&along-r<=REACH,close=horiz<1.3&&along>0&&perp<r+1.1;
    if((hit||close)&&along<best){best=along;aimNode=n.id;}}
  }
+ /** Aim label under the reticle and the context action button (mine / pick up / scan / none). */
  function updateAimUI(){
-  const box=el('aim'),btn=el('mine'),n=aimNode?NODE_BY_ID.get(aimNode):undefined;
-  box.hidden=!n||!running;btn.hidden=!n||!running;document.body.dataset.aim=String(!!n);
-  if(!n||!game)return;const left=game.world.nodes[n.id],m=MATERIALS[n.material],ti=toolSlot(game.player.inventory);
-  el('aim-kind').textContent=m.label.toUpperCase()+' · '+(ti>=0?`${(ticksFor(n.material,TOOLS[game.player.inventory[ti]!.itemId].timeMul)/20).toFixed(1)} с/блок`:'нет инструмента');
-  el('aim-name').textContent=n.name;el('aim-meta').textContent=aimReason||`ОСТАЛОСЬ ${left} / ${n.amount} · ${itemName(n.itemId).toUpperCase()}`;
-  box.classList.toggle('blocked',!!aimReason);(el('aim-bar').firstElementChild as HTMLElement).style.transform=`scaleX(${mineRatio})`;btn.style.setProperty('--p',String(mineRatio));
+  const box=el('aim'),n=aimNode&&game?NODE_BY_ID.get(aimNode):undefined;
+  box.hidden=!n||!running;document.body.dataset.aim=String(!!n);
+  let kind='none',label='Действие',iconId='i-hand',blocked='';
+  if(n&&game){
+   const left=game.world.nodes[n.id],ti=toolSlot(game),sel=game.player.inventory[game.player.hotbar];
+   const secs=ti>=0?(ticksFor(n.material,TOOLS[game.player.inventory[ti]!.itemId].timeMul)/20):0;
+   blocked=ti<0?(sel&&TOOLS[sel.itemId]?'Инструмент сломан':game.player.inventory.some(x=>x&&TOOLS[x.itemId])?'Выберите мультитул':'Нужен инструмент'):'';
+   el('aim-name').textContent=itemName(n.itemId)+(ti>=0?` · ${secs%1?secs.toFixed(1):secs} с`:'');
+   el('aim-meta').textContent=aimReason||blocked||`${left} / ${n.amount}`;box.classList.toggle('blocked',!!(aimReason||blocked));
+   (el('aim-bar').firstElementChild as HTMLElement).style.transform=`scaleX(${mineRatio})`;
+   kind='mine';label='Добыть';iconId='i-pick';
+  }else if(nearDrop){kind='pickup';label='Поднять';iconId='i-pack';}
+  else if(nearest){kind='scan';label='Сканировать';iconId='i-scan';}
+  const disabled=kind==='none'||!!blocked||!running;
+  actionKind=disabled?'none':kind;if(disabled)holdMine=false;
+  actionBtn.dataset.kind=kind;actionBtn.setAttribute('aria-disabled',String(disabled));actionBtn.style.setProperty('--p',String(mineRatio));
+  if(el('action-label').textContent!==label){el('action-label').textContent=label;el('action-icon').innerHTML=`<use href="#${iconId}"/>`;actionBtn.setAttribute('aria-label',kind==='mine'?'Добыть (удерживать)':label);}
+  actionBtn.title=blocked;
  }
  function onMined(ev:Extract<ReturnType<typeof mineTick>,{kind:'block'}>){
   const n=NODE_BY_ID.get(ev.nodeId)!;audio.tone('item');applyNodes();
@@ -331,7 +368,7 @@ function boot(){
   else toast(`+1 · осталось ${ev.left}`,itemName(ev.itemId));
   if(!ev.left){toast('Запас исчерпан',n.name);}
   if(ev.toolBroke){audio.tone('warn');toast('Инструмент сломан',itemName('tool_stone')+' · ремонт появится с крафтом');}
-  if(dialog==='inventory-panel')drawInventory();
+  hudKey='';updateHotbar();
  }
  // ---------- Holographic map (mirrored x so it matches the first-person view: east = −x) ----------
  let mapBase:HTMLCanvasElement|null=null;
@@ -374,9 +411,12 @@ function boot(){
   cctx.fillStyle=grad;cctx.strokeStyle=grad;cctx.lineWidth=dpr;
   cctx.beginPath();cctx.moveTo(0,h*.62);cctx.lineTo(w,h*.62);cctx.globalAlpha=.25;cctx.stroke();cctx.globalAlpha=1;
   for(let d=0;d<360;d+=5){const a=d*Math.PI/180,x=X(a);if(Math.abs(wrap(a-heading))>span/2)continue;const major=d%45===0;cctx.fillRect(x-dpr/2,h*(major?.44:d%15===0?.5:.55),dpr,h*(major?.18:d%15===0?.12:.07));
-   if(major){cctx.font=`600 ${9*dpr}px ui-monospace,monospace`;cctx.textAlign='center';cctx.fillText(DIRS[d/45],x,h*.36);}}
+   if(major){cctx.font=`600 ${11*dpr}px system-ui,sans-serif`;cctx.textAlign='center';cctx.fillText(DIRS[d/45],x,h*.36);}}
   for(const p of LANDMARKS){const a=bearing(p.x-actor.x,p.z-actor.z),rel=wrap(a-heading);if(Math.abs(rel)>span/2)continue;const x=X(a),sel=p.id===selected;
    cctx.save();cctx.translate(x,h*.82);cctx.rotate(Math.PI/4);cctx.fillStyle=sel?'#f2b460':visited.has(p.id)?'rgba(127,230,218,.45)':'rgba(191,238,230,.9)';const r=(sel?4:2.5)*dpr;cctx.fillRect(-r,-r,r*2,r*2);cctx.restore();}
+  // Sun (day) or moon (night) on the strip at its real bearing — the light moves with the game clock.
+  {const sd=world.sunDirection,day=sd.y>-.02,a=day?bearing(sd.x,sd.z):bearing(-sd.x,-sd.z),rel=wrap(a-heading);
+   if(Math.abs(rel)<span/2){const x=X(a),y=h*.36,r=5*dpr;cctx.save();cctx.strokeStyle=cctx.fillStyle=day?'#ffb43c':'#cfe3ff';cctx.lineWidth=1.4*dpr;cctx.beginPath();cctx.arc(x,y,r*.7,0,Math.PI*2);if(day){cctx.stroke();for(let i=0;i<8;i++){const q=i*Math.PI/4;cctx.beginPath();cctx.moveTo(x+Math.cos(q)*r*1.05,y+Math.sin(q)*r*1.05);cctx.lineTo(x+Math.cos(q)*r*1.5,y+Math.sin(q)*r*1.5);cctx.stroke();}}else cctx.fill();cctx.restore();}}
   cctx.fillStyle='#f2b460';cctx.beginPath();cctx.moveTo(w/2-4*dpr,0);cctx.lineTo(w/2+4*dpr,0);cctx.lineTo(w/2,5*dpr);cctx.fill();
  }
  const marker=el('target-marker');
@@ -388,42 +428,44 @@ function boot(){
   if(visible){marker.style.transform=`translate(${(tmp.x*.5+.5)*innerWidth}px,${Math.max(innerHeight<500?92:118,(-tmp.y*.5+.5)*innerHeight)}px) translate(-50%,-50%)`;el('marker-distance').textContent=`${Math.round(d)} м`;}
  }
  const mined=(item:string)=>!!game&&NODES.some(n=>n.itemId===item&&game!.world.nodes[n.id]<n.amount);
- function objective(){
-  if(insideCapsule())return 'Выйдите из капсулы и осмотритесь';
+ /** Short task for the HUD chip and a longer hint shown when it is expanded. */
+ function objective():[string,string]{
+  if(insideCapsule())return ['Выйдите из капсулы','Выход — через шлюз позади. Метка на компасе показывает ближайшую цель.'];
   if(game){
-   if(!mined('iron_raw'))return 'Добудьте железную руду: подойдите к выходу (метка на компасе) и удерживайте «Добыть» [F]';
-   if(!mined('copper_raw'))return 'Отлично. Теперь медь — медный выход восточнее железного';
-   if(!mined('ice'))return 'Наберите лёд у ледяной глыбы в низине на севере';
-   if(!mined('stone'))return 'Соберите камень у осыпи слева от капсулы';
-   if(!exported)return 'Ресурсы найдены. Откройте меню — сохраните мир и попробуйте экспорт файла';
+   if(!mined('iron_raw'))return ['Найдите железо','Подойдите к выходу железной руды (метка на компасе), выберите мультитул в ячейке 1 и удерживайте «Добыть» [F].'];
+   if(!mined('copper_raw'))return ['Добудьте медь','Медный выход — восточнее железного.'];
+   if(!mined('ice'))return ['Наберите лёд','Ледяная глыба — в низине на севере.'];
+   if(!mined('stone'))return ['Соберите камень','Каменная осыпь — слева от капсулы.'];
+   if(!exported)return ['Сохраните мир','Ресурсы найдены. Откройте меню — сохраните мир и попробуйте экспорт файла.'];
   }
-  if(visited.size>=LANDMARKS.length)return insideCapsule()||Math.hypot(actor.x-40,actor.z-40)<8?'Маршрут завершён: все места осмотрены':'Участок изучен. Возвращайтесь к капсуле';
-  if(visited.size===0)return 'Отсканируйте капсулу или ближайшее место — кнопка «Сканировать»';
-  if(visited.size<LANDMARKS.length)return `Исследуйте окрестности: следуйте метке на компасе (${visited.size} из ${LANDMARKS.length})`;
-  return 'Участок изучен. Возвращайтесь к капсуле';
+  if(visited.size>=LANDMARKS.length)return ['Маршрут завершён','Все места осмотрены.'];
+  return ['Исследуйте долину',`Следуйте метке на компасе и сканируйте места: ${visited.size} из ${LANDMARKS.length}.`];
+ }
+ function updateVitals(){
+  if(!game)return;const g=game,o2=oxygenGU(g),cap=oxygenCapacityGU(g)||1;
+  const set=(id:string,v:number,ratio:number)=>{const e=el(id);e.style.setProperty('--v',String(Math.max(0,Math.min(1,ratio))));const b=e.querySelector('b')!;const t=String(Math.round(v));if(b.textContent!==t)b.textContent=t;};
+  set('g-health',g.player.vitals.health,g.player.vitals.health/100);set('g-satiety',g.player.vitals.satiety,g.player.vitals.satiety/100);set('g-oxygen',o2,o2/cap);
+  el('g-oxygen').setAttribute('aria-label',`Кислород ${Math.round(o2)} GU`);el('g-health').setAttribute('aria-label',`Здоровье ${Math.round(g.player.vitals.health)}`);el('g-satiety').setAttribute('aria-label',`Сытость ${Math.round(g.player.vitals.satiety)}`);
  }
  function updateUI(){
   if(game){const want=!mined('iron_raw')?'iron':!mined('copper_raw')?'copper':!mined('ice')?'ice':!mined('stone')?'capsule':null;if(want&&autoTarget!==want){autoTarget=want;selected=want;}}
   nearDrop=null;if(game)for(const d of game.world.drops)if(Math.hypot(d.x-actor.x,d.z-actor.z)<2.2){nearDrop=d.id;break;}
-  el('pickup').hidden=!nearDrop||!running;
   const target=LANDMARKS.find(p=>p.id===selected)!;
   const d=Math.hypot(actor.x-target.x,actor.z-target.z);el('target-name').textContent=target.name;el('target-distance').textContent=`${Math.round(d)} м`;
   const angle=Math.atan2(target.x-actor.x,target.z-actor.z)-actor.yaw;(document.querySelector('.nav-arrow') as HTMLElement).style.transform=`rotate(${-angle}rad)`;
   nearest=LANDMARKS.filter(p=>Math.hypot(actor.x-p.x,actor.z-p.z)<=p.radius).sort((a,b)=>Math.hypot(actor.x-a.x,actor.z-a.z)-Math.hypot(actor.x-b.x,actor.z-b.z))[0];
-  el('discovery').hidden=!nearest;document.body.dataset.near=String(!!nearest);
-  if(nearest){el('discovery-kind').textContent=nearest.kind;el('discovery-title').textContent=nearest.name;
-   if(started&&!discovered.has(nearest.id)){discovered.add(nearest.id);if(nearest.id!=='capsule'){toast('Новое место',nearest.name);audio.tone('discover');}}}
-  el('progress').textContent=`ОСМОТРЕНО ${visited.size} / ${LANDMARKS.length}`;
-  [...el('progress-bar').children].forEach((c,i)=>c.classList.toggle('on',i<visited.size));
-  el('coords').textContent=`X ${String(Math.round(actor.x)).padStart(3,'0')} · Z ${String(Math.round(actor.z)).padStart(3,'0')}`;
-  const o=objective();if(o!==lastObjective){lastObjective=o;el('objective-text').textContent=o;const ob=el('objective');ob.classList.remove('pulse');void ob.offsetWidth;ob.classList.add('pulse');}
+  document.body.dataset.near=String(!!nearest);
+  if(nearest&&started&&!discovered.has(nearest.id)){discovered.add(nearest.id);if(nearest.id!=='capsule'){toast('Новое место',nearest.name);audio.tone('discover');}}
+  const [o,detail]=objective();if(o!==lastObjective){lastObjective=o;el('objective-text').textContent=o;el('objective-detail').textContent=detail;const ob=el('objective');ob.classList.remove('pulse');void ob.offsetWidth;ob.classList.add('pulse');}
+  updateVitals();updateHotbar();updateDayButton();
  }
- function state(){const sorted=[...frames].sort((a,b)=>a-b);return {ready:true,version:'S1',slotId,revision:saver?.revision??0,saveStatus:saver?.status.kind??(game?'none':'idle'),halted:!!saver?.halted,activeTicks:clock.activeTicks,clockRunning:clock.running,aimNode,mineRatio,nodes:game?{...game.world.nodes}:null,inventory:game?game.player.inventory.filter(Boolean).map(s=>({...s})):[],drops:game?game.world.drops.length:0,storage:!!store,grassCount:world.grassCount,fullscreen:!!document.fullscreenElement,running,dialog,night,selected,visited:[...visited],activeTime:clock.activeSeconds,position:{x:actor.x,y:actor.y,z:actor.z},yaw:actor.yaw,pitch:actor.pitch,grounded:actor.grounded,input:{...input,joyX,joyY,joyPointer,lookPointer},quality:settings.quality,sound:settings.sound,bob:settings.bob,fov:settings.fov,fineTerrainBlocks:world.terrain.fineBlocks,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0,viewport:{width:innerWidth,height:innerHeight},renderer:renderer.getContext().getParameter(renderer.getContext().VERSION)};}
+ function state(){const sorted=[...frames].sort((a,b)=>a-b);return {ready:true,version:'S1',slotId,revision:saver?.revision??0,saveStatus:saver?.status.kind??(game?'none':'idle'),halted:!!saver?.halted,activeTicks:clock.activeTicks,clockRunning:clock.running,hotbar:game?.player.hotbar??0,cells:game?game.player.inventory.map(s=>s?{...s}:null):[],suit:game?Object.fromEntries(Object.entries(game.player.suit).map(([k,v])=>[k,v?.itemId??null])):null,worn:game?wornParts(game):0,bottles:game?game.player.bottles.map(b=>b?{...b}:null):[],oxygenGU:game?oxygenGU(game):0,dayPhase:dayPhase(),dayOffsetTicks:game?.world.dayOffsetTicks??0,nightValue:world.nightValue,action:actionKind,handItem:hand.visible,panel:panels.debug,aimNode,mineRatio,nodes:game?{...game.world.nodes}:null,inventory:game?game.player.inventory.filter(Boolean).map(s=>({...s})):[],drops:game?game.world.drops.length:0,storage:!!store,grassCount:world.grassCount,fullscreen:!!document.fullscreenElement,running,dialog,night:!isDay(dayPhase()),selected,visited:[...visited],activeTime:clock.activeSeconds,position:{x:actor.x,y:actor.y,z:actor.z},yaw:actor.yaw,pitch:actor.pitch,grounded:actor.grounded,input:{...input,joyX,joyY,joyPointer,lookPointer},quality:settings.quality,sound:settings.sound,bob:settings.bob,fov:settings.fov,fineTerrainBlocks:world.terrain.fineBlocks,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0,viewport:{width:innerWidth,height:innerHeight},renderer:renderer.getContext().getParameter(renderer.getContext().VERSION)};}
  const dev=!!(import.meta as unknown as {env?:{DEV?:boolean}}).env?.DEV;
  Object.defineProperty(window,'__vireon',{value:{getState:state,save:()=>saver?.save(),snapshot:()=>game?snapshot():null,
   // Development-only verification helper; absent from production and standalone builds.
   ...(dev?{teleport:(x:number,z:number,yaw:number,pitch=-.2)=>{actor.x=x;actor.z=z;actor.y=heightAt(x,z);actor.yaw=yaw;actor.pitch=pitch;actor.previous={x,y:actor.y,z};}}:{})},writable:false});
 
+ let handBobX=0,handBobY=0;
  const draw=(now:number)=>{
   const actualFrameMs=now-last;const dt=Math.min(actualFrameMs/1000,.25);last=now;
   if(running){
@@ -450,7 +492,7 @@ function boot(){
    const a=clock.running?clock.alpha:1;
    wake=Math.max(0,wake-(running?dt:0));const w=wake/2.6,ease=w*w*(3-2*w);
    const moving=running&&(Math.abs(input.forward)+Math.abs(input.right))>.1&&actor.grounded;
-   const bobOn=moving&&settings.bob,bobY=bobOn?Math.sin(bob*2)*.028:0,bobX=bobOn?Math.cos(bob)*.018:0;
+   const bobOn=moving&&settings.bob,bobY=bobOn?Math.sin(bob*2)*.028:0,bobX=bobOn?Math.cos(bob)*.018:0;handBobX=bobX;handBobY=bobY;
    viewPos.set(THREE.MathUtils.lerp(actor.previous.x,actor.x,a),THREE.MathUtils.lerp(actor.previous.y,actor.y,a)+EYE+bobY-ease*.25,THREE.MathUtils.lerp(actor.previous.z,actor.z,a));
    viewPos.x+=Math.cos(actor.yaw)*bobX;viewPos.z-=Math.sin(actor.yaw)*bobX;camera.position.copy(viewPos);
    const pitch=actor.pitch-ease*.45;
@@ -460,14 +502,16 @@ function boot(){
   }
   // Explicit pause (and settings opened from it) freezes the whole scene, not only the controller.
   const frozen=started&&(dialog==='paused'||dialog==='settings');
+  if(game&&started)world.setTime(dayPhase());
   world.update(frozen?0:dt,camera,renderer);renderer.render(scene,camera);
+  if(started&&hand.visible&&dialog!=='suit-panel'){hand.update(frozen?0:dt,camera,{sun:world.sunLight,hemi:world.hemiLight},holdMine&&mineRatio>0,handBobX,handBobY);renderer.autoClear=false;renderer.clearDepth();renderer.render(hand.scene,camera);renderer.autoClear=true;}
   if(!frozen)audio.update(dt,started&&insideCapsule()?1:0,world.nightValue);
   if(started){drawCompass(bearing(Math.sin(actor.yaw),Math.cos(actor.yaw)));updateMarker();computeAim();updateAimUI();}
   if(running&&dt>0){frames.push(actualFrameMs);if(frames.length>180)frames.shift();}
   if(now-lastUI>150){updateUI();lastUI=now;if(showMetrics){const s=state();const ob=el('objective').getBoundingClientRect();el('metrics').style.top=`${Math.round(ob.bottom+8)}px`;el('metrics').textContent=`S1 / WebGL2 / DPR ${renderer.getPixelRatio()} / ${settings.quality}\nВызовы: ${s.drawCalls} · треуг.: ${s.triangles}\nКадр p95: ${s.frameP95Ms.toFixed(1)} мс\nX ${actor.x.toFixed(1)} · Z ${actor.z.toFixed(1)}\nЭто замер текущего браузера`;}}
   requestAnimationFrame(draw);
  };
- document.body.dataset.started='false';applyQuality(settings.quality);applySound(settings.sound);applyBob(settings.bob);applyFov(settings.fov);fov=settings.fov;setNight(false,true);updateUI();
+ document.body.dataset.started='false';applyQuality(settings.quality);applySound(settings.sound);applyBob(settings.bob);applyFov(settings.fov);fov=settings.fov;world.setTime(516,true);updateUI();
  document.body.dataset.running='false';requestAnimationFrame(draw);
  void initStore().then(()=>{document.body.dataset.ready='true';});
 }
