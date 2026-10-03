@@ -210,5 +210,26 @@
   },
   "build": "TypeScript, Vite and standalone passed",
   "designValidation": "198 items, 213 recipes; PASS",
-  "physicalPhoneTested": false
+  "physicalPhoneTested": false,
+  "bootCorrection": {
+    "date": "2026-10-04",
+    "build": "TypeScript, Vite, standalone passed",
+    "screenshots": [
+      "screenshots/suit-844x390.webp",
+      "screenshots/suit-1366x768.webp",
+      "screenshots/suit-667x320.webp",
+      "screenshots/inventory-844x390.webp"
+    ],
+    "interaction": {
+      "viewports": [
+        "844x390",
+        "1366x768",
+        "667x320"
+      ],
+      "removedAndReequipped": true,
+      "errors": [],
+      "environment": "Chromium with SwiftShader; visual correctness only"
+    },
+    "physicalPhoneTested": false
+  }
 }
