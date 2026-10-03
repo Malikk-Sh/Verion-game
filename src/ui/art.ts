@@ -1,13 +1,26 @@
 import { ITEMS, type SuitPart } from '../game/defs';
+import tool from '../assets/items/tool_stone.webp';
+import tank from '../assets/items/bottle_1.webp';
+import food from '../assets/items/pulp.webp';
+import iron from '../assets/items/iron_raw.webp';
+import copper from '../assets/items/copper_raw.webp';
+import ice from '../assets/items/ice.webp';
+import stone from '../assets/items/stone.webp';
+import helmet from '../assets/items/suit_helmet.webp';
+import chest from '../assets/items/suit_chest.webp';
+import legs from '../assets/items/suit_legs.webp';
+import boots from '../assets/items/suit_boots.webp';
 /**
- * Item art. Final sprites are not made yet: every item uses a vector placeholder in the
- * palette of the approved mock-ups. To plug in a finished asset, add its URL here
- * (e.g. `tool_stone: new URL('../assets/items/tool_stone.webp', import.meta.url).href`);
- * the UI then shows the image instead of the placeholder. IDs are the stable item IDs.
+ * Shared local raster sprites: one asset for hotbar, inventory, equipment and inspection.
+ * Static imports give Vite hashed URLs and the portable build embedded data URLs.
+ * Stable item IDs and save data are independent of the visual assets.
  */
-export const ITEM_ART: Partial<Record<string, string>> = {};
-/** Optional character render for the suit screen; the placeholder figure is used until set. */
-export const FIGURE_ART: { url?: string } = {};
+export const ITEM_ART: Partial<Record<string, string>> = {
+ tool_stone: tool, bottle_1: tank, pulp: food, iron_raw: iron, copper_raw: copper,
+ ice, stone, suit_helmet: helmet, suit_chest: chest, suit_legs: legs, suit_boots: boots,
+};
+/** Paper doll uses the same four sprites; removed parts become faint placement guides. */
+export const FIGURE_ART: { parts: Record<SuitPart, string> } = { parts: { helmet, chest, legs, boots } };
 
 const P: Record<string, string> = {
  tool_stone: '<path d="M13 41 31 19" stroke="#0d1214" stroke-width="7" stroke-linecap="round"/><path d="M13 41 31 19" stroke="#46525a" stroke-width="4.4" stroke-linecap="round"/><path d="m17 36.4 2.4 2M22.5 29.8l2.4 2" stroke="#e8742a" stroke-width="5.5"/><path d="M24 10l11-3 8 7-3 9-9 1-6-5Z" fill="#b3ada2" stroke="#6f6a62" stroke-width="1.2"/><path d="M30 14l6 5" stroke="#e8742a" stroke-width="3"/>',
@@ -23,7 +36,7 @@ const P: Record<string, string> = {
  suit_boots: '<path d="M10 14h9v16l5 4v6H8Z" fill="#ecebe6" stroke="#5d6466" stroke-width="1.2"/><path d="M27 14h9v16l5 4v6H25Z" fill="#ecebe6" stroke="#5d6466" stroke-width="1.2"/><path d="M8 37h16M25 37h16" stroke="#2b3234" stroke-width="3"/><path d="M10 20h9M27 20h9" stroke="#e8742a" stroke-width="2.6"/>',
 };
 const PART_ITEM: Record<SuitPart, string> = { helmet: 'suit_helmet', chest: 'suit_chest', legs: 'suit_legs', boots: 'suit_boots' };
-/** An element showing the item: the registered sprite or the placeholder vector. */
+/** Registered item sprite; unknown future items retain a vector fallback. */
 export function itemArt(id: string, cls = 'art'): HTMLElement {
  const box = document.createElement('span'); box.className = cls; box.dataset.item = id;
  const url = ITEM_ART[id];
@@ -38,15 +51,9 @@ export function ghostArt(kind: SuitPart | 'tank', cls = 'art ghost'): HTMLElemen
  box.innerHTML = `<svg viewBox="0 0 48 48" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.3" stroke-dasharray="3 2">${(P[kind === 'tank' ? 'bottle_1' : PART_ITEM[kind]] ?? '').replace(/fill="[^"]*"/g, 'fill="none"').replace(/stroke="#[^"]*"/g, '')}</g></svg>`;
  return box;
 }
-/** Placeholder full-body figure; parts that are not worn are drawn as dashed outlines. */
+/** Four independent raster layers preserve selection and all combinations of worn parts. */
 export function figureArt(worn: Record<SuitPart, boolean>, selected?: SuitPart): string {
- if (FIGURE_ART.url) return `<img src="${FIGURE_ART.url}" alt="">`;
- const c = (p: SuitPart) => `class="fig-part${worn[p] ? '' : ' off'}${selected === p ? ' sel' : ''}"`;
- return `<svg viewBox="0 0 120 220" aria-hidden="true">
-  <ellipse cx="60" cy="210" rx="44" ry="7" class="fig-base"/>
-  <g ${c('legs')}><path d="M42 112h36l3 58H66l-6-40-6 40H39Z"/><path d="M41 140h12M67 140h12" class="fig-accent"/></g>
-  <g ${c('boots')}><path d="M38 170h16v26H32v-8Z"/><path d="M66 170h16l6 18v8H66Z"/><path d="M34 192h20M66 192h22" class="fig-dark"/></g>
-  <g ${c('chest')}><path d="M40 48h40l14 10 6 42-9 3-6-30v39H35V73l-6 30-9-3 6-42Z"/><path d="m54 58 6 9 6-9Z" class="fig-accent"/><path d="M36 106h48" class="fig-dark"/></g>
-  <g ${c('helmet')}><circle cx="60" cy="30" r="19"/><path d="M47 29a13 10 0 0 1 26 0v5H47Z" class="fig-visor"/></g>
- </svg>`;
+ return `<div class="raster-figure" aria-hidden="true"><i class="figure-platform"></i>${(['legs', 'boots', 'chest', 'helmet'] as SuitPart[]).map(p =>
+  `<span class="fig-part fig-${p}${worn[p] ? '' : ' off'}${selected === p ? ' sel' : ''}" data-figure-part="${p}" data-worn="${worn[p]}"><img src="${FIGURE_ART.parts[p]}" alt="" draggable="false"></span>`
+ ).join('')}</div>`;
 }

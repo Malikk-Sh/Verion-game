@@ -1,0 +1,214 @@
+{
+  "date": "2026-10-03",
+  "unitTests": {
+    "passed": 38,
+    "failed": 0
+  },
+  "s1": {
+    "checks": [
+      "Fresh browser: no saves, \"Новая экспедиция\" only",
+      "New expedition creates a saved slot (revision 1) with the starting kit",
+      "Aiming at the iron outcrop shows the mining prompt",
+      "Holding F mines one block: node 32→31, ore in inventory, tool wear 1",
+      "HUD at 844×390, 1366×768 and 667×320: no overlapping groups, inside viewport, buttons ≥48 px",
+      "Hotbar = backpack row 1: selecting food disables «Добыть», key 1 returns the multitool",
+      "Touch-drag across a hotbar cell does not rotate the camera or move the player",
+      "Inventory opens and game time keeps running inside it",
+      "Inventory UI: move to empty cell, swap with occupied, cancel; «Сортировать остальное» keeps row 1",
+      "Suit screen: tap does not remove in hazard, 1 s hold removes helmet to backpack, «Надеть» returns it, back to inventory",
+      "Day/night: button and N shift the cycle, scene light follows, phase advances with game time",
+      "Pause freezes the clock and commits a new revision",
+      "Reload → Продолжить restores deposits, inventory, position, hotbar, suit and day offset from IndexedDB",
+      "Second tab is told the world is open elsewhere",
+      "Take-over: new tab writes, old tab stops and offers export",
+      "Export downloads a .vireon.json envelope",
+      "Import creates a second slot without touching the first",
+      "Damaged file is rejected with a message",
+      "No console errors"
+    ],
+    "errors": [],
+    "environment": "Headless Chromium, software WebGL (SwiftShader), economy preset. Correctness only."
+  },
+  "sprites": {
+    "checks": [
+      "Six hotbar slots use loaded raster sprites from backpack row 1",
+      "All 11 current items load at 512px with transparent margins and solid object pixels",
+      "HUD, inventory and suit raster layers fit at 844×390, 1366×768 and 667×320",
+      "Selection follows the part; removing/reequipping changes the raster figure",
+      "Standalone HTML loads embedded WebP sprites without external image requests",
+      "No browser console or runtime errors"
+    ],
+    "errors": [],
+    "screenshots": [
+      "artifacts/sprites-844-hud.png",
+      "artifacts/sprites-844-inventory.png",
+      "artifacts/sprites-844-suit.png",
+      "artifacts/sprites-1366-hud.png",
+      "artifacts/sprites-1366-inventory.png",
+      "artifacts/sprites-1366-suit.png",
+      "artifacts/sprites-667-hud.png",
+      "artifacts/sprites-667-inventory.png",
+      "artifacts/sprites-667-suit.png",
+      "artifacts/sprites-844-suit-removed.png"
+    ],
+    "environment": "Chromium, SwiftShader; visual correctness, not phone FPS",
+    "assets": [
+      {
+        "id": "tool_stone",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "bottle_1",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "suit_helmet",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "suit_chest",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "suit_legs",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "suit_boots",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "pulp",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "iron_raw",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "copper_raw",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "ice",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "stone",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      }
+    ]
+  },
+  "compactSprites": {
+    "checks": [
+      "Six hotbar slots use loaded raster sprites from backpack row 1",
+      "All 11 current items load at 512px with transparent margins and solid object pixels",
+      "HUD, inventory and suit raster layers fit at 667×320",
+      "Selection follows the part; removing/reequipping changes the raster figure",
+      "Standalone HTML loads embedded WebP sprites without external image requests",
+      "No browser console or runtime errors"
+    ],
+    "errors": [],
+    "screenshots": [
+      "artifacts/sprites-667-hud.png",
+      "artifacts/sprites-667-inventory.png",
+      "artifacts/sprites-667-inventory-scrolled.png",
+      "artifacts/sprites-667-suit.png",
+      "artifacts/sprites-844-suit-removed.png"
+    ],
+    "environment": "Chromium, SwiftShader; visual correctness, not phone FPS",
+    "assets": [
+      {
+        "id": "tool_stone",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "bottle_1",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "suit_helmet",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "suit_chest",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "suit_legs",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "suit_boots",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "pulp",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "iron_raw",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "copper_raw",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "ice",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "stone",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      }
+    ]
+  },
+  "build": "TypeScript, Vite and standalone passed",
+  "designValidation": "198 items, 213 recipes; PASS",
+  "physicalPhoneTested": false
+}
