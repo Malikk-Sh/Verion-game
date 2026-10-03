@@ -10,6 +10,7 @@ import helmet from '../assets/items/suit_helmet.webp';
 import chest from '../assets/items/suit_chest.webp';
 import legs from '../assets/items/suit_legs.webp';
 import boots from '../assets/items/suit_boots.webp';
+import figureBoots from '../assets/figure/suit_boots.webp';
 /**
  * Shared local raster sprites: one asset for hotbar, inventory, equipment and inspection.
  * Static imports give Vite hashed URLs and the portable build embedded data URLs.
@@ -19,8 +20,8 @@ export const ITEM_ART: Partial<Record<string, string>> = {
  tool_stone: tool, bottle_1: tank, pulp: food, iron_raw: iron, copper_raw: copper,
  ice, stone, suit_helmet: helmet, suit_chest: chest, suit_legs: legs, suit_boots: boots,
 };
-/** Paper doll uses the same four sprites; removed parts become faint placement guides. */
-export const FIGURE_ART: { parts: Record<SuitPart, string> } = { parts: { helmet, chest, legs, boots } };
+/** Boots use a stance-specific sprite; removed parts become faint placement guides. */
+export const FIGURE_ART: { parts: Record<SuitPart, string> } = { parts: { helmet, chest, legs, boots: figureBoots } };
 
 const P: Record<string, string> = {
  tool_stone: '<path d="M13 41 31 19" stroke="#0d1214" stroke-width="7" stroke-linecap="round"/><path d="M13 41 31 19" stroke="#46525a" stroke-width="4.4" stroke-linecap="round"/><path d="m17 36.4 2.4 2M22.5 29.8l2.4 2" stroke="#e8742a" stroke-width="5.5"/><path d="M24 10l11-3 8 7-3 9-9 1-6-5Z" fill="#b3ada2" stroke="#6f6a62" stroke-width="1.2"/><path d="M30 14l6 5" stroke="#e8742a" stroke-width="3"/>',
@@ -53,7 +54,9 @@ export function ghostArt(kind: SuitPart | 'tank', cls = 'art ghost'): HTMLElemen
 }
 /** Four independent raster layers preserve selection and all combinations of worn parts. */
 export function figureArt(worn: Record<SuitPart, boolean>, selected?: SuitPart): string {
- return `<div class="raster-figure" aria-hidden="true"><i class="figure-platform"></i>${(['legs', 'boots', 'chest', 'helmet'] as SuitPart[]).map(p =>
-  `<span class="fig-part fig-${p}${worn[p] ? '' : ' off'}${selected === p ? ' sel' : ''}" data-figure-part="${p}" data-worn="${worn[p]}"><img src="${FIGURE_ART.parts[p]}" alt="" draggable="false"></span>`
- ).join('')}</div>`;
+ return `<div class="raster-figure" aria-hidden="true"><div class="figure-canvas"><i class="figure-platform"></i>${(['legs', 'boots', 'chest', 'helmet'] as SuitPart[]).map(p =>
+  `<span class="fig-part fig-${p}${worn[p] ? '' : ' off'}${selected === p ? ' sel' : ''}" data-figure-part="${p}" data-worn="${worn[p]}">${p === 'boots'
+   ? `<span class="fig-boot fig-boot-left"><img src="${figureBoots}" alt="" draggable="false"></span><span class="fig-boot fig-boot-right"><img src="${figureBoots}" alt="" draggable="false"></span>`
+   : `<img src="${FIGURE_ART.parts[p]}" alt="" draggable="false">`}</span>`
+ ).join('')}</div></div>`;
 }

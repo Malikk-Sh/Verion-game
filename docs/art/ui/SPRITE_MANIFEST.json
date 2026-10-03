@@ -124,5 +124,18 @@
       "prompt": "Use case: stylized-concept. Asset type: isolated transparent inventory sprite for Vireon mobile sci-fi survival game, asset ID suit_boots. Reference screenshot is STYLE reference ONLY, second image is the exact equipment style to match. SINGLE pair of white sci-fi astronaut boots with orange horizontal trim, dark charcoal thick soles and ankle joints, robust padded top openings, no legs, no pants, no wearer. Pair side by side, three-quarter front view, toes point slightly toward viewer. Match the approved costume and chest style. Polished volumetric 3D game render with neutral soft upper-left lighting, strong readable silhouette at 48px, broad crisp details, realistic stylized materials, not vector art. SINGLE object set centered on square canvas, fill about 82% with 8% clear margins, no clipping. Genuine transparent alpha background. No UI, no text, no numbers, no labels, no frame, no logo, no pedestal, no floor shadow, no extra objects.",
       "styleReference": "User-approved costume screenshot; chest sprite also referenced for legs and boots"
     }
+  ],
+  "figureAssets": [
+    {
+      "id": "figure_boots",
+      "path": "src/assets/figure/suit_boots.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 49450,
+      "sha256": "445418267932b1354239fae762d4822e0345ef5ce592d0cced9741fda5932af7",
+      "sourceSha256": "df51203fdb6f982d69230a0bca0190b27629e3b3d4988f82e928c3f8653e4541",
+      "prompt": "Create a transparent game sprite from the reference boots: TWO matching white/orange/charcoal armored sci-fi boots, fully separated by a wide transparent gap, shafts two shaft widths apart. Preserve reference style, materials, lighting, detailing. Almost frontal slight three-quarter left-facing stance matching second reference trousers. Left boot cuff slightly higher than right. Two boots ONLY, no trousers, no legs, no floor, no shadows on background, no text. Square transparent alpha canvas; both complete and unclipped. Wide planted stance, each boot stands independently, no touching or overlapping, open black ankle socket.",
+      "styleReference": "Existing item sprites suit_boots and suit_legs"
+    }
   ]
 }
