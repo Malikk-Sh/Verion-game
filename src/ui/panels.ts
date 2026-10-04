@@ -185,7 +185,7 @@ export function createPanels(host: PanelHost) {
    }
    box.append(acts);
    const note = h('p', 'd-warn' + (suitMessage ? ' msg' : ''));
-   note.append(icon('i-warn'), h('span', '', suitMessage || (host.hazard() ? 'В опасной среде снятие — удержание 1 с' : 'Внутри капсулы часть снимается сразу')));
+   note.append(icon('i-warn'), h('span', '', suitMessage || (host.hazard() ? 'В опасной среде' : 'Внутри капсулы')));
    box.append(note);
   }
  }
