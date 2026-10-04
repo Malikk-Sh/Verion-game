@@ -519,5 +519,89 @@
       ]
     },
     "build": "TypeScript and Vite passed; standalone not updated"
+  },
+  "bootFitCorrection": {
+    "date": "2026-10-04",
+    "cause": "Boot shafts were narrower than the trouser ankle openings; cuffs were exposed below the leg ends.",
+    "change": "Uniform boot scale increased by one third; ankle centres realigned and boot cuffs moved under trouser hems. Legs artwork and geometry unchanged.",
+    "pantsSha256": "4f66737fa717dd8019b13dc4b6860001ce23fee7c9802959542dd5f331063683",
+    "verification": {
+      "checks": [
+        "Boot fit shown at three viewports; pants sprite and proportions unchanged",
+        "Legs and boots remain independently selectable, removable and equipable",
+        "No browser errors"
+      ],
+      "errors": [],
+      "screenshots": [
+        "artifacts/sprites-844-bootfit-inventory.png",
+        "artifacts/sprites-844-bootfit-suit.png",
+        "artifacts/sprites-1366-bootfit-suit.png",
+        "artifacts/sprites-667-bootfit-suit.png"
+      ],
+      "environment": "Chromium, SwiftShader; visual correctness, not phone FPS",
+      "consistency": [
+        {
+          "viewport": [
+            844,
+            390
+          ],
+          "sameSprite": true,
+          "aspectError": 0.00013412017167380164
+        },
+        {
+          "viewport": [
+            1366,
+            768
+          ],
+          "sameSprite": true,
+          "aspectError": 0
+        },
+        {
+          "viewport": [
+            667,
+            320
+          ],
+          "sameSprite": true,
+          "aspectError": 0.00019171779141102796
+        }
+      ],
+      "metrics": [
+        {
+          "viewport": [
+            844,
+            390
+          ],
+          "figureWidth": 129.4375,
+          "legWidth": 116.484375,
+          "legHeight": 116.5,
+          "leftBoot": 31.578125,
+          "rightBoot": 32.09375
+        },
+        {
+          "viewport": [
+            1366,
+            768
+          ],
+          "figureWidth": 240,
+          "legWidth": 216,
+          "legHeight": 216,
+          "leftBoot": 58.546875,
+          "rightBoot": 59.515625
+        },
+        {
+          "viewport": [
+            667,
+            320
+          ],
+          "figureWidth": 90.546875,
+          "legWidth": 81.484375,
+          "legHeight": 81.5,
+          "leftBoot": 22.078125,
+          "rightBoot": 22.453125
+        }
+      ]
+    },
+    "build": "TypeScript and Vite passed; standalone not updated",
+    "physicalPhoneTested": false
   }
 }

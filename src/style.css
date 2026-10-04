@@ -320,10 +320,10 @@ input[type=range]::-moz-range-track{height:3px;background:var(--line)}input[type
 .raster-figure .fig-boots img,.raster-figure .fig-boots.sel:not(.off) img{filter:none}
 /* Glow follows the separated silhouettes, rather than their clipping edges. */
 .raster-figure .fig-boots.sel:not(.off){filter:drop-shadow(0 0 3px rgba(26,241,248,.8))}
-.fig-boot{position:absolute;width:36%;height:20%}
-.fig-boot-left{left:28.5%;top:65.6333%;clip-path:inset(0 50% 0 0)}
-.fig-boot-right{left:34.8%;top:67.9333%;clip-path:inset(0 0 0 51%)}
-.figure-platform{position:absolute;left:16%;right:16%;bottom:12%;height:6%;border:1px solid rgba(58,229,240,.25);border-radius:50%;background:radial-gradient(ellipse,rgba(36,195,207,.13),transparent 70%);z-index:0}
+.fig-boot{position:absolute;width:48%;height:26.6667%}
+.fig-boot-left{left:24.4%;top:62%;clip-path:inset(0 50% 0 0)}
+.fig-boot-right{left:24.8%;top:62.7%;clip-path:inset(0 0 0 51%)}
+.figure-platform{position:absolute;left:16%;right:16%;bottom:11%;height:6%;border:1px solid rgba(58,229,240,.25);border-radius:50%;background:radial-gradient(ellipse,rgba(36,195,207,.13),transparent 70%);z-index:0}
 .fig-part path,.fig-part circle{fill:#e9e8e3;stroke:#3d4648;stroke-width:1.4}.fig-part .fig-accent{fill:#e8742a;stroke:#e8742a}.fig-part .fig-dark{fill:none;stroke:#2b3234;stroke-width:4}.fig-part .fig-visor{fill:#12181a;stroke:#e8742a}
 .fig-part.off path,.fig-part.off circle{fill:none;stroke:rgba(160,220,225,.45);stroke-dasharray:4 3}.fig-part.off .fig-accent,.fig-part.off .fig-visor{fill:none}
 .fig-part.sel path:first-child,.fig-part.sel circle{stroke:var(--aqua);stroke-width:2.2}
