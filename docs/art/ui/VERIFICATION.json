@@ -370,7 +370,7 @@
     "date": "2026-10-04",
     "approvedVariant": 1,
     "assets": 12,
-    "bytes": 355558,
+    "bytes": 355914,
     "screenshotsReviewed": [
       "HUD 844×390",
       "suit 1366×768",
@@ -378,5 +378,62 @@
     ],
     "figure": "Hip width matched to chest belt; waist and ankles overlapped; stance boot layers independent of leg state",
     "physicalPhoneTested": false
+  },
+  "stanceCorrection": {
+    "date": "2026-10-04",
+    "change": "Regenerated pants with 35% closer ankle centres; pelvis width and rendered leg dimensions unchanged. Both boots repositioned to new ankle centres.",
+    "verification": {
+      "checks": [
+        "Natural stance shown in inventory and suit at three viewports; pelvis scale unchanged",
+        "Legs and boots remain independently selectable, removable and equipable",
+        "No browser errors"
+      ],
+      "errors": [],
+      "screenshots": [
+        "artifacts/sprites-844-stance-inventory.png",
+        "artifacts/sprites-844-stance-suit.png",
+        "artifacts/sprites-1366-stance-inventory.png",
+        "artifacts/sprites-1366-stance-suit.png",
+        "artifacts/sprites-667-stance-inventory.png",
+        "artifacts/sprites-667-stance-suit.png"
+      ],
+      "environment": "Chromium, SwiftShader; visual correctness, not phone FPS",
+      "metrics": [
+        {
+          "viewport": [
+            844,
+            390
+          ],
+          "figureWidth": 155.328125,
+          "legWidth": 139.78125,
+          "legHeight": 93.1875,
+          "leftBoot": 44.265625,
+          "rightBoot": 54.046875
+        },
+        {
+          "viewport": [
+            1366,
+            768
+          ],
+          "figureWidth": 288,
+          "legWidth": 259.1875,
+          "legHeight": 172.796875,
+          "leftBoot": 82.078125,
+          "rightBoot": 100.21875
+        },
+        {
+          "viewport": [
+            667,
+            320
+          ],
+          "figureWidth": 108.65625,
+          "legWidth": 97.78125,
+          "legHeight": 65.1875,
+          "leftBoot": 30.953125,
+          "rightBoot": 37.796875
+        }
+      ]
+    },
+    "build": "TypeScript and Vite passed; standalone not updated"
   }
 }

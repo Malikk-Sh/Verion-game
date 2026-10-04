@@ -31,11 +31,11 @@
       "path": "src/assets/items/suit_legs.webp",
       "width": 512,
       "height": 512,
-      "bytes": 29254,
-      "sha256": "b4e1b44934f0df019b3ef4463ad589cb33e30afa63577ee90cf8c576acf47b0f",
-      "sourceSha256": "ebddc344b7eb68e1b568cd97a1fbf73c6371a4d6a80381eeb6952e23ff76f191",
-      "prompt": "Create ONE production game inventory sprite on a truly transparent background. Match the approved SOFT LOW-POLY art in the reference board exactly: large faceted matte 3D planes, softly bevelled edges, ivory/off-white panels, burnt orange accents and charcoal mechanical joints. Adult grounded proportions, strongly simplified geometry, no tiny seams/screws, no texture noise/weathering, no photorealistic gloss, no outlines. Consistent upper-left diffuse lighting. Single centered isolated object, no floor, no cast shadow outside object, no text, no UI, no board. Square canvas, object occupies 86% of available height and/or width, fully visible with generous transparent margins. A matching astronaut pants/greaves pair, one joined pelvis with two spread legs. Broad adult hips that fit the reference torso, orange hip plates and knee borders, ivory shins and charcoal joints. Three-quarter view facing viewer's left, viewer-right leg slightly lower. Cut off at ankle cuffs, NO feet or boots. Full legs only, no upper torso.",
-      "styleReference": "User-approved variant 1, soft low-poly board, 2026-10-04"
+      "bytes": 29610,
+      "sha256": "4f66737fa717dd8019b13dc4b6860001ce23fee7c9802959542dd5f331063683",
+      "sourceSha256": "877b33bac4a484f6f3b204ee791a8d1d9a88fffb237f06dc36774a3f320a39e4",
+      "prompt": "Use case: precise-object-edit. Edit target: first reference is the current transparent astronaut PANTS sprite. Second reference is unchanged matching torso, for style and waist width only. Primary request: change ONLY the stance of the two legs from wide splayed legs to a natural relaxed standing posture, knees nearly straight, thighs and shins descending almost vertically under the hips. Bring the ankle centres about 35% closer together than current image, with a modest clear transparent gap between the legs. Keep adult hip/pelvis width, waist belt, original leg LENGTH, proportions, ivory/orange/charcoal colors, exact soft low-poly large matte facets, knee armor, hip armor, ankle cuffs, three-quarter left-facing view, viewer-right ankle slightly lower than left, and upper-left lighting. Preserve the square framing and object height. Pants from waist to ankle ONLY, no boots, no feet, no upper torso, no head. Full transparent alpha background. NO crouch, no bowlegs, no outward feet pose, no compressed pelvis or miniaturized pants. Entire object unclipped with clear margins.",
+      "styleReference": "Previous low-poly pants (edit target), unchanged chest (style/waist reference); closer relaxed stance, 2026-10-04"
     },
     {
       "id": "suit_boots",
