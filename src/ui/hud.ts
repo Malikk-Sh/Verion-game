@@ -1,12 +1,15 @@
 /** All HUD geometry uses the same 40px unit. Preferences are independent of world saves. */
 export const HUD_GROUPS = {
  joystick: 'Джойстик', action: 'Основное действие', movement: 'Бег и прыжок',
- menu: 'Верхние кнопки', compass: 'Компас', vitals: 'Индикаторы состояния',
+ menu: 'Верхние кнопки', compass: 'Компас', vitals: 'Индикаторы',
  hotbar: 'Быстрый доступ', info: 'Задача и подписи',
 } as const;
 export type HudGroup = keyof typeof HUD_GROUPS;
 export type HudSettings = Record<HudGroup, number>;
 export const HUD_MIN = 80, HUD_MAX = 150, HUD_STEP = 5;
+export const HUD_VERSION = 2;
+/** User-approved proportions from the 4 October screenshot, now shown as 100%. */
+export const HUD_BASE: HudSettings = { joystick: 110, action: 115, movement: 95, menu: 90, compass: 90, vitals: 80, hotbar: 90, info: 80 };
 export const defaultHudSettings = (): HudSettings => Object.fromEntries(Object.keys(HUD_GROUPS).map(k => [k, 100])) as HudSettings;
 export function parseHudSettings(value: unknown): HudSettings {
  const result = defaultHudSettings();
@@ -17,9 +20,14 @@ export function parseHudSettings(value: unknown): HudSettings {
  }
  return result;
 }
+export function loadHudSettings(value: unknown, version: unknown): HudSettings {
+ if (!value || typeof value !== 'object' || version === HUD_VERSION) return parseHudSettings(value);
+ const old = parseHudSettings(value);
+ return parseHudSettings(Object.fromEntries(Object.entries(old).map(([key, n]) => [key, n / HUD_BASE[key as HudGroup] * 100])));
+}
 export type HudInsets = { left: number; right: number; top: number; bottom: number };
 export function hudLayout(width: number, height: number, inset: HudInsets, prefs: HudSettings) {
- const s = Object.fromEntries(Object.entries(parseHudSettings(prefs)).map(([k, v]) => [k, v / 100])) as Record<HudGroup, number>;
+ const s = Object.fromEntries(Object.entries(parseHudSettings(prefs)).map(([k, v]) => [k, v * HUD_BASE[k as HudGroup] / 10000])) as Record<HudGroup, number>;
  const room = width - inset.left - inset.right, gap = 8;
  // Reserve a readable compass between the two top groups, rather than rely on a device breakpoint.
  const topFit = Math.max(.3, Math.min(1, (room - 128 - gap * 2) / (164 * s.vitals + 256 * s.menu)));
@@ -58,9 +66,13 @@ export function hudLayout(width: number, height: number, inset: HudInsets, prefs
  const barTop = height - inset.bottom - barHeight, aimHeight = 32 * s.info;
  const aimBelow = height / 2 + Math.max(28, 20 * s.info + gap);
  const aimTop = aimBelow + aimHeight + gap <= barTop + .1 ? aimBelow : height / 2 - 26 - aimHeight;
+ const aimBottom = aimTop + aimHeight;
+ const aimLeftEdge = aimBottom > height - joyBottom - joyWidth && aimTop < height - joyBottom ? inset.left + joyWidth + gap : inset.left;
+ const aimRightEdge = aimBottom > height - inset.bottom - actionHeight ? width - inset.right - actionWidth() - gap : width - inset.right;
+ const aimWidth = aimRightEdge - aimLeftEdge, aimLeft = aimLeftEdge + aimWidth / 2;
  return { scales: s, compassLeft, compassWidth, objectiveTop, objectiveHeight, objectiveWidth,
   hotbarLeft, hotbarWidth: barWidth, hotbarHeight: barHeight, joystickBottom: joyBottom,
-  joystickSize: joyWidth, actionWidth: actionWidth(), actionHeight, aimTop,
+  joystickSize: joyWidth, actionWidth: actionWidth(), actionHeight, aimTop, aimWidth, aimLeft,
   toastTop: objectiveTop, toastWidth: Math.max(1, room - objectiveWidth - gap), saveHeight };
 }
 
@@ -80,7 +92,8 @@ export function applyHudSettings(prefs: HudSettings) {
  const positions = { 'compass-left': layout.compassLeft, 'compass-width': layout.compassWidth,
   'objective-top': layout.objectiveTop, 'objective-height': layout.objectiveHeight, 'objective-width': layout.objectiveWidth,
   'hotbar-left': layout.hotbarLeft, 'hotbar-width': layout.hotbarWidth, 'joystick-bottom': layout.joystickBottom,
-  'aim-top': layout.aimTop, 'toast-top': layout.toastTop, 'toast-width': layout.toastWidth, 'save-height': layout.saveHeight };
+  'aim-top': layout.aimTop, 'aim-width': layout.aimWidth, 'aim-left': layout.aimLeft,
+  'toast-top': layout.toastTop, 'toast-width': layout.toastWidth, 'save-height': layout.saveHeight };
  for (const [key, value] of Object.entries(positions)) root.style.setProperty(`--hud-${key}`, `${value}px`);
  return layout;
 }

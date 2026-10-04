@@ -1,7 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { defaultHudSettings, parseHudSettings, hudLayout, HUD_GROUPS, type HudGroup } from '../src/ui/hud';
+import { defaultHudSettings, parseHudSettings, loadHudSettings, HUD_BASE, HUD_VERSION, hudLayout, HUD_GROUPS, type HudGroup } from '../src/ui/hud';
 const safe = { left: 16, right: 16, top: 10, bottom: 10 };
+test('Approved HUD sizes become 100%; old preferences migrate once', () => {
+ assert.deepEqual(loadHudSettings(HUD_BASE, undefined), defaultHudSettings());
+ assert.deepEqual(loadHudSettings(undefined, undefined), defaultHudSettings());
+ const custom = {...defaultHudSettings(),joystick:120};
+ assert.deepEqual(loadHudSettings(custom,HUD_VERSION),custom);
+ const r=hudLayout(1366,768,safe,defaultHudSettings());
+ for(const key of Object.keys(HUD_GROUPS) as HudGroup[])assert.equal(r.scales[key],HUD_BASE[key]/100);
+});
 test('HUD preferences accept old settings and independently repair invalid values', () => {
  assert.deepEqual(parseHudSettings(undefined), defaultHudSettings());
  assert.deepEqual(parseHudSettings(null), defaultHudSettings());
@@ -23,6 +31,8 @@ test('HUD lanes remain separated for all combinations of smallest/largest group 
    assert.ok(h-r.joystickBottom-r.joystickSize >= r.objectiveTop+r.objectiveHeight+7.9, tag);
    assert.ok(40*s.menu >= 31.99 && 40*s.hotbar >= 31.99 && 44*s.movement >= 31.99 && 80*s.action >= 31.99, tag);
    assert.ok(r.aimTop+32*s.info <= h-safe.bottom-r.hotbarHeight-7.9, tag);
+   if(r.aimTop+32*s.info>h-r.joystickBottom-r.joystickSize)assert.ok(r.aimLeft-r.aimWidth/2>=safe.left+r.joystickSize+7.9,tag);
+   if(r.aimTop+32*s.info>h-safe.bottom-r.actionHeight)assert.ok(r.aimLeft+r.aimWidth/2<=w-safe.right-r.actionWidth-7.9,tag);
   }
  }
 });

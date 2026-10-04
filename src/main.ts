@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import './style.css';
 import './ui/hud.css';
-import { HUD_GROUPS, HUD_MIN, HUD_MAX, HUD_STEP, parseHudSettings, defaultHudSettings, applyHudSettings, type HudSettings, type HudGroup } from './ui/hud';
+import { HUD_GROUPS, HUD_MIN, HUD_MAX, HUD_STEP, HUD_VERSION, loadHudSettings, defaultHudSettings, applyHudSettings, type HudSettings, type HudGroup } from './ui/hud';
 import { installFullscreen } from './fullscreen';
 import { createWorld, type Quality } from './scene';
 import { Character, type Input } from './controller';
@@ -25,10 +25,10 @@ const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById
 const canvas=el<HTMLCanvasElement>('world');
 const error=(message:string)=>{el('error-text').textContent=message;el('error').hidden=false;document.body.dataset.ready='error';};
 
-type Settings={quality:Quality;sound:boolean;bob:boolean;fov:number;hud:HudSettings};
+type Settings={quality:Quality;sound:boolean;bob:boolean;fov:number;hud:HudSettings;hudVersion:number};
 function loadSettings():Settings{
- const fallback:Settings={quality:'standard',sound:true,bob:true,fov:70,hud:defaultHudSettings()};
- try{const s=JSON.parse(localStorage.getItem('vireon.settings')||'{}');return {quality:['low','standard','high'].includes(s?.quality)?s.quality:fallback.quality,sound:typeof s?.sound==='boolean'?s.sound:fallback.sound,bob:typeof s?.bob==='boolean'?s.bob:fallback.bob,fov:typeof s?.fov==='number'&&s.fov>=60&&s.fov<=95?Math.round(s.fov):fallback.fov,hud:parseHudSettings(s?.hud)};}catch{return fallback;}
+ const fallback:Settings={quality:'standard',sound:true,bob:true,fov:70,hud:defaultHudSettings(),hudVersion:HUD_VERSION};
+ try{const s=JSON.parse(localStorage.getItem('vireon.settings')||'{}');return {quality:['low','standard','high'].includes(s?.quality)?s.quality:fallback.quality,sound:typeof s?.sound==='boolean'?s.sound:fallback.sound,bob:typeof s?.bob==='boolean'?s.bob:fallback.bob,fov:typeof s?.fov==='number'&&s.fov>=60&&s.fov<=95?Math.round(s.fov):fallback.fov,hud:loadHudSettings(s?.hud,s?.hudVersion),hudVersion:HUD_VERSION};}catch{return fallback;}
 }
 const saveSettings=(s:Settings)=>{try{localStorage.setItem('vireon.settings',JSON.stringify(s));}catch{/* settings are optional */}};
 const QUALITY_LABEL:Record<Quality,string>={low:'Графика: экономная',standard:'Графика: стандарт',high:'Графика: высокая'};
@@ -55,7 +55,7 @@ function boot(){
  const hand=createViewModel();
  const TITLE_OFFSET=-.42;
  let exported=false,autoTarget='',frames:number[]=[],showMetrics=false,wake=0,bob=0,stride=0,fov=70,titleTime=0,lastObjective='',settingsReturn='welcome';
- const visited=new Set<string>(),discovered=new Set<string>();let dialog='welcome';const ALL_DIALOGS=['welcome','paused','settings','objective-panel','map-panel','info-panel','inventory-panel','suit-panel','saves-panel','lease-panel'];
+ const visited=new Set<string>(),discovered=new Set<string>();let dialog='welcome';const ALL_DIALOGS=['welcome','paused','settings','hud-settings-panel','objective-panel','map-panel','info-panel','inventory-panel','suit-panel','saves-panel','lease-panel'];
  const insideCapsule=(x=actor.x,z=actor.z)=>x>37.5&&x<42.5&&z>37&&z<43.1;
 
  // ---------- Settings ----------
@@ -81,7 +81,7 @@ function boot(){
   document.body.dataset.running=String(running);
   el('objective').setAttribute('aria-expanded',String(which==='objective-panel'));
   if(which==='map-panel')drawMap();if(which==='inventory-panel')panels.drawInventory();if(which==='suit-panel')panels.drawSuit();if(which==='saves-panel')void refreshSlots();if(which==='paused')updatePauseInfo();
-  if(running)audio.resume();else if(started&&(which==='paused'||which==='settings'))audio.suspend();
+  if(running)audio.resume();else if(started&&(which==='paused'||which==='settings'||which==='hud-settings-panel'))audio.suspend();
  }
  function pause(reason='Пауза'){if(!started)return;el('pause-title').textContent=reason;setDialog('paused');void saver?.save();}
  function bootSequence(){
@@ -162,6 +162,8 @@ function boot(){
  const openSettings=()=>{audio.tone('ui');settingsReturn=started?'paused':'welcome';el('hud-preview').hidden=!started;setDialog('settings');};
  el('title-settings').onclick=openSettings;el('settings-button').onclick=openSettings;
  el('settings-back').onclick=()=>{audio.tone('ui');setDialog(settingsReturn);};
+ el('hud-settings-button').onclick=()=>{audio.tone('ui');setDialog('hud-settings-panel');};
+ el('hud-settings-back').onclick=()=>{audio.tone('ui');setDialog('settings');};
  const hudRanges=new Map<HudGroup,{input:HTMLInputElement;output:HTMLOutputElement}>();
  for(const [key,label] of Object.entries(HUD_GROUPS) as [HudGroup,string][]){
   const row=document.createElement('label'),name=document.createElement('span'),range=document.createElement('input'),output=document.createElement('output');
@@ -196,7 +198,7 @@ function boot(){
   setDialog('info-panel');updateUI();
  }
  addEventListener('keydown',event=>{
-  if(event.code==='Escape'){event.preventDefault();if(dialog==='settings'){setDialog(settingsReturn);return;}if(started){if(running)pause();else resume();}return;}
+  if(event.code==='Escape'){event.preventDefault();if(dialog==='hud-settings-panel'){setDialog('settings');return;}if(dialog==='settings'){setDialog(settingsReturn);return;}if(started){if(running)pause();else resume();}return;}
   if(event.code==='KeyM'&&started&&!event.repeat){event.preventDefault();if(dialog==='map-panel')resume();else setDialog('map-panel');return;}
   if(event.code==='KeyI'&&started&&!event.repeat){event.preventDefault();openPanel('inventory-panel');return;}
   if(event.code==='KeyC'&&started&&!event.repeat){event.preventDefault();openPanel('suit-panel');return;}
@@ -517,7 +519,7 @@ function boot(){
    const targetFov=settings.fov+(input.run&&moving&&settings.bob?6:0);fov+=(targetFov-fov)*Math.min(1,dt*6);if(Math.abs(camera.fov-fov)>.01){camera.fov=fov;camera.updateProjectionMatrix();}
   }
   // Explicit pause (and settings opened from it) freezes the whole scene, not only the controller.
-  const frozen=started&&(dialog==='paused'||dialog==='settings');
+  const frozen=started&&(dialog==='paused'||dialog==='settings'||dialog==='hud-settings-panel');
   if(game&&started)world.setTime(dayPhase());
   world.update(frozen?0:dt,camera,renderer);renderer.render(scene,camera);
   if(started&&hand.visible&&dialog!=='suit-panel'){hand.update(frozen?0:dt,camera,{sun:world.sunLight,hemi:world.hemiLight},holdMine&&mineRatio>0,handBobX,handBobY);renderer.autoClear=false;renderer.clearDepth();renderer.render(hand.scene,camera);renderer.autoClear=true;}

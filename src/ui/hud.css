@@ -28,12 +28,13 @@
 #hotbar{left:var(--hud-hotbar-left);width:var(--hud-hotbar-width);transform:none;align-items:stretch}
 #hotbar-title{width:100%;min-width:0;height:calc(20px * var(--hud-hotbar));min-height:0;padding:0 calc(8px * var(--hud-hotbar));gap:calc(6px * var(--hud-hotbar));align-items:center;font-size:max(11px,calc(12px * var(--hud-hotbar)))}
 #hotbar-name{min-width:0;overflow:hidden;text-overflow:ellipsis}#hotbar-meta{flex-shrink:0}
-#hotbar-slots{gap:calc(4px * var(--hud-hotbar));padding:calc(5px * var(--hud-hotbar));width:100%}
+#hotbar-slots{gap:calc(4px * var(--hud-hotbar));padding:calc(5px * var(--hud-hotbar));width:100%;--cut:calc(3px * var(--hud-hotbar));clip-path:polygon(0 0,100% 0,100% calc(100% - var(--cut)),calc(100% - var(--cut)) 100%,var(--cut) 100%,0 calc(100% - var(--cut)))}
+#hotbar-title{--cut:calc(4px * var(--hud-hotbar));clip-path:polygon(0 0,calc(100% - var(--cut)) 0,100% 100%,0 100%)}
 #hotbar .cell{width:calc(40px * var(--hud-hotbar));height:calc(40px * var(--hud-hotbar));flex-shrink:0}
 #hotbar .cell-n{left:calc(4px * var(--hud-hotbar));top:calc(3px * var(--hud-hotbar));font-size:max(10px,calc(11px * var(--hud-hotbar)))}
 #hotbar .cell-count{font-size:max(11px,calc(12px * var(--hud-hotbar)));min-width:calc(17px * var(--hud-hotbar));padding:1px 3px;right:2px;bottom:2px}
 #hotbar .cell-bar{left:calc(5px * var(--hud-hotbar));right:calc(5px * var(--hud-hotbar));bottom:calc(4px * var(--hud-hotbar));height:calc(4px * var(--hud-hotbar))}
-#hotbar-caption{align-self:center;margin:0;padding:0 16px;height:calc(16px * var(--hud-hotbar));font-size:max(11px,calc(11px * var(--hud-hotbar)));line-height:calc(16px * var(--hud-hotbar))}
+#hotbar-caption{align-self:center;margin:0;padding:0 12px;height:calc(16px * var(--hud-hotbar));font-size:max(11px,calc(11px * var(--hud-hotbar)));line-height:calc(16px * var(--hud-hotbar));clip-path:polygon(2px 0,calc(100% - 2px) 0,100% 100%,0 100%)}
 #joystick{left:var(--sl);bottom:var(--hud-joystick-bottom);width:calc(100px * var(--hud-joystick));height:calc(100px * var(--hud-joystick))}
 .stick-ring{width:calc(92px * var(--hud-joystick));height:calc(92px * var(--hud-joystick))}
 #stick{width:calc(40px * var(--hud-joystick));height:calc(40px * var(--hud-joystick))}
@@ -48,19 +49,23 @@
 .hex{width:calc(48px * var(--hud-movement));height:calc(44px * var(--hud-movement));clip-path:polygon(4px 0,calc(100% - 4px) 0,100% 4px,100% calc(100% - 4px),calc(100% - 4px) 100%,4px 100%,0 calc(100% - 4px),0 4px)}
 .hex svg{width:calc(20px * var(--hud-movement));height:calc(20px * var(--hud-movement))}
 .hex span{font-size:max(11px,calc(11px * var(--hud-movement)))}
-#aim{top:var(--hud-aim-top);max-width:calc(100vw - var(--sl) - var(--sr));height:calc(32px * var(--hud-info));padding:calc(4px * var(--hud-info)) calc(10px * var(--hud-info));gap:calc(6px * var(--hud-info));font-size:max(12px,calc(12px * var(--hud-info)))}
-#aim-name{min-width:0;overflow:hidden;text-overflow:ellipsis}#aim-meta{font-size:max(11px,calc(11px * var(--hud-info)));flex-shrink:0}
+#aim{left:var(--hud-aim-left);top:var(--hud-aim-top);max-width:var(--hud-aim-width);height:calc(32px * var(--hud-info));padding:calc(4px * var(--hud-info)) calc(10px * var(--hud-info));gap:calc(6px * var(--hud-info));font-size:max(12px,calc(12px * var(--hud-info)))}
+#aim-name{min-width:0;overflow:hidden;text-overflow:ellipsis}#aim-meta{font-size:max(11px,calc(11px * var(--hud-info)));min-width:0;overflow:hidden;text-overflow:ellipsis;flex-shrink:1}
 #toast{top:var(--hud-toast-top);left:auto;right:var(--sr);transform:none;max-width:var(--hud-toast-width);padding:calc(6px * var(--hud-info)) calc(14px * var(--hud-info));text-align:center;animation-name:hud-toast}
 #toast .tiny{font-size:max(11px,calc(11px * var(--hud-info)))}#toast strong{font-size:max(12px,calc(12px * var(--hud-info)))}
 @keyframes hud-toast{0%{opacity:0;translate:0 -6px}10%,80%{opacity:1;translate:0 0}100%{opacity:0;translate:0 -4px}}
 #marker-distance{font-size:max(11px,calc(11px * var(--hud-info)))}
 #target-marker{gap:calc(3px * var(--hud-info))}#target-marker i{width:calc(11px * var(--hud-info));height:calc(11px * var(--hud-info))}
 #reticle{width:calc(46px * var(--hud-info));height:calc(46px * var(--hud-info))}body[data-aim=true] #reticle{width:calc(40px * var(--hud-info));height:calc(40px * var(--hud-info))}
-.hud-settings{margin-top:20px;border-top:1px solid var(--line);padding-top:12px}
-.hud-settings h3{margin:0 0 8px;font-size:16px}.hud-settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+#hud-settings-button{margin-top:12px;min-height:40px}
+#hud-settings-panel{width:min(800px,calc(100vw - var(--sl) - var(--sr)));height:min(440px,calc(100dvh - 20px));padding:12px 16px;overflow:hidden;display:flex;flex-direction:column;gap:8px}
+.hud-settings-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-shrink:0}
+#hud-settings-panel h2{font-size:22px;margin:0}.hud-settings-head .secondary{width:auto;min-height:36px;font-size:12px;padding:0 12px;white-space:nowrap}
+.hud-settings-grid{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(4,minmax(0,1fr));gap:6px 16px}
 .hud-size-row{display:grid;grid-template-columns:minmax(0,1fr) 48px;gap:4px 8px;font-size:12px;align-items:center}
 .hud-size-row input{grid-column:1/-1;width:100%;margin:0;accent-color:var(--aqua);min-height:32px;height:32px;touch-action:pan-y}
 .hud-size-row output{text-align:right;color:var(--aqua);font-variant-numeric:tabular-nums}
-#hud-reset{min-height:36px;font-size:12px;margin-top:10px}.hud-settings .help{font-size:11px;margin-top:8px}
+.hud-settings-actions{display:flex;gap:10px;flex-shrink:0}.hud-settings-actions .secondary{flex:1;min-height:36px;font-size:12px;padding:0 8px}
+#hud-settings-panel .help{font-size:11px;line-height:1.35;margin:0;flex-shrink:0}
 @media(max-width:760px){#hotbar-caption{display:none}}
-@media(max-width:420px){.hud-settings-grid{grid-template-columns:1fr}}
+@media(max-height:360px){.hud-settings-grid{grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr))}#hud-settings-panel h2{font-size:20px}.hud-size-row{font-size:11px;gap:2px 4px;grid-template-columns:minmax(0,1fr) 38px}}

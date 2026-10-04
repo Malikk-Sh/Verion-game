@@ -62,7 +62,7 @@ try{
  await page.close();
  // Fresh isolated context: old settings remain intact. Throttle only this software-rendered test browser.
  await context.addInitScript(()=>{
-  if(!localStorage.getItem('vireon.settings'))localStorage.setItem('vireon.settings',JSON.stringify({quality:'low',sound:false,bob:false,fov:76}));
+  if(!localStorage.getItem('vireon.settings'))localStorage.setItem('vireon.settings',JSON.stringify({quality:'low',sound:false,bob:false,fov:76,hud:{joystick:110,action:115,movement:95,menu:90,compass:90,vitals:80,hotbar:90,info:80}}));
   const raf=window.requestAnimationFrame.bind(window);window.requestAnimationFrame=fn=>raf(t=>setTimeout(()=>fn(t),120));
  });
  const game=await context.newPage();debugPage=game;game.setDefaultTimeout(30000);game.on('pageerror',e=>report.errors.push(e.message));
@@ -84,21 +84,25 @@ try{
  await click('#inventory-button');await click('#inventory-grid [data-cell="0"]');await click('#act-move');await click('#inventory-grid [data-cell="11"]');await click('#close-inventory');
  check('Real inventory swaps replace broken tool with tank and healthy tool without stale flags');
  for(const [width,height] of [[761,390],[844,390]]){await game.setViewportSize({width,height});await game.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>resolve())));await game.waitForFunction(()=>Number(getComputedStyle(document.querySelector('#hotbar')).opacity)>.99);assert.deepEqual(await layout(game),{overlap:[],out:[],small:[]});await shot(`${width}x${height}`);}
- await game.setViewportSize({width:667,height:320});await click('#objective');assert.equal(await game.locator('#objective-panel').isVisible(),true);assert.equal(await game.evaluate(()=>window.__vireon.getState().running),false);await shot('667x320-quest');await click('#objective-back');
+ await game.evaluate(()=>{document.querySelector('#toast').hidden=true});await game.setViewportSize({width:667,height:320});await click('#objective');assert.equal(await game.locator('#objective-panel').isVisible(),true);assert.equal(await game.evaluate(()=>window.__vireon.getState().running),false);await shot('667x320-quest');await click('#objective-back');
  assert.equal(await game.evaluate(()=>window.__vireon.getState().running),true);check('Task details open separately and close back to gameplay on short screen');
- await click('#pause-button');await click('#settings-button');
+ await click('#pause-button');await click('#settings-button');await click('#hud-settings-button');
+ assert.deepEqual(await game.locator('.hud-size-row input').evaluateAll(es=>es.map(e=>Number(e.value))),Array(8).fill(100));check('Approved legacy proportions migrate to 100% defaults');
+ for(const [width,height] of [[568,320],[667,320],[844,390],[1366,768]]){await game.setViewportSize({width,height});const fits=await game.locator('#hud-settings-panel').evaluate(e=>{const p=e.getBoundingClientRect();return e.scrollHeight<=e.clientHeight+1&&[...e.querySelectorAll('input,button')].filter(c=>c.getClientRects().length).every(c=>{const r=c.getBoundingClientRect();return r.top>=p.top&&r.bottom<=p.bottom&&r.left>=p.left&&r.right<=p.right})});assert.ok(fits,`${width}x${height}: HUD settings need scrolling`);}
+ check('Dedicated HUD settings fit without scrolling at four viewports');await game.setViewportSize({width:844,height:390});
  const keys=await game.locator('.hud-size-row input').evaluateAll(es=>es.map(e=>e.id));assert.equal(keys.length,8);
  const values=[150,120,85,80,135,110,95,125];
  for(let i=0;i<keys.length;i++)await game.locator(`#${keys[i]}`).evaluate((e,v)=>{e.value=String(v);e.dispatchEvent(new Event('input',{bubbles:true}))},values[i]);
  const saved=await game.evaluate(()=>JSON.parse(localStorage.getItem('vireon.settings')));
  assert.equal(saved.fov,76);assert.equal(saved.bob,false);assert.equal(saved.quality,'low');assert.equal(saved.sound,false);assert.deepEqual(Object.values(saved.hud),values);
- await game.locator('.hud-settings').scrollIntoViewIfNeeded();await shot('settings');
- await game.reload();await ready();await click('#title-settings');
+ await game.locator('#hud-settings-panel').scrollIntoViewIfNeeded();await shot('settings');
+ await game.reload();await ready();await click('#title-settings');await click('#hud-settings-button');
  assert.deepEqual(await game.locator('.hud-size-row input').evaluateAll(es=>es.map(e=>Number(e.value))),values);check('Eight independent preferences persist after reload without replacing previous graphics/audio settings');
  await click('#hud-reset');assert.deepEqual(await game.locator('.hud-size-row input').evaluateAll(es=>es.map(e=>Number(e.value))),Array(8).fill(100));assert.equal(await game.evaluate(()=>JSON.parse(localStorage.getItem('vireon.settings')).fov),76);check('Reset changes HUD sizes only');
- await click('#settings-back');await click('#continue');await game.waitForFunction(()=>window.__vireon.getState().running);
- const before=await game.evaluate(()=>window.__vireon.getState());await game.locator('#hotbar-slots .cell').nth(1).tap();await game.waitForFunction(()=>window.__vireon.getState().action==='none');
- const after=await game.evaluate(()=>window.__vireon.getState());assert.equal(after.hotbar,1);assert.equal(after.yaw,before.yaw);assert.equal(after.pitch,before.pitch);check('Smaller hotbar cells select items, gate mining, and do not rotate the camera');
+ await click('#hud-settings-back');await click('#settings-back');await click('#continue');await game.waitForFunction(()=>window.__vireon.getState().running);
+ await game.setViewportSize({width:844,height:390});await game.evaluate(()=>window.__vireon.teleport(44,46,-.20,-.08));await game.waitForTimeout(1200);await shot('visor-default');
+ const before=await game.evaluate(()=>window.__vireon.getState());await game.locator('#hotbar-slots .cell').nth(1).tap();await game.waitForFunction(()=>window.__vireon.getState().hotbar===1);
+ const after=await game.evaluate(()=>window.__vireon.getState());assert.equal(after.hotbar,1);assert.equal(after.yaw,before.yaw);assert.equal(after.pitch,before.pitch);check('Smaller hotbar cells select items and do not rotate the camera');
  assert.deepEqual(report.errors,[]);
 }catch(e){report.failure=String(e.stack||e);if(debugPage){report.debug=await debugPage.evaluate(()=>({rects:Object.fromEntries(['vitals','hud-buttons','compass-wrap','compass','hotbar'].map(id=>[id,document.getElementById(id).getBoundingClientRect().toJSON()])),styles:[...document.querySelectorAll('style')].map(e=>e.getAttribute('data-vite-dev-id')),variables:document.documentElement.style.cssText}));console.log(report.debug);}console.error(e);process.exitCode=1;}
 finally{await writeFile('artifacts/hud-verification.json',JSON.stringify(report,null,2)+'\n');await browser?.close();await server.close();}
