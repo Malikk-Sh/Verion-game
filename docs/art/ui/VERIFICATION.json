@@ -1,5 +1,5 @@
 {
-  "date": "2026-10-03",
+  "date": "2026-10-04",
   "unitTests": {
     "passed": 38,
     "failed": 0
@@ -29,7 +29,73 @@
     "errors": [],
     "environment": "Headless Chromium, software WebGL (SwiftShader), economy preset. Correctness only."
   },
-  "sprites": {
+  "build": "TypeScript and Vite passed; standalone intentionally not updated",
+  "designValidation": "198 items, 213 recipes; PASS",
+  "physicalPhoneTested": false,
+  "bootCorrection": {
+    "date": "2026-10-04",
+    "build": "TypeScript, Vite, standalone passed",
+    "screenshots": [
+      "screenshots/suit-844x390.webp",
+      "screenshots/suit-1366x768.webp",
+      "screenshots/suit-667x320.webp",
+      "screenshots/inventory-844x390.webp"
+    ],
+    "interaction": {
+      "viewports": [
+        "844x390",
+        "1366x768",
+        "667x320"
+      ],
+      "removedAndReequipped": true,
+      "errors": [],
+      "environment": "Chromium with SwiftShader; visual correctness only"
+    },
+    "physicalPhoneTested": false
+  },
+  "legProportionsCorrection": {
+    "date": "2026-10-04",
+    "change": "Leg artwork widened by 20% at unchanged rendered height; ankle alignment updated.",
+    "verification": {
+      "metrics": [
+        {
+          "viewport": [
+            844,
+            390
+          ],
+          "legWidth": 111.828125,
+          "legHeight": 93.1875,
+          "figureHeight": 233,
+          "legTop": 109.5
+        },
+        {
+          "viewport": [
+            1366,
+            768
+          ],
+          "legWidth": 207.359375,
+          "legHeight": 172.796875,
+          "figureHeight": 432,
+          "legTop": 203.03125
+        },
+        {
+          "viewport": [
+            667,
+            320
+          ],
+          "legWidth": 78.21875,
+          "legHeight": 65.1875,
+          "figureHeight": 163,
+          "legTop": 76.609375
+        }
+      ],
+      "errors": [],
+      "removeReequipLegsAndBoots": true,
+      "environment": "Chromium SwiftShader; correctness only"
+    },
+    "build": "TypeScript and Vite passed; standalone not updated"
+  },
+  "legacySprites20261003": {
     "checks": [
       "Six hotbar slots use loaded raster sprites from backpack row 1",
       "All 11 current items load at 512px with transparent margins and solid object pixels",
@@ -121,7 +187,7 @@
       }
     ]
   },
-  "compactSprites": {
+  "legacyCompactSprites20261003": {
     "checks": [
       "Six hotbar slots use loaded raster sprites from backpack row 1",
       "All 11 current items load at 512px with transparent margins and solid object pixels",
@@ -208,70 +274,109 @@
       }
     ]
   },
-  "build": "TypeScript, Vite and standalone passed",
-  "designValidation": "198 items, 213 recipes; PASS",
-  "physicalPhoneTested": false,
-  "bootCorrection": {
-    "date": "2026-10-04",
-    "build": "TypeScript, Vite, standalone passed",
-    "screenshots": [
-      "screenshots/suit-844x390.webp",
-      "screenshots/suit-1366x768.webp",
-      "screenshots/suit-667x320.webp",
-      "screenshots/inventory-844x390.webp"
+  "sprites": {
+    "checks": [
+      "Six hotbar slots use loaded raster sprites from backpack row 1",
+      "All 11 current items load at 512px with transparent margins and solid object pixels",
+      "HUD, inventory and suit raster layers fit at 844×390, 1366×768, 667×320",
+      "Helmet, legs and boots remain independently selectable, removable and equipable",
+      "No browser console or runtime errors"
     ],
-    "interaction": {
-      "viewports": [
-        "844x390",
-        "1366x768",
-        "667x320"
-      ],
-      "removedAndReequipped": true,
-      "errors": [],
-      "environment": "Chromium with SwiftShader; visual correctness only"
-    },
-    "physicalPhoneTested": false
+    "errors": [],
+    "screenshots": [
+      "artifacts/sprites-844-hud.png",
+      "artifacts/sprites-844-inventory.png",
+      "artifacts/sprites-844-suit.png",
+      "artifacts/sprites-1366-hud.png",
+      "artifacts/sprites-1366-inventory.png",
+      "artifacts/sprites-1366-suit.png",
+      "artifacts/sprites-667-hud.png",
+      "artifacts/sprites-667-inventory.png",
+      "artifacts/sprites-667-inventory-scrolled.png",
+      "artifacts/sprites-667-suit.png",
+      "artifacts/sprites-844-suit-removed.png"
+    ],
+    "environment": "Chromium, SwiftShader; visual correctness, not phone FPS",
+    "assets": [
+      {
+        "id": "tool_stone",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "bottle_1",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "suit_helmet",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "suit_chest",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "suit_legs",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "suit_boots",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "pulp",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "iron_raw",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "copper_raw",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "ice",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "stone",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      }
+    ]
   },
-  "legProportionsCorrection": {
+  "lowPoly": {
     "date": "2026-10-04",
-    "change": "Leg artwork widened by 20% at unchanged rendered height; ankle alignment updated.",
-    "verification": {
-      "metrics": [
-        {
-          "viewport": [
-            844,
-            390
-          ],
-          "legWidth": 111.828125,
-          "legHeight": 93.1875,
-          "figureHeight": 233,
-          "legTop": 109.5
-        },
-        {
-          "viewport": [
-            1366,
-            768
-          ],
-          "legWidth": 207.359375,
-          "legHeight": 172.796875,
-          "figureHeight": 432,
-          "legTop": 203.03125
-        },
-        {
-          "viewport": [
-            667,
-            320
-          ],
-          "legWidth": 78.21875,
-          "legHeight": 65.1875,
-          "figureHeight": 163,
-          "legTop": 76.609375
-        }
-      ],
-      "errors": [],
-      "removeReequipLegsAndBoots": true,
-      "environment": "Chromium SwiftShader; correctness only"
-    },
-    "build": "TypeScript and Vite passed; standalone not updated"
+    "approvedVariant": 1,
+    "assets": 12,
+    "bytes": 355558,
+    "screenshotsReviewed": [
+      "HUD 844×390",
+      "suit 1366×768",
+      "inventory 667×320"
+    ],
+    "figure": "Hip width matched to chest belt; waist and ankles overlapped; stance boot layers independent of leg state",
+    "physicalPhoneTested": false
   }
 }

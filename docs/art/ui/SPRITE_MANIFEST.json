@@ -1,128 +1,129 @@
 {
-  "date": "2026-10-03",
+  "date": "2026-10-04",
   "generator": "OpenAI image_gen",
+  "style": "Soft low-poly: large matte facets, ivory/orange/charcoal equipment; simplified silhouettes",
   "format": "WebP RGBA, quality 90, 512 × 512; format conversion only",
   "assets": [
-    {
-      "id": "tool_stone",
-      "path": "src/assets/items/tool_stone.webp",
-      "width": 512,
-      "height": 512,
-      "bytes": 34290,
-      "sha256": "8f03dcc1cbad3059db4d0abff002d37ad28175d3cf7299502a2ff0e25187feba",
-      "sourceSha256": "c1dc5d48646e6eddf00226d53fb46eaf2cc9f8cff77ec24cc17d01d31794c9f7",
-      "prompt": "Use case: stylized-concept. Asset type: SINGLE transparent inventory sprite for Vireon mobile sci-fi survival game, item ID tool_stone. The reference screenshot is STYLE reference only; produce ONLY the isolated stone multitool, no interface, no text, no numbers, no frame, no background. Match the large multitool icon in the screenshot: compact chipped dark grey stone axe/pick head, rugged charcoal grip, orange mechanical clamps and accents, plausible early survival tool. Three-quarter inventory view, diagonally from bottom left handle to top right head. Polished volumetric 3D game render with clean readable silhouette and broad material details at 48px display size, not a vector or drawing. Neutral soft light from upper left, gentle ambient occlusion within the object, NO cast shadow on a floor, no excessive bloom. Single item centered on a SQUARE canvas, fill about 84% of canvas with generous unclipped 8% clear margins. Genuine transparent alpha background. No logo, letters, decorative pedestal, duplicate object or extra objects. Strong consistent styling with the approved white/orange/charcoal sci-fi equipment.",
-      "styleReference": "User-approved inventory screenshot; stone sprite also referenced for ore and ice"
-    },
-    {
-      "id": "bottle_1",
-      "path": "src/assets/items/bottle_1.webp",
-      "width": 512,
-      "height": 512,
-      "bytes": 26278,
-      "sha256": "50a862be72268b8ffa44e6dfab5f1fa5aef2836fc886dcef44a0acbeae07d8ba",
-      "sourceSha256": "c48641993d18c866f562c716304518880e878c7a9c4baa091863cd19c404c4cd",
-      "prompt": "Use case: stylized-concept. Asset type: SINGLE isolated transparent inventory sprite for Vireon mobile sci-fi survival game, item ID bottle_1. Reference screenshot is STYLE reference ONLY. One white metal oxygen cylinder with orange bands, dark charcoal valve and short nozzle at top, compact rounded bottom, slight diagonal leaning right. No straps, no hose, no lettering, no logo. Match the polished volumetric 3D game icons in the reference, strong clean readable silhouette at 48px size, detailed broad materials, not vector art. Neutral soft upper left lighting, intrinsic ambient occlusion, no cast shadow on a floor. Center the single object on a square canvas, fill approximately 82% with clear 9% margins, no clipping. Genuine transparent alpha background. No interface, frame, text, numbers, pedestal, extra objects or background.",
-      "styleReference": "User-approved inventory screenshot; stone sprite also referenced for ore and ice"
-    },
-    {
-      "id": "pulp",
-      "path": "src/assets/items/pulp.webp",
-      "width": 512,
-      "height": 512,
-      "bytes": 24844,
-      "sha256": "2230d60b174fc19d07c41e4bc30d4f568db4baddc20f01bba4f9c43931db722e",
-      "sourceSha256": "3a246f3fe6ff1423dd60c54b0d1a8d1ab83f48e25e0d2936d99e0617de61de57",
-      "prompt": "Use case: stylized-concept. Asset type: SINGLE isolated transparent inventory sprite for Vireon mobile sci-fi survival game, item ID pulp. Reference screenshot is STYLE reference ONLY. One sealed compact white foil food pouch with an orange horizontal stripe near the top, subtle creases, squared flat base. Upright three-quarter view. No label, no text, no logos. Match the polished volumetric 3D game icons in the reference, strong clean readable silhouette at 48px size, detailed broad materials, not vector art. Neutral soft upper left lighting, intrinsic ambient occlusion, no cast shadow on a floor. Center the single object on a square canvas, fill approximately 82% with clear 9% margins, no clipping. Genuine transparent alpha background. No interface, frame, text, numbers, pedestal, extra objects or background.",
-      "styleReference": "User-approved inventory screenshot; stone sprite also referenced for ore and ice"
-    },
-    {
-      "id": "iron_raw",
-      "path": "src/assets/items/iron_raw.webp",
-      "width": 512,
-      "height": 512,
-      "bytes": 81408,
-      "sha256": "25f950149c8b844a03dccb285820d96b4c5d367195704650751c5ad8866e90c1",
-      "sourceSha256": "c60240010b4d3753410905e16320e4ad85be89393a8e1342a4cef561cfe5e6fc",
-      "prompt": "Use case: stylized-concept. Asset type: SINGLE isolated transparent inventory sprite for Vireon mobile sci-fi survival game, item ID iron_raw. Reference screenshot is STYLE reference ONLY. One angular dark charcoal iron ore chunk with distinct rusty orange mineral veins running across broad faces, rugged craggy silhouette. Rust is natural mineral, not lava, no glow, no burning. Single ore rock. Match the polished volumetric 3D game icons in the reference, strong clean readable silhouette at 48px size, detailed broad materials, not vector art. Neutral soft upper left lighting, intrinsic ambient occlusion, no cast shadow on a floor. Center the single object on a square canvas, fill approximately 82% with clear 9% margins, no clipping. Genuine transparent alpha background. No interface, frame, text, numbers, pedestal, extra objects or background.",
-      "styleReference": "User-approved inventory screenshot; stone sprite also referenced for ore and ice"
-    },
-    {
-      "id": "copper_raw",
-      "path": "src/assets/items/copper_raw.webp",
-      "width": 512,
-      "height": 512,
-      "bytes": 79236,
-      "sha256": "349346f02b48d0bc30501bc3aef1279b766761b905f5bfb59b471a9ffacf34de",
-      "sourceSha256": "e17e26e9fea3ac78632eb9b5583404ba3fc8bf43d67db772300d87e4ddf27ca3",
-      "prompt": "Use case: stylized-concept. Asset type: SINGLE isolated transparent inventory sprite for Vireon mobile sci-fi survival game, item ID copper_raw. Reference screenshot is STYLE reference ONLY. One compact angular copper ore chunk, earthy rusty brown base with broad bright metallic copper crystal facets and warm orange highlights, a distinctly coppery silhouette. Single ore rock, no scattered crystals. Match the polished volumetric 3D game icons in the reference, strong clean readable silhouette at 48px size, detailed broad materials, not vector art. Neutral soft upper left lighting, intrinsic ambient occlusion, no cast shadow on a floor. Center the single object on a square canvas, fill approximately 82% with clear 9% margins, no clipping. Genuine transparent alpha background. No interface, frame, text, numbers, pedestal, extra objects or background.",
-      "styleReference": "User-approved inventory screenshot; stone sprite also referenced for ore and ice"
-    },
-    {
-      "id": "ice",
-      "path": "src/assets/items/ice.webp",
-      "width": 512,
-      "height": 512,
-      "bytes": 74300,
-      "sha256": "8f7df435d9a8ecb53f2efcf489fc75d79f7c0c55679231c09c93e8ae026ca462",
-      "sourceSha256": "829a1ba94228c01529cbe53ae1d198e3e345979d6ac7e1346d760ae00071cf9b",
-      "prompt": "Use case: stylized-concept. Asset type: SINGLE isolated transparent inventory sprite for Vireon mobile sci-fi survival game, item ID ice. Reference screenshot is STYLE reference ONLY. One angular chunk of pale cyan translucent ice, irregular faceted rough broken surface, icy blue shadows and frosted edges, subtle inner cracks, broad readable light blue silhouette. Single piece, no water drops or floor. Match the polished volumetric 3D game icons in the reference, strong clean readable silhouette at 48px size, detailed broad materials, not vector art. Neutral soft upper left lighting, intrinsic ambient occlusion, no cast shadow on a floor. Center the single object on a square canvas, fill approximately 82% with clear 9% margins, no clipping. Genuine transparent alpha background. No interface, frame, text, numbers, pedestal, extra objects or background.",
-      "styleReference": "User-approved inventory screenshot; stone sprite also referenced for ore and ice"
-    },
-    {
-      "id": "stone",
-      "path": "src/assets/items/stone.webp",
-      "width": 512,
-      "height": 512,
-      "bytes": 55302,
-      "sha256": "3d59ab3543dc01910983ecac391243d97059c9ca8068851721827d181e5a2fd4",
-      "sourceSha256": "6f4b9e1527747ddf74b3d405c3e5a754963a1a1eda25d66d86f08afcb74dec29",
-      "prompt": "Use case: stylized-concept. Asset type: SINGLE isolated transparent inventory sprite for Vireon mobile sci-fi survival game, item ID stone. Reference screenshot is STYLE reference ONLY. One rough grey basalt stone chunk, broad angular irregular silhouette, realistic low-poly-inspired facets and subtle surface texture, slightly warmer dark grey shadows. Single stone, no scattered pebbles. Match the polished volumetric 3D game icons in the reference, strong clean readable silhouette at 48px size, detailed broad materials, not vector art. Neutral soft upper left lighting, intrinsic ambient occlusion, no cast shadow on a floor. Center the single object on a square canvas, fill approximately 82% with clear 9% margins, no clipping. Genuine transparent alpha background. No interface, frame, text, numbers, pedestal, extra objects or background.",
-      "styleReference": "User-approved inventory screenshot; stone sprite also referenced for ore and ice"
-    },
     {
       "id": "suit_helmet",
       "path": "src/assets/items/suit_helmet.webp",
       "width": 512,
       "height": 512,
-      "bytes": 44118,
-      "sha256": "920d762118ab7680716f0dc53fc842a44b7a69151d5372996eb683cecbfa2227",
-      "sourceSha256": "306a113fc116c4f6b2a86189d9779f9ef013f88622628fc4ab57ed34b2ee85ff",
-      "prompt": "Use case: stylized-concept. Asset type: isolated transparent 3D game render for Vireon mobile sci-fi survival game, asset ID suit_helmet. Reference screenshot is STYLE reference ONLY. SINGLE helmet inventory sprite: closed white astronaut helmet, large glossy near-black visor, orange rim and side plates, dark neck gasket, three-quarter frontal view, matching the helmet shown in the approved suit screenshot. Helmet only, no head or torso. Polished volumetric 3D game render, neutral soft upper-left lighting, strong clean silhouette readable in small equipment slots, broad crisp details. Realistic stylized materials, not vector or illustration. Genuine transparent alpha background. No UI, no text, no numbers, no labels, no frame, no logo, no extra objects. Square canvas, object fills about 82% with at least 8% clear margins on every side.",
-      "styleReference": "User-approved costume screenshot; chest sprite also referenced for legs and boots"
+      "bytes": 29526,
+      "sha256": "d5331b8838c8a6179e4daf1d61db8c6c282bce098efe1d4a0f69bc566140bc81",
+      "sourceSha256": "d852e65f3f27ccb0567957ec38f16757b8d365c99dd38fc5fa58433eeee19991",
+      "prompt": "Create ONE production game inventory sprite on a truly transparent background. Match the approved SOFT LOW-POLY art in the reference board exactly: large faceted matte 3D planes, softly bevelled edges, ivory/off-white panels, burnt orange accents and charcoal mechanical joints. Adult grounded proportions, strongly simplified geometry, no tiny seams/screws, no texture noise/weathering, no photorealistic gloss, no outlines. Consistent upper-left diffuse lighting. Single centered isolated object, no floor, no cast shadow outside object, no text, no UI, no board. Square canvas, object occupies 86% of available height and/or width, fully visible with generous transparent margins. A sealed astronaut helmet matching the helmet in the reference: large dark faceted visor, ivory lower rim and orange crown stripe. Three-quarter view facing viewer's left. Only helmet, no neck/body.",
+      "styleReference": "User-approved variant 1, soft low-poly board, 2026-10-04"
     },
     {
       "id": "suit_chest",
       "path": "src/assets/items/suit_chest.webp",
       "width": 512,
       "height": 512,
-      "bytes": 56718,
-      "sha256": "cf3aa0181054ed5afe6a495b0bcf37efd9ca3e5f31e2c19fd2dfaa775bcecd9e",
-      "sourceSha256": "be74b5308b448e2848bf865dd55f09e84a92550229fc1c32d9e704bfa6837fa8",
-      "prompt": "Use case: stylized-concept. Asset type: isolated transparent 3D game render for Vireon mobile sci-fi survival game, asset ID suit_chest. Reference screenshot is STYLE reference ONLY. SINGLE chest armor inventory sprite: white/off-white padded sci-fi astronaut torso with both attached full sleeves and dark gloves, orange shoulder panels and small orange chest triangle without lettering, charcoal flexible joints, dark collar opening. Front three-quarter slight view, arms close to sides, no helmet, no pants, no legs. Lower edge ends just below waist. Match the chest of the approved suit screenshot. Polished volumetric 3D game render, neutral soft upper-left lighting, strong clean silhouette readable in small equipment slots, broad crisp details. Realistic stylized materials, not vector or illustration. Genuine transparent alpha background. No UI, no text, no numbers, no labels, no frame, no logo, no extra objects. Square canvas, object fills about 82% with at least 8% clear margins on every side.",
-      "styleReference": "User-approved costume screenshot; chest sprite also referenced for legs and boots"
+      "bytes": 43342,
+      "sha256": "36493d512839cd9103cb7e4d3130dc83b0b556844de906b778a3cf88a648d919",
+      "sourceSha256": "acce99eb631bcc7b2376a41fa7a7917821f532042109d7edac31b0d939d10bef",
+      "prompt": "Create ONE production game inventory sprite on a truly transparent background. Match the approved SOFT LOW-POLY art in the reference board exactly: large faceted matte 3D planes, softly bevelled edges, ivory/off-white panels, burnt orange accents and charcoal mechanical joints. Adult grounded proportions, strongly simplified geometry, no tiny seams/screws, no texture noise/weathering, no photorealistic gloss, no outlines. Consistent upper-left diffuse lighting. Single centered isolated object, no floor, no cast shadow outside object, no text, no UI, no board. Square canvas, object occupies 86% of available height and/or width, fully visible with generous transparent margins. An astronaut torso armor WITH two complete arms and gloves, matching the chest on reference. Open neck collar, adult broad shoulders, ivory breastplate with small orange triangle, orange shoulders, charcoal elbows and waist belt. Standing pose arms at sides slightly away. Three-quarter view facing viewer's left. Cut off cleanly at waist belt. No head, no hips or legs.",
+      "styleReference": "User-approved variant 1, soft low-poly board, 2026-10-04"
     },
     {
       "id": "suit_legs",
       "path": "src/assets/items/suit_legs.webp",
       "width": 512,
       "height": 512,
-      "bytes": 38486,
-      "sha256": "8676a678a6a593bd490bb18a151f5c4d4bbfb3bc481c111d92e66230687ceb52",
-      "sourceSha256": "3e53749a87fa0da9d9f9f757344b6a39143a739d443f3efb912c78d7a636e4e6",
-      "prompt": "Use case: stylized-concept. Asset type: isolated transparent inventory sprite for Vireon mobile sci-fi survival game, asset ID suit_legs. Reference screenshot is STYLE reference ONLY, second image is the exact equipment style to match. SINGLE pair of astronaut suit pants / leg armor, off-white padded fabric with hard white knee plates, orange knee and side hip accents, dark charcoal waist band and flexible joint seals. Two attached trouser legs, from waist to ankle, no boots, no torso. Three-quarter front view with no human skin. Match the approved costume and chest style. Polished volumetric 3D game render with neutral soft upper-left lighting, strong readable silhouette at 48px, broad crisp details, realistic stylized materials, not vector art. SINGLE object set centered on square canvas, fill about 82% with 8% clear margins, no clipping. Genuine transparent alpha background. No UI, no text, no numbers, no labels, no frame, no logo, no pedestal, no floor shadow, no extra objects.",
-      "styleReference": "User-approved costume screenshot; chest sprite also referenced for legs and boots"
+      "bytes": 29254,
+      "sha256": "b4e1b44934f0df019b3ef4463ad589cb33e30afa63577ee90cf8c576acf47b0f",
+      "sourceSha256": "ebddc344b7eb68e1b568cd97a1fbf73c6371a4d6a80381eeb6952e23ff76f191",
+      "prompt": "Create ONE production game inventory sprite on a truly transparent background. Match the approved SOFT LOW-POLY art in the reference board exactly: large faceted matte 3D planes, softly bevelled edges, ivory/off-white panels, burnt orange accents and charcoal mechanical joints. Adult grounded proportions, strongly simplified geometry, no tiny seams/screws, no texture noise/weathering, no photorealistic gloss, no outlines. Consistent upper-left diffuse lighting. Single centered isolated object, no floor, no cast shadow outside object, no text, no UI, no board. Square canvas, object occupies 86% of available height and/or width, fully visible with generous transparent margins. A matching astronaut pants/greaves pair, one joined pelvis with two spread legs. Broad adult hips that fit the reference torso, orange hip plates and knee borders, ivory shins and charcoal joints. Three-quarter view facing viewer's left, viewer-right leg slightly lower. Cut off at ankle cuffs, NO feet or boots. Full legs only, no upper torso.",
+      "styleReference": "User-approved variant 1, soft low-poly board, 2026-10-04"
     },
     {
       "id": "suit_boots",
       "path": "src/assets/items/suit_boots.webp",
       "width": 512,
       "height": 512,
-      "bytes": 50304,
-      "sha256": "30a0899264bdbb14f357977e906e1289dcdf3b4985354daf502d95796e31d043",
-      "sourceSha256": "9ee59be4bc7bc044fc61cd6c73a70e818822ce0455fb111639a625e8f9c5c3c3",
-      "prompt": "Use case: stylized-concept. Asset type: isolated transparent inventory sprite for Vireon mobile sci-fi survival game, asset ID suit_boots. Reference screenshot is STYLE reference ONLY, second image is the exact equipment style to match. SINGLE pair of white sci-fi astronaut boots with orange horizontal trim, dark charcoal thick soles and ankle joints, robust padded top openings, no legs, no pants, no wearer. Pair side by side, three-quarter front view, toes point slightly toward viewer. Match the approved costume and chest style. Polished volumetric 3D game render with neutral soft upper-left lighting, strong readable silhouette at 48px, broad crisp details, realistic stylized materials, not vector art. SINGLE object set centered on square canvas, fill about 82% with 8% clear margins, no clipping. Genuine transparent alpha background. No UI, no text, no numbers, no labels, no frame, no logo, no pedestal, no floor shadow, no extra objects.",
-      "styleReference": "User-approved costume screenshot; chest sprite also referenced for legs and boots"
+      "bytes": 35292,
+      "sha256": "1dd80bc4dfe5768423f44aaa1d2cb0f84f616363c52d786b16bd2e131bc00894",
+      "sourceSha256": "ffa5e72e3e52ebf18f03605272dcd55512509d1783d60a372ab441a9083244e0",
+      "prompt": "Create ONE production game inventory sprite on a truly transparent background. Match the approved SOFT LOW-POLY art in the reference board exactly: large faceted matte 3D planes, softly bevelled edges, ivory/off-white panels, burnt orange accents and charcoal mechanical joints. Adult grounded proportions, strongly simplified geometry, no tiny seams/screws, no texture noise/weathering, no photorealistic gloss, no outlines. Consistent upper-left diffuse lighting. Single centered isolated object, no floor, no cast shadow outside object, no text, no UI, no board. Square canvas, object occupies 86% of available height and/or width, fully visible with generous transparent margins. Two matching ivory/orange astronaut boots with charcoal soles and open ankle cuffs, compact balanced pair, three-quarter view facing viewer's left. Leave a visible gap so silhouettes are distinct. Only boots.",
+      "styleReference": "User-approved variant 1, soft low-poly board, 2026-10-04"
+    },
+    {
+      "id": "tool_stone",
+      "path": "src/assets/items/tool_stone.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 27834,
+      "sha256": "9acca1f2033e155e32cf0d603bca88ec2474528958065398296db74462d3a3bb",
+      "sourceSha256": "99f9713eed6002fd4fef24aba39a68b026f5cdf0823a8da9c6dce3ce8c8d9939",
+      "prompt": "Create ONE production game inventory sprite on a truly transparent background. Match the approved SOFT LOW-POLY art in the reference board exactly: large faceted matte 3D planes, softly bevelled edges, ivory/off-white panels, burnt orange accents and charcoal mechanical joints. Adult grounded proportions, strongly simplified geometry, no tiny seams/screws, no texture noise/weathering, no photorealistic gloss, no outlines. Consistent upper-left diffuse lighting. Single centered isolated object, no floor, no cast shadow outside object, no text, no UI, no board. Square canvas, object occupies 86% of available height and/or width, fully visible with generous transparent margins. One stone multitool exactly like reference tool: chunky rough faceted grey stone double-ended hammer/axe head mounted on charcoal handle with a broad orange grip panel. Diagonal handle from bottom-left to top-right. No metal axe blade, no text.",
+      "styleReference": "User-approved variant 1, soft low-poly board, 2026-10-04"
+    },
+    {
+      "id": "bottle_1",
+      "path": "src/assets/items/bottle_1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 23028,
+      "sha256": "5cb4fc0d9f4c00c1472cb79c27f15845294535cdb9db243cc0f9a3813af905ff",
+      "sourceSha256": "886dbd355da62e82e231eb5830912549bcc63a14f6c3843d42f9a16620608df6",
+      "prompt": "Create ONE production game inventory sprite on a truly transparent background. Match the approved SOFT LOW-POLY art in the reference board exactly: large faceted matte 3D planes, softly bevelled edges, ivory/off-white panels, burnt orange accents and charcoal mechanical joints. Adult grounded proportions, strongly simplified geometry, no tiny seams/screws, no texture noise/weathering, no photorealistic gloss, no outlines. Consistent upper-left diffuse lighting. Single centered isolated object, no floor, no cast shadow outside object, no text, no UI, no board. Square canvas, object occupies 86% of available height and/or width, fully visible with generous transparent margins. One compact astronaut oxygen cylinder exactly like reference: ivory faceted cylindrical tank, two broad orange bands, charcoal base and valve with simple orange cap. Diagonal from bottom-left to top-right. No text or logos.",
+      "styleReference": "User-approved variant 1, soft low-poly board, 2026-10-04"
+    },
+    {
+      "id": "pulp",
+      "path": "src/assets/items/pulp.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 27150,
+      "sha256": "d94a972dbac9bf101338fb75661dbf757fc6ad249e3dd766fb271154e6acd26c",
+      "sourceSha256": "cd9e787a27eda52acdcf990df300f15fd4c7b54b13e2f61177d04643f45ad5de",
+      "prompt": "Create ONE production game inventory sprite on a truly transparent background. Match the approved SOFT LOW-POLY art in the reference board exactly: large faceted matte 3D planes, softly bevelled edges, ivory/off-white panels, burnt orange accents and charcoal mechanical joints. Adult grounded proportions, strongly simplified geometry, no tiny seams/screws, no texture noise/weathering, no photorealistic gloss, no outlines. Consistent upper-left diffuse lighting. Single centered isolated object, no floor, no cast shadow outside object, no text, no UI, no board. Square canvas, object occupies 86% of available height and/or width, fully visible with generous transparent margins. One sealed upright ivory food pouch with flat base and one broad orange stripe near the top. Simple broad triangular folds, matching reference, no tiny wrinkles.",
+      "styleReference": "User-approved variant 1, soft low-poly board, 2026-10-04"
+    },
+    {
+      "id": "iron_raw",
+      "path": "src/assets/items/iron_raw.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 33100,
+      "sha256": "d8515dfbdf3120bb3339c76ab38e321821aecb3c84587f0a5162c805e817bcf9",
+      "sourceSha256": "d9e2475da4d3ccebf6a21e331f370b18df4e273975cd0cfb31f607de61bbd913",
+      "prompt": "Create ONE production game inventory sprite on a truly transparent background. Match the approved SOFT LOW-POLY art in the reference board exactly: large faceted matte 3D planes, softly bevelled edges, ivory/off-white panels, burnt orange accents and charcoal mechanical joints. Adult grounded proportions, strongly simplified geometry, no tiny seams/screws, no texture noise/weathering, no photorealistic gloss, no outlines. Consistent upper-left diffuse lighting. Single centered isolated object, no floor, no cast shadow outside object, no text, no UI, no board. Square canvas, object occupies 86% of available height and/or width, fully visible with generous transparent margins. One angular charcoal-grey iron ore rock with broad rusty orange mineral patches on large flat facets. Exactly like the ore on reference board, no lava/glow, no granular texture. Dark grey silhouette clearly different from copper.",
+      "styleReference": "User-approved variant 1, soft low-poly board, 2026-10-04"
+    },
+    {
+      "id": "copper_raw",
+      "path": "src/assets/items/copper_raw.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 32270,
+      "sha256": "4c36284ab84ac5e3ea48bca5d5ee16af0e15ed896d4d4ecca0551ff0495216f7",
+      "sourceSha256": "32f79814a28f14ae31457b53ae8d5c88d69bbff0ed71dfd200ec1b72541d4c4e",
+      "prompt": "Create ONE production game inventory sprite on a truly transparent background. Match the approved SOFT LOW-POLY art in the reference board exactly: large faceted matte 3D planes, softly bevelled edges, ivory/off-white panels, burnt orange accents and charcoal mechanical joints. Adult grounded proportions, strongly simplified geometry, no tiny seams/screws, no texture noise/weathering, no photorealistic gloss, no outlines. Consistent upper-left diffuse lighting. Single centered isolated object, no floor, no cast shadow outside object, no text, no UI, no board. Square canvas, object occupies 86% of available height and/or width, fully visible with generous transparent margins. One angular copper ore rock with broad matte warm terracotta and muted copper orange polygon facets, a few darker brown faces. Simple chunky irregular shape, no reflections or glints, no orange-on-grey rust veins.",
+      "styleReference": "User-approved variant 1, soft low-poly board, 2026-10-04"
+    },
+    {
+      "id": "ice",
+      "path": "src/assets/items/ice.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 24140,
+      "sha256": "4318a8575cca616810d3f328053b8abeeb1cc74e2493ce2f66ed0436093c18f7",
+      "sourceSha256": "4281dd9ea533f19fb900dd3b229346e06fb89db96c0065e740a75a62b30b7d5c",
+      "prompt": "Create ONE production game inventory sprite on a truly transparent background. Match the approved SOFT LOW-POLY art in the reference board exactly: large faceted matte 3D planes, softly bevelled edges, ivory/off-white panels, burnt orange accents and charcoal mechanical joints. Adult grounded proportions, strongly simplified geometry, no tiny seams/screws, no texture noise/weathering, no photorealistic gloss, no outlines. Consistent upper-left diffuse lighting. Single centered isolated object, no floor, no cast shadow outside object, no text, no UI, no board. Square canvas, object occupies 86% of available height and/or width, fully visible with generous transparent margins. One angular pale icy cyan ice chunk made of large simple polygon faces, frosted light blue matte surfaces with a few broad white facets. No tiny cracks, no translucent glass sparkle. Blue silhouette.",
+      "styleReference": "User-approved variant 1, soft low-poly board, 2026-10-04"
+    },
+    {
+      "id": "stone",
+      "path": "src/assets/items/stone.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 19432,
+      "sha256": "1dcd22763eeb1f004febd2ffb092d195a34da35cb4991a614c53f0a4e6f4b7f3",
+      "sourceSha256": "08ceb4921be4d2f9ce799b7d1971f6535e18731226af6ed923e4751eb8748c92",
+      "prompt": "Create ONE production game inventory sprite on a truly transparent background. Match the approved SOFT LOW-POLY art in the reference board exactly: large faceted matte 3D planes, softly bevelled edges, ivory/off-white panels, burnt orange accents and charcoal mechanical joints. Adult grounded proportions, strongly simplified geometry, no tiny seams/screws, no texture noise/weathering, no photorealistic gloss, no outlines. Consistent upper-left diffuse lighting. Single centered isolated object, no floor, no cast shadow outside object, no text, no UI, no board. Square canvas, object occupies 86% of available height and/or width, fully visible with generous transparent margins. One angular warm grey stone chunk, broad simple flat polygon faces in muted grey and taupe, about 20 visible facets. No veins, no mineral crystals, no texture.",
+      "styleReference": "User-approved variant 1, soft low-poly board, 2026-10-04"
     }
   ],
   "figureAssets": [
@@ -131,11 +132,11 @@
       "path": "src/assets/figure/suit_boots.webp",
       "width": 512,
       "height": 512,
-      "bytes": 49450,
-      "sha256": "445418267932b1354239fae762d4822e0345ef5ce592d0cced9741fda5932af7",
-      "sourceSha256": "df51203fdb6f982d69230a0bca0190b27629e3b3d4988f82e928c3f8653e4541",
-      "prompt": "Create a transparent game sprite from the reference boots: TWO matching white/orange/charcoal armored sci-fi boots, fully separated by a wide transparent gap, shafts two shaft widths apart. Preserve reference style, materials, lighting, detailing. Almost frontal slight three-quarter left-facing stance matching second reference trousers. Left boot cuff slightly higher than right. Two boots ONLY, no trousers, no legs, no floor, no shadows on background, no text. Square transparent alpha canvas; both complete and unclipped. Wide planted stance, each boot stands independently, no touching or overlapping, open black ankle socket.",
-      "styleReference": "Existing item sprites suit_boots and suit_legs"
+      "bytes": 31190,
+      "sha256": "ea7141aceb94782ae012fdfe93cb872ebb08ce713f03016eb10b8b22702d6a49",
+      "sourceSha256": "bccc3dff6d3fb224ecf61fa321ee7377526b5a3c2eb6889e66ce4f7718332f3a",
+      "prompt": "Create ONE production game inventory sprite on a truly transparent background. Match the approved SOFT LOW-POLY art in the reference board exactly: large faceted matte 3D planes, softly bevelled edges, ivory/off-white panels, burnt orange accents and charcoal mechanical joints. Adult grounded proportions, strongly simplified geometry, no tiny seams/screws, no texture noise/weathering, no photorealistic gloss, no outlines. Consistent upper-left diffuse lighting. Single centered isolated object, no floor, no cast shadow outside object, no text, no UI, no board. Square canvas, object occupies 86% of available height and/or width, fully visible with generous transparent margins. Two astronaut boots matching the ivory/orange boots in reference, FULLY separated by a VERY WIDE transparent gap: the ankle centres are 45% of canvas width apart. Two isolated silhouettes, no touching, no overlapping. Three-quarter front view facing viewer's left, left cuff slightly higher than right. Simple matte chunky geometry, open ankle cuffs. Only boots, no legs. Pair fits in canvas with 8% margin. This is a spread adult standing stance rather than a compact inventory pair.",
+      "styleReference": "User-approved variant 1, soft low-poly board, 2026-10-04"
     }
   ]
 }

@@ -1,4 +1,4 @@
-// Raster art review: real persisted fixture, UI interactions, responsive screenshots and portable build.
+// Raster art review: real persisted fixture, UI interactions, responsive screenshots and separate equipment layers.
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
@@ -13,9 +13,9 @@ const compactOnly = process.argv.includes('--compact');
 const viewports = compactOnly ? [[667, 320]] : [[844, 390], [1366, 768], [667, 320]];
 try {
  browser = await chromium.launch({ headless: true, executablePath: process.env.VIREON_CHROMIUM_PATH, args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'] });
- const ctx = await browser.newContext({ viewport: { width: 844, height: 390 }, hasTouch: true, deviceScaleFactor: 2 });
+ const ctx = await browser.newContext({ viewport: { width: 844, height: 390 }, hasTouch: true, deviceScaleFactor: 1 });
  await ctx.addInitScript(() => localStorage.setItem('vireon.settings', JSON.stringify({ quality: 'low', sound: false })));
- const page = await ctx.newPage(); page.setDefaultTimeout(240000);
+ const page = await ctx.newPage(); page.setDefaultTimeout(30000);
  const watch = p => { p.on('pageerror', e => report.errors.push(e.message)); p.on('console', m => { if (m.type() === 'error') report.errors.push(m.text()); }); };
  watch(page);
  const ready = () => page.waitForFunction(() => document.body.dataset.ready === 'true');
@@ -80,23 +80,17 @@ try {
  await page.setViewportSize({ width: 844, height: 390 }); await click('#suit-button');
  await click('#part-grid [data-part="boots"]');
  assert.equal(await page.locator('.fig-boots.sel').count(), 1); assert.equal(await page.locator('.fig-helmet.sel').count(), 0);
- await click('#part-grid [data-part="helmet"]');
- await page.locator('#suit-remove').hover(); await page.mouse.down();
- await page.waitForFunction(() => window.__vireon.getState().worn === 3, null, { timeout: 60000 }); await page.mouse.up();
- assert.equal(await page.locator('.fig-helmet.off[data-worn="false"]').count(), 1);
- await shot('844-suit-removed');
- await click('#suit-replace'); await page.locator('#suit-detail .option').first().click();
- assert.equal(await page.locator('.fig-helmet.off').count(), 0); check('Selection follows the part; removing/reequipping changes the raster figure');
+ for (const part of ['helmet', 'legs', 'boots']) {
+  await click(`#part-grid [data-part="${part}"]`);
+  await page.locator('#suit-remove').hover(); await page.mouse.down();
+  await page.waitForFunction(() => window.__vireon.getState().worn === 3, null, { timeout: 10000 }); await page.mouse.up();
+  assert.equal(await page.locator(`.fig-${part}.off[data-worn="false"]`).count(), 1);
+  if (part === 'legs') await shot('844-suit-removed');
+  await click('#suit-replace'); await page.locator('#suit-detail .option').first().click();
+  assert.equal(await page.locator(`.fig-${part}.off`).count(), 0);
+ }
+ check('Helmet, legs and boots remain independently selectable, removable and equipable');
  await ctx.close();
- const portable = await browser.newContext({ viewport: { width: 844, height: 390 } });
- const p = await portable.newPage(); watch(p); p.setDefaultTimeout(240000);
- await p.addInitScript(() => localStorage.setItem('vireon.settings', JSON.stringify({ quality: 'low', sound: false })));
- await p.goto('http://127.0.0.1:5176/preview/vireon-verdana-s1.html'); await p.waitForFunction(() => document.body.dataset.ready === 'true');
- await p.$eval('#start', e => e.click()); await p.waitForFunction(() => window.__vireon.getState().running);
- await p.keyboard.press('KeyI'); await p.waitForFunction(() => [...document.querySelectorAll('.art img')].every(e => e.complete && e.naturalWidth === 512));
- assert.ok(await p.locator('.art img').evaluateAll(es => es.every(e => e.src.startsWith('data:image/webp;base64,'))));
- await p.screenshot({ path: 'artifacts/sprites-portable-inventory.png' }); await portable.close();
- check('Standalone HTML loads embedded WebP sprites without external image requests');
  assert.deepEqual(report.errors, []); check('No browser console or runtime errors');
 } catch (e) { report.failure = String(e.stack || e); console.error(e); process.exitCode = 1; }
 finally { await writeFile(`artifacts/sprite-${compactOnly ? 'compact-' : ''}verification.json`, JSON.stringify(report, null, 2) + '\n'); await browser?.close(); await server.close(); }
