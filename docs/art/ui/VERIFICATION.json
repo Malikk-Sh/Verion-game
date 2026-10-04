@@ -435,5 +435,89 @@
       ]
     },
     "build": "TypeScript and Vite passed; standalone not updated"
+  },
+  "figureAspectCorrection": {
+    "date": "2026-10-04",
+    "cause": "The figure used object-fit: fill on a nonsquare pants box, widening the same sprite used by the slot.",
+    "change": "All part boxes are square; native sprite proportions preserved. Canvas 5:9; waist, ankles and platform realigned.",
+    "verification": {
+      "checks": [
+        "Inventory and figure use identical pants sprite, with preserved image proportions, at three viewports",
+        "Legs and boots remain independently selectable, removable and equipable",
+        "No browser errors"
+      ],
+      "errors": [],
+      "screenshots": [
+        "artifacts/sprites-844-stance-inventory.png",
+        "artifacts/sprites-844-stance-suit.png",
+        "artifacts/sprites-1366-stance-inventory.png",
+        "artifacts/sprites-1366-stance-suit.png",
+        "artifacts/sprites-667-stance-inventory.png",
+        "artifacts/sprites-667-stance-suit.png"
+      ],
+      "environment": "Chromium, SwiftShader; visual correctness, not phone FPS",
+      "consistency": [
+        {
+          "viewport": [
+            844,
+            390
+          ],
+          "sameSprite": true,
+          "aspectError": 0.00013412017167380164
+        },
+        {
+          "viewport": [
+            1366,
+            768
+          ],
+          "sameSprite": true,
+          "aspectError": 0
+        },
+        {
+          "viewport": [
+            667,
+            320
+          ],
+          "sameSprite": true,
+          "aspectError": 0.00019171779141102796
+        }
+      ],
+      "metrics": [
+        {
+          "viewport": [
+            844,
+            390
+          ],
+          "figureWidth": 129.4375,
+          "legWidth": 116.484375,
+          "legHeight": 116.5,
+          "leftBoot": 36.875,
+          "rightBoot": 45.03125
+        },
+        {
+          "viewport": [
+            1366,
+            768
+          ],
+          "figureWidth": 240,
+          "legWidth": 216,
+          "legHeight": 216,
+          "leftBoot": 68.390625,
+          "rightBoot": 83.515625
+        },
+        {
+          "viewport": [
+            667,
+            320
+          ],
+          "figureWidth": 90.546875,
+          "legWidth": 81.484375,
+          "legHeight": 81.5,
+          "leftBoot": 25.796875,
+          "rightBoot": 31.5
+        }
+      ]
+    },
+    "build": "TypeScript and Vite passed; standalone not updated"
   }
 }

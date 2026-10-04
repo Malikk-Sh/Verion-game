@@ -72,6 +72,13 @@ try {
    await shot(`${w}-inventory-scrolled`);
   }
   await click('#open-suit'); await shot(`${w}-suit`);
+  const legs = await page.evaluate(() => {
+   const figure = document.querySelector('#suit-figure .fig-legs img');
+   const slot = document.querySelector('#part-grid [data-part="legs"] img');
+   const r = figure.getBoundingClientRect();
+   return { sameSprite: figure.src === slot.src, aspectError: Math.abs(r.width / r.height - figure.naturalWidth / figure.naturalHeight) };
+  });
+  assert.ok(legs.sameSprite && legs.aspectError < .01, 'Figure pants must match the equipment sprite without stretching');
   const boxes = await page.evaluate(() => [...document.querySelectorAll('#suit-figure .fig-part img, #part-grid .art img, #suit-detail .art img')].map(e => { const r = e.getBoundingClientRect(); return { width: r.width, height: r.height, inside: r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight }; }));
   assert.ok(boxes.every(b => b.width > 0 && b.height > 0 && b.inside), JSON.stringify(boxes));
   await click('#close-suit');
