@@ -9,7 +9,7 @@
 svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
 .mono{font-family:var(--mono);letter-spacing:.14em;text-transform:uppercase}.tiny{font-size:9px;font-weight:600}
 .chamfer{clip-path:polygon(var(--cut) 0,100% 0,100% calc(100% - var(--cut)),calc(100% - var(--cut)) 100%,0 100%,0 var(--cut))}
-button{font:inherit;color:inherit;cursor:pointer;min-height:48px;min-width:48px;padding:0 16px;border:1px solid var(--line);border-radius:0;background:linear-gradient(160deg,rgba(40,70,72,.55),rgba(10,26,30,.7));
+button{font:inherit;color:inherit;cursor:pointer;min-height:32px;min-width:32px;padding:0 16px;border:1px solid var(--line);border-radius:0;background:linear-gradient(160deg,rgba(40,70,72,.55),rgba(10,26,30,.7));
  clip-path:polygon(var(--cut) 0,100% 0,100% calc(100% - var(--cut)),calc(100% - var(--cut)) 100%,0 100%,0 var(--cut));
  backdrop-filter:blur(10px) saturate(1.2);-webkit-backdrop-filter:blur(10px) saturate(1.2);touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:background .18s,border-color .18s,color .18s,transform .08s}
 button:hover{border-color:rgba(156,236,224,.5);background:linear-gradient(160deg,rgba(55,95,96,.6),rgba(14,34,38,.75))}
@@ -130,25 +130,8 @@ body[data-aim=true] #reticle{width:40px;height:40px}body[data-aim=true] #reticle
 #run{grid-area:run}#jump{grid-area:jump}
 #run[aria-pressed=true]{background:linear-gradient(180deg,var(--amber-hi),rgba(255,180,60,.5))}#run[aria-pressed=true] svg{color:var(--amber-hi)}
 .drag-ghost{position:fixed;left:0;top:0;z-index:50;pointer-events:none;opacity:.85;width:56px;height:56px}
-/* Phone landscape (844×390 class) */
-@media(max-height:500px){
- :root{--cell:50px}
- .gauge{width:54px;height:54px}.gauge b{top:27px;font-size:13px}.gauge[data-kind=oxygen] b{top:24px}.gauge small{top:39px;font-size:7px}.gauge .g-icon{width:15px;height:15px;margin-top:-13px}
- #vitals{gap:5px}
- #objective{top:calc(var(--st) + 60px);min-height:48px;max-width:200px;font-size:12px;gap:7px}#objective-detail{top:calc(var(--st) + 112px);max-width:220px;font-size:10px}
- #compass{width:min(300px,28vw);height:34px}#navigation{font-size:12px;min-height:26px}
- .tile{width:52px;height:50px;font-size:9.5px;gap:2px}.tile svg{width:20px;height:20px}.tile.square{width:50px}#hud-buttons{gap:5px}
- #toast{top:calc(var(--st) + 66px)}
- #aim{top:calc(50% + 30px);font-size:12px;padding:5px 12px 7px}
- #hotbar-title{font-size:11px;min-height:22px;padding:3px 26px 2px 10px}#hotbar-slots{gap:4px;padding:5px}#hotbar-caption{font-size:9px}
- .cell-n{font-size:10px}.cell-count{font-size:11px;min-width:17px}
- #joystick{width:116px;height:116px;bottom:calc(var(--sb) + 20px)}.stick-ring{width:108px;height:108px}#stick{width:46px;height:46px}
- #save-status{font-size:11px}#save-status svg{width:16px;height:16px}
- .act-main{width:92px;height:92px}.act-main svg{width:30px;height:30px}.act-main span{font-size:12px;letter-spacing:-.01em}
- .hex{width:64px;height:56px}.hex svg{width:20px;height:20px}.hex span{font-size:10.5px}#actions{gap:4px 6px}
-}
-@media(max-height:360px){#objective{max-width:170px}.act-main{width:84px;height:84px}.act-main span{font-size:10.5px}.hex{width:60px;height:52px}#joystick{bottom:calc(var(--sb) + 26px)}}
-@media(max-width:760px){#hotbar-caption{display:none}#compass-wrap{left:42%}#compass{width:min(170px,25vw)}#navigation{max-width:190px;font-size:11px;overflow:hidden;text-overflow:ellipsis}}
+/* Inventory cell size; scalable HUD geometry is in ui/hud.css. */
+@media(max-height:500px){:root{--cell:50px}}
 
 /* ---------- Boot sequence ---------- */
 #boot{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-family:var(--mono);font-size:11px;letter-spacing:.12em;color:var(--cyan);text-transform:uppercase;display:flex;flex-direction:column;gap:6px;min-width:300px;pointer-events:none}
@@ -350,11 +333,8 @@ input[type=range]::-moz-range-track{height:3px;background:var(--line)}input[type
  .suit-detail{padding-left:12px;gap:4px}.d-warn{font-size:11px!important}.d-warn svg{width:16px;height:16px}
 }
 
-/* Small landscape phones keep 48px cells and actions; extra rows/details can scroll. */
+/* Small landscape inventory: extra rows/details can scroll; HUD sizes are independent. */
 @media(max-width:760px) and (max-height:500px){
- #compass-wrap{left:calc(var(--sl) + 180px);right:calc(var(--sr) + 286px);transform:none;min-width:0}
- #compass{width:100%}#navigation{max-width:100%;gap:4px;padding:0 6px;font-size:10px}#navigation .nav-arrow{width:16px}
- #target-name{min-width:0;overflow:hidden;text-overflow:ellipsis}#target-distance{flex-shrink:0}
  .inv-body{grid-template-columns:minmax(0,24fr) minmax(0,54fr) minmax(0,22fr)}
  .inv-body>*{padding:0 7px}.pack-head{gap:6px}.pack-head h3{font-size:14px;white-space:nowrap}#pack-count{font-size:12px;margin-left:3px;white-space:nowrap}
  #sort-rest{font-size:10px;padding:0 6px;gap:3px}#sort-rest svg{width:14px;flex-shrink:0}

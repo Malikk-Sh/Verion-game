@@ -603,5 +603,456 @@
     },
     "build": "TypeScript and Vite passed; standalone not updated",
     "physicalPhoneTested": false
+  },
+  "hudCustomization": {
+    "date": "2026-10-04",
+    "unitTests": "41/41",
+    "build": "tsc --noEmit + vite build; no standalone HTML",
+    "browser": {
+      "checks": [
+        "Actual HUD CSS at eight viewports, 80/100/150%: no intersections, inside screen, buttons ≥32px",
+        "Simulated landscape safe areas with largest preferences",
+        "Broken → bottle → empty → healthy tool resets status and renders remaining gas",
+        "Real inventory swaps replace broken tool with tank and healthy tool without stale flags",
+        "Task details open separately and close back to gameplay on short screen",
+        "Eight independent preferences persist after reload without replacing previous graphics/audio settings",
+        "Reset changes HUD sizes only",
+        "Smaller hotbar cells select items, gate mining, and do not rotate the camera"
+      ],
+      "screenshots": [
+        "artifacts/hud-new-761x390.png",
+        "artifacts/hud-new-844x390.png",
+        "artifacts/hud-new-667x320-quest.png",
+        "artifacts/hud-new-settings.png"
+      ],
+      "errors": [],
+      "environment": "Chromium / SwiftShader; UI correctness, not phone FPS",
+      "layout": [
+        {
+          "width": 568,
+          "height": 320,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 568,
+          "height": 320,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 568,
+          "height": 320,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 760,
+          "height": 390,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 760,
+          "height": 390,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 760,
+          "height": 390,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 761,
+          "height": 390,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 761,
+          "height": 390,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 761,
+          "height": 390,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 800,
+          "height": 360,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 800,
+          "height": 360,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 800,
+          "height": 360,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 915,
+          "height": 412,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 915,
+          "height": 412,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 915,
+          "height": 412,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 1366,
+          "height": 768,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 1366,
+          "height": 768,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 1366,
+          "height": 768,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        }
+      ]
+    },
+    "finalLayout": {
+      "checks": [
+        "Actual HUD CSS at eight viewports, 80/100/150%: no intersections, inside screen, buttons ≥32px",
+        "Simulated landscape safe areas with largest preferences",
+        "Broken → bottle → empty → healthy tool resets status and renders remaining gas",
+        "Default top-menu captions are readable without truncation; compact sizes retain accessible names"
+      ],
+      "screenshots": [],
+      "errors": [],
+      "environment": "Chromium / SwiftShader; UI correctness, not phone FPS",
+      "layout": [
+        {
+          "width": 568,
+          "height": 320,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 568,
+          "height": 320,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 568,
+          "height": 320,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 760,
+          "height": 390,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 760,
+          "height": 390,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 760,
+          "height": 390,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 761,
+          "height": 390,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 761,
+          "height": 390,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 761,
+          "height": 390,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 800,
+          "height": 360,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 800,
+          "height": 360,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 800,
+          "height": 360,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 915,
+          "height": 412,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 915,
+          "height": 412,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 915,
+          "height": 412,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 1366,
+          "height": 768,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 1366,
+          "height": 768,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 1366,
+          "height": 768,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        }
+      ],
+      "labels": [
+        {
+          "text": "Костюм",
+          "width": 47,
+          "scroll": 47,
+          "font": "10.5px"
+        },
+        {
+          "text": "Рюкзак",
+          "width": 45,
+          "scroll": 45,
+          "font": "10.5px"
+        },
+        {
+          "text": "Карта",
+          "width": 36,
+          "scroll": 36,
+          "font": "10.5px"
+        },
+        {
+          "text": "День",
+          "width": 30,
+          "scroll": 30,
+          "font": "10.5px"
+        }
+      ]
+    },
+    "physicalPhoneTested": false
   }
 }

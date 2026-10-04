@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import './style.css';
+import './ui/hud.css';
+import { HUD_GROUPS, HUD_MIN, HUD_MAX, HUD_STEP, parseHudSettings, defaultHudSettings, applyHudSettings, type HudSettings, type HudGroup } from './ui/hud';
 import { installFullscreen } from './fullscreen';
 import { createWorld, type Quality } from './scene';
 import { Character, type Input } from './controller';
@@ -23,10 +25,10 @@ const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById
 const canvas=el<HTMLCanvasElement>('world');
 const error=(message:string)=>{el('error-text').textContent=message;el('error').hidden=false;document.body.dataset.ready='error';};
 
-type Settings={quality:Quality;sound:boolean;bob:boolean;fov:number};
+type Settings={quality:Quality;sound:boolean;bob:boolean;fov:number;hud:HudSettings};
 function loadSettings():Settings{
- const fallback:Settings={quality:'standard',sound:true,bob:true,fov:70};
- try{const s=JSON.parse(localStorage.getItem('vireon.settings')||'{}');return {quality:['low','standard','high'].includes(s.quality)?s.quality:fallback.quality,sound:typeof s.sound==='boolean'?s.sound:fallback.sound,bob:typeof s.bob==='boolean'?s.bob:fallback.bob,fov:typeof s.fov==='number'&&s.fov>=60&&s.fov<=95?Math.round(s.fov):fallback.fov};}catch{return fallback;}
+ const fallback:Settings={quality:'standard',sound:true,bob:true,fov:70,hud:defaultHudSettings()};
+ try{const s=JSON.parse(localStorage.getItem('vireon.settings')||'{}');return {quality:['low','standard','high'].includes(s?.quality)?s.quality:fallback.quality,sound:typeof s?.sound==='boolean'?s.sound:fallback.sound,bob:typeof s?.bob==='boolean'?s.bob:fallback.bob,fov:typeof s?.fov==='number'&&s.fov>=60&&s.fov<=95?Math.round(s.fov):fallback.fov,hud:parseHudSettings(s?.hud)};}catch{return fallback;}
 }
 const saveSettings=(s:Settings)=>{try{localStorage.setItem('vireon.settings',JSON.stringify(s));}catch{/* settings are optional */}};
 const QUALITY_LABEL:Record<Quality,string>={low:'Графика: экономная',standard:'Графика: стандарт',high:'Графика: высокая'};
@@ -53,7 +55,7 @@ function boot(){
  const hand=createViewModel();
  const TITLE_OFFSET=-.42;
  let exported=false,autoTarget='',frames:number[]=[],showMetrics=false,wake=0,bob=0,stride=0,fov=70,titleTime=0,lastObjective='',settingsReturn='welcome';
- const visited=new Set<string>(),discovered=new Set<string>();let dialog='welcome';const ALL_DIALOGS=['welcome','paused','settings','map-panel','info-panel','inventory-panel','suit-panel','saves-panel','lease-panel'];
+ const visited=new Set<string>(),discovered=new Set<string>();let dialog='welcome';const ALL_DIALOGS=['welcome','paused','settings','objective-panel','map-panel','info-panel','inventory-panel','suit-panel','saves-panel','lease-panel'];
  const insideCapsule=(x=actor.x,z=actor.z)=>x>37.5&&x<42.5&&z>37&&z<43.1;
 
  // ---------- Settings ----------
@@ -77,6 +79,7 @@ function boot(){
   el('veil').classList.toggle('live',liveDialogs.has(dialog));
   document.body.dataset.dialog=which??'';
   document.body.dataset.running=String(running);
+  el('objective').setAttribute('aria-expanded',String(which==='objective-panel'));
   if(which==='map-panel')drawMap();if(which==='inventory-panel')panels.drawInventory();if(which==='suit-panel')panels.drawSuit();if(which==='saves-panel')void refreshSlots();if(which==='paused')updatePauseInfo();
   if(running)audio.resume();else if(started&&(which==='paused'||which==='settings'))audio.suspend();
  }
@@ -94,8 +97,10 @@ function boot(){
   const first=!started;started=true;document.body.dataset.started='true';setDialog(null);el('start').blur();
   if(first){audio.start();audio.setEnabled(settings.sound);wake=2.6;bootSequence();}
  }
- function resize(){const portrait=innerHeight>innerWidth;el('portrait').hidden=!portrait;renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
+ function refreshHud(){applyHudSettings(settings.hud);
   const c=el<HTMLCanvasElement>('compass'),r=c.getBoundingClientRect();c.width=Math.max(1,Math.round(r.width*devicePixelRatio));c.height=Math.max(1,Math.round(r.height*devicePixelRatio));
+ }
+ function resize(){const portrait=innerHeight>innerWidth;el('portrait').hidden=!portrait;renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();refreshHud();
   if(portrait&&started)pause('Продолжим в горизонтальном режиме');}
  addEventListener('resize',resize);
  addEventListener('blur',()=>pause('Экспедиция приостановлена'));
@@ -146,16 +151,27 @@ function boot(){
   hand.setItem(s&&TOOLS[s.itemId]&&(s.durability??0)>0?s.itemId:null);
   if(dialog==='inventory-panel')panels.drawInventory();
  }
- const objBtn=el('objective');objBtn.onclick=()=>{const open=objBtn.getAttribute('aria-expanded')!=='true';objBtn.setAttribute('aria-expanded',String(open));el('objective-detail').hidden=!open;audio.tone('ui');};
+ el('objective').onclick=()=>{if(!running)return;audio.tone('ui');setDialog('objective-panel');};
+ el('close-objective').onclick=resume;el('objective-back').onclick=resume;
  el('resume').onclick=resume;el('pause-button').onclick=()=>{audio.tone('ui');pause();};
  el('reset').onclick=()=>{if(saver?.halted)return;actor.reset();resume();};
  el('quality-toggle').onclick=()=>{const order:Quality[]=['low','standard','high'];applyQuality(order[(order.indexOf(settings.quality)+1)%3]);};
  el('sound-toggle').onclick=()=>applySound(!settings.sound);
  el('bob-toggle').onclick=()=>applyBob(!settings.bob);
  el<HTMLInputElement>('fov-range').addEventListener('input',e=>applyFov(Number((e.target as HTMLInputElement).value)));
- const openSettings=()=>{audio.tone('ui');settingsReturn=started?'paused':'welcome';setDialog('settings');};
+ const openSettings=()=>{audio.tone('ui');settingsReturn=started?'paused':'welcome';el('hud-preview').hidden=!started;setDialog('settings');};
  el('title-settings').onclick=openSettings;el('settings-button').onclick=openSettings;
  el('settings-back').onclick=()=>{audio.tone('ui');setDialog(settingsReturn);};
+ const hudRanges=new Map<HudGroup,{input:HTMLInputElement;output:HTMLOutputElement}>();
+ for(const [key,label] of Object.entries(HUD_GROUPS) as [HudGroup,string][]){
+  const row=document.createElement('label'),name=document.createElement('span'),range=document.createElement('input'),output=document.createElement('output');
+  row.className='hud-size-row';range.type='range';range.id=`hud-size-${key}`;range.min=String(HUD_MIN);range.max=String(HUD_MAX);range.step=String(HUD_STEP);range.value=String(settings.hud[key]);
+  row.htmlFor=range.id;name.textContent=label;output.htmlFor=range.id;output.value=`${settings.hud[key]}%`;
+  range.oninput=()=>{settings.hud[key]=Number(range.value);output.value=`${range.value}%`;saveSettings(settings);refreshHud();};
+  row.append(name,output,range);el('hud-settings-grid').append(row);hudRanges.set(key,{input:range,output});
+ }
+ el('hud-reset').onclick=()=>{settings.hud=defaultHudSettings();for(const [key,{input,output}] of hudRanges){input.value=String(settings.hud[key]);output.value=`${settings.hud[key]}%`;}saveSettings(settings);refreshHud();};
+ el('hud-preview').onclick=resume;
  // Day/night follows the game clock (600 s day + 360 s night). The Sun/Moon button skips the light phase only.
  let shownDay:boolean|null=null;
  const dayPhase=()=>game?phaseSeconds(clock.activeTicks,game.world.dayOffsetTicks):516;
@@ -195,7 +211,7 @@ function boot(){
  addEventListener('keyup',event=>{keys.delete(event.code);if(event.code==='KeyF')holdMine=false;updateRun();});
  const stick=el('joystick');
  const capture=(target:HTMLElement,event:PointerEvent)=>{try{target.setPointerCapture(event.pointerId);}catch{/* Synthetic pointer events have no OS capture; real pointers do. */}};
- function moveStick(event:PointerEvent){const r=stick.getBoundingClientRect();let x=event.clientX-(r.left+r.width/2),y=event.clientY-(r.top+r.height/2);const len=Math.hypot(x,y),max=39;if(len>max){x*=max/len;y*=max/len;}joyX=x/max;joyY=-y/max;if(Math.abs(joyX)<.1)joyX=0;if(Math.abs(joyY)<.1)joyY=0;el('stick').style.transform=`translate(${x}px,${y}px)`;}
+ function moveStick(event:PointerEvent){const r=stick.getBoundingClientRect();let x=event.clientX-(r.left+r.width/2),y=event.clientY-(r.top+r.height/2);const len=Math.hypot(x,y),max=Math.max(1,(r.width-el('stick').getBoundingClientRect().width)/2-r.width*.06);if(len>max){x*=max/len;y*=max/len;}joyX=x/max;joyY=-y/max;if(Math.abs(joyX)<.1)joyX=0;if(Math.abs(joyY)<.1)joyY=0;el('stick').style.transform=`translate(${x}px,${y}px)`;}
  stick.addEventListener('pointerdown',event=>{if(!running||joyPointer!==null)return;event.preventDefault();joyPointer=event.pointerId;capture(stick,event);moveStick(event);});
  stick.addEventListener('pointermove',event=>{if(joyPointer===event.pointerId){event.preventDefault();moveStick(event);}});
  const releaseStick=(event:PointerEvent)=>{if(joyPointer===event.pointerId){joyPointer=null;joyX=joyY=0;el('stick').style.transform='translate(0,0)';}};
@@ -405,19 +421,19 @@ function boot(){
  const compass=el<HTMLCanvasElement>('compass'),cctx=compass.getContext('2d')!;
  const DIRS=['С','СВ','В','ЮВ','Ю','ЮЗ','З','СЗ'];
  function drawCompass(heading:number){
-  const w=compass.width,h=compass.height,dpr=devicePixelRatio,span=Math.PI*.95;if(!w)return;
+  const w=compass.width,h=compass.height,dpr=devicePixelRatio,scale=h/(28*dpr),span=Math.PI*.95;if(!w)return;
   cctx.clearRect(0,0,w,h);const X=(a:number)=>w/2+wrap(a-heading)/span*w;
   const grad=cctx.createLinearGradient(0,0,w,0);grad.addColorStop(0,'rgba(233,245,241,0)');grad.addColorStop(.2,'rgba(233,245,241,.85)');grad.addColorStop(.8,'rgba(233,245,241,.85)');grad.addColorStop(1,'rgba(233,245,241,0)');
   cctx.fillStyle=grad;cctx.strokeStyle=grad;cctx.lineWidth=dpr;
   cctx.beginPath();cctx.moveTo(0,h*.62);cctx.lineTo(w,h*.62);cctx.globalAlpha=.25;cctx.stroke();cctx.globalAlpha=1;
   for(let d=0;d<360;d+=5){const a=d*Math.PI/180,x=X(a);if(Math.abs(wrap(a-heading))>span/2)continue;const major=d%45===0;cctx.fillRect(x-dpr/2,h*(major?.44:d%15===0?.5:.55),dpr,h*(major?.18:d%15===0?.12:.07));
-   if(major){cctx.font=`600 ${11*dpr}px system-ui,sans-serif`;cctx.textAlign='center';cctx.fillText(DIRS[d/45],x,h*.36);}}
+   if(major){cctx.font=`600 ${Math.max(10,11*scale)*dpr}px system-ui,sans-serif`;cctx.textAlign='center';cctx.fillText(DIRS[d/45],x,h*.36);}}
   for(const p of LANDMARKS){const a=bearing(p.x-actor.x,p.z-actor.z),rel=wrap(a-heading);if(Math.abs(rel)>span/2)continue;const x=X(a),sel=p.id===selected;
-   cctx.save();cctx.translate(x,h*.82);cctx.rotate(Math.PI/4);cctx.fillStyle=sel?'#f2b460':visited.has(p.id)?'rgba(127,230,218,.45)':'rgba(191,238,230,.9)';const r=(sel?4:2.5)*dpr;cctx.fillRect(-r,-r,r*2,r*2);cctx.restore();}
+   cctx.save();cctx.translate(x,h*.82);cctx.rotate(Math.PI/4);cctx.fillStyle=sel?'#f2b460':visited.has(p.id)?'rgba(127,230,218,.45)':'rgba(191,238,230,.9)';const r=(sel?4:2.5)*dpr*scale;cctx.fillRect(-r,-r,r*2,r*2);cctx.restore();}
   // Sun (day) or moon (night) on the strip at its real bearing — the light moves with the game clock.
   {const sd=world.sunDirection,day=sd.y>-.02,a=day?bearing(sd.x,sd.z):bearing(-sd.x,-sd.z),rel=wrap(a-heading);
-   if(Math.abs(rel)<span/2){const x=X(a),y=h*.36,r=5*dpr;cctx.save();cctx.strokeStyle=cctx.fillStyle=day?'#ffb43c':'#cfe3ff';cctx.lineWidth=1.4*dpr;cctx.beginPath();cctx.arc(x,y,r*.7,0,Math.PI*2);if(day){cctx.stroke();for(let i=0;i<8;i++){const q=i*Math.PI/4;cctx.beginPath();cctx.moveTo(x+Math.cos(q)*r*1.05,y+Math.sin(q)*r*1.05);cctx.lineTo(x+Math.cos(q)*r*1.5,y+Math.sin(q)*r*1.5);cctx.stroke();}}else cctx.fill();cctx.restore();}}
-  cctx.fillStyle='#f2b460';cctx.beginPath();cctx.moveTo(w/2-4*dpr,0);cctx.lineTo(w/2+4*dpr,0);cctx.lineTo(w/2,5*dpr);cctx.fill();
+   if(Math.abs(rel)<span/2){const x=X(a),y=h*.36,r=5*dpr*scale;cctx.save();cctx.strokeStyle=cctx.fillStyle=day?'#ffb43c':'#cfe3ff';cctx.lineWidth=1.4*dpr;cctx.beginPath();cctx.arc(x,y,r*.7,0,Math.PI*2);if(day){cctx.stroke();for(let i=0;i<8;i++){const q=i*Math.PI/4;cctx.beginPath();cctx.moveTo(x+Math.cos(q)*r*1.05,y+Math.sin(q)*r*1.05);cctx.lineTo(x+Math.cos(q)*r*1.5,y+Math.sin(q)*r*1.5);cctx.stroke();}}else cctx.fill();cctx.restore();}}
+  cctx.fillStyle='#f2b460';cctx.beginPath();cctx.moveTo(w/2-4*dpr*scale,0);cctx.lineTo(w/2+4*dpr*scale,0);cctx.lineTo(w/2,5*dpr*scale);cctx.fill();
  }
  const marker=el('target-marker');
  function updateMarker(){

@@ -49,13 +49,13 @@
   <div class="gauge" id="g-satiety" data-kind="satiety" role="img" aria-label="Сытость"><svg class="ring" viewBox="0 0 64 64"><circle class="track" cx="32" cy="32" r="27"/><circle class="arc" cx="32" cy="32" r="27" pathLength="100"/></svg><svg class="g-icon"><use href="#i-food"/></svg><b>100</b></div>
   <div class="gauge" id="g-oxygen" data-kind="oxygen" role="img" aria-label="Кислород"><svg class="ring" viewBox="0 0 64 64"><circle class="track" cx="32" cy="32" r="27"/><circle class="arc" cx="32" cy="32" r="27" pathLength="100"/></svg><svg class="g-icon"><use href="#i-o2"/></svg><b>240</b><small>GU</small></div>
  </div>
- <button id="objective" aria-expanded="false" aria-controls="objective-detail"><svg class="obj-arrow"><use href="#i-arrow"/></svg><span id="objective-text">Выйдите из капсулы</span><svg class="obj-chevron"><use href="#i-chevron"/></svg></button>
- <p id="objective-detail" hidden></p>
+ <div id="hud-safe-area" aria-hidden="true"></div>
+ <button id="objective" aria-expanded="false" aria-controls="objective-panel"><svg class="obj-arrow"><use href="#i-arrow"/></svg><span id="objective-text">Выйдите из капсулы</span><svg class="obj-chevron"><use href="#i-chevron"/></svg></button>
  <div id="compass-wrap"><canvas id="compass" aria-hidden="true"></canvas><div id="navigation"><span class="nav-arrow"><svg><use href="#i-arrow"/></svg></span><span id="target-name">Железо</span><span id="target-distance"></span></div></div>
  <nav id="hud-buttons" aria-label="Меню">
-  <button id="suit-button" class="tile" title="Костюм [C]"><svg><use href="#i-helmet"/></svg><span>Костюм</span></button>
-  <button id="inventory-button" class="tile" title="Рюкзак [I]"><svg><use href="#i-pack"/></svg><span>Рюкзак</span></button>
-  <button id="map-button" class="tile" title="Карта [M]"><svg><use href="#i-map"/></svg><span>Карта</span></button>
+  <button id="suit-button" class="tile" title="Костюм [C]" aria-label="Костюм"><svg><use href="#i-helmet"/></svg><span>Костюм</span></button>
+  <button id="inventory-button" class="tile" title="Рюкзак [I]" aria-label="Рюкзак"><svg><use href="#i-pack"/></svg><span>Рюкзак</span></button>
+  <button id="map-button" class="tile" title="Карта [M]" aria-label="Карта"><svg><use href="#i-map"/></svg><span>Карта</span></button>
   <button id="day" class="tile" title="Сменить день и ночь [N]" aria-label="Сменить день и ночь"><span id="light-icon"><svg><use href="#i-sun"/></svg></span><span id="light-text">День</span></button>
   <button id="pause-button" class="tile square" aria-label="Пауза" title="Меню [Esc]"><svg><use href="#i-pause"/></svg></button>
  </nav>
@@ -66,7 +66,7 @@
  <div id="hotbar" role="group" aria-label="Быстрый доступ — первая строка рюкзака"><div id="hotbar-title"><b id="hotbar-name"></b><span id="hotbar-meta"></span></div><div id="hotbar-slots"></div><small id="hotbar-caption">Первая строка рюкзака</small></div>
  <div id="joystick" role="group" aria-label="Джойстик движения"><div class="stick-ring"><span class="stick-ticks"></span><i class="stick-dir up"></i><i class="stick-dir down"></i><i class="stick-dir left"></i><i class="stick-dir right"></i><div id="stick"></div></div></div>
  <div id="save-status" data-kind="idle"><svg><use href="#i-check"/></svg><span id="save-text">Без мира</span></div>
- <div id="actions"><button id="action" class="act-main" data-kind="none" aria-disabled="true"><i class="act-ring"></i><svg id="action-icon"><use href="#i-hand"/></svg><span id="action-label">Действие</span></button><button id="run" class="hex" aria-pressed="false"><svg><use href="#i-run"/></svg><span>Бег</span></button><button id="jump" class="hex"><svg><use href="#i-jump"/></svg><span>Прыжок</span></button></div>
+ <div id="actions"><button id="action" class="act-main" data-kind="none" aria-disabled="true"><i class="act-ring"></i><svg id="action-icon"><use href="#i-hand"/></svg><span id="action-label">Действие</span></button><button id="run" class="hex" aria-label="Бег" aria-pressed="false"><svg><use href="#i-run"/></svg><span>Бег</span></button><button id="jump" class="hex" aria-label="Прыжок"><svg><use href="#i-jump"/></svg><span>Прыжок</span></button></div>
  <div id="boot" aria-hidden="true"></div>
 </div>
 <div id="veil" class="veil">
@@ -81,6 +81,7 @@
   <div class="title-foot mono tiny"><span class="build-tag">S1.1</span> Этап «Основа»: добыча конечных ресурсов, рюкзак с быстрым доступом, костюм из четырёх частей, смена дня и ночи, сохранение в браузере и экспорт/импорт файла. Кислород, крафт и строительство — следующий этап.</div>
  </section>
  <section id="paused" class="panel pause-panel" hidden><div class="mono tiny kicker">VIREON / МЕНЮ ЭКСПЕДИЦИИ</div><h2 id="pause-title">Пауза</h2><div class="menu-grid"><button id="resume" class="primary">Продолжить <span aria-hidden="true">→</span></button><button id="save-now" class="secondary"><svg><use href="#i-save"/></svg><span>Сохранить</span></button><button id="saves-button" class="secondary"><svg><use href="#i-download"/></svg><span>Сохранения</span></button><button id="settings-button" class="secondary"><svg><use href="#i-gear"/></svg><span>Настройки</span></button><button id="reset" class="secondary"><svg><use href="#i-home"/></svg><span>К капсуле</span></button></div><p id="pause-save-info" class="help mono"></p><p class="help">Мир сохраняется сам каждые 30 активных секунд, при паузе и сворачивании. «К капсуле» — служебный возврат, не телепортация будущей игры.</p></section>
+ <section id="objective-panel" class="panel" hidden aria-label="Текущая задача"><div class="panel-heading"><h2>Задача</h2><button id="close-objective" class="icon-button" aria-label="Закрыть задачу">×</button></div><p id="objective-detail"></p><button id="objective-back" class="primary">Продолжить</button></section>
  <section id="settings" class="panel settings-panel" hidden><div class="panel-heading"><div><div class="mono tiny kicker">VIREON / НАСТРОЙКИ</div><h2>Настройки</h2></div><button id="settings-back" class="icon-button" aria-label="Закрыть настройки">×</button></div>
   <div class="settings-grid">
    <button id="fullscreen-toggle" class="secondary" aria-pressed="false"><svg><use href="#i-expand"/></svg><span data-fullscreen-label>На весь экран</span></button>
@@ -90,6 +91,7 @@
    <label class="range-row" for="fov-range"><svg><use href="#i-eye"/></svg><span>Поле зрения</span><input id="fov-range" type="range" min="60" max="95" step="1" value="70"><output id="fov-value">70°</output></label>
    <button id="metrics-toggle" class="ghost">Показать показатели сцены</button>
   </div>
+  <section class="hud-settings" aria-label="Размер интерфейса"><h3>Размер интерфейса</h3><div id="hud-settings-grid" class="hud-settings-grid"></div><button id="hud-reset" class="secondary">Сбросить размеры</button><button id="hud-preview" class="secondary" hidden>Проверить в игре</button><p class="help">Размеры сохраняются автоматически. На небольшом экране крупные элементы подстраиваются под свободное место.</p></section>
   <p id="fullscreen-status" role="status" aria-live="polite"></p>
   <p class="help">Качество: «экономная» — без теней и пыли; «высокая» — большие тени и чёткость экрана. Покачивание отключает качание камеры и расширение обзора при беге. Настройки сохраняются в этом браузере.</p>
  </section>

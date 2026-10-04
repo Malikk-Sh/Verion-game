@@ -28,15 +28,15 @@ try{
  await page.waitForFunction(()=>window.__vireon.getState().inventory.some(i=>i.itemId==='iron_raw'));await page.keyboard.up('KeyF');
  s=await st();assert.equal(s.nodes['iron-a'],31);assert.equal(s.inventory.find(i=>i.itemId==='tool_stone').durability,159);check('Holding F mines one block: node 32→31, ore in inventory, tool wear 1');
 
- // HUD layout: no overlaps between HUD groups, everything inside the viewport, every visible HUD button ≥48 CSS px.
+ // HUD layout: no overlaps between HUD groups, everything inside the viewport, every visible HUD button ≥32 CSS px.
  const layout=()=>page.evaluate(()=>{const ids=['vitals','objective','compass-wrap','hud-buttons','aim','hotbar','joystick','actions','save-status'];
   const rs=ids.map(id=>{const r=document.getElementById(id).getBoundingClientRect();return{id,l:r.left,t:r.top,r:r.right,b:r.bottom,w:r.width};}).filter(r=>r.w>0);
   const over=[];for(let i=0;i<rs.length;i++)for(let j=i+1;j<rs.length;j++){const a=rs[i],b=rs[j];if(a.l<b.r-1&&a.r>b.l+1&&a.t<b.b-1&&a.b>b.t+1)over.push(a.id+'×'+b.id);}
   const out=rs.filter(r=>r.l<0||r.t<0||r.r>innerWidth+.5||r.b>innerHeight+.5).map(r=>r.id);
-  const small=[...document.querySelectorAll('#hud button')].filter(b=>b.getClientRects().length&&(b.getBoundingClientRect().height<47.5||b.getBoundingClientRect().width<47.5)).map(b=>b.id||b.className);
+  const small=[...document.querySelectorAll('#hud button')].filter(b=>b.getClientRects().length&&(b.getBoundingClientRect().height<31.5||b.getBoundingClientRect().width<31.5)).map(b=>b.id||b.className);
   return{over,out,small};});
- for(const [w,h] of [[844,390],[1366,768],[667,320]]){await page.setViewportSize({width:w,height:h});await page.waitForTimeout(400);const r=await layout();assert.deepEqual(r,{over:[],out:[],small:[]},`${w}×${h}: ${JSON.stringify(r)}`);await page.screenshot({path:`artifacts/s1-hud-${w}.png`});}
- await page.setViewportSize({width:844,height:390});check('HUD at 844×390, 1366×768 and 667×320: no overlapping groups, inside viewport, buttons ≥48 px');
+ for(const [w,h] of [[844,390],[1366,768],[667,320],[761,390],[800,360]]){await page.setViewportSize({width:w,height:h});await page.waitForTimeout(400);const r=await layout();assert.deepEqual(r,{over:[],out:[],small:[]},`${w}×${h}: ${JSON.stringify(r)}`);await page.screenshot({path:`artifacts/s1-hud-${w}.png`});}
+ await page.setViewportSize({width:844,height:390});check('HUD at 844×390, 1366×768, 667×320, 761×390 and 800×360: no overlapping groups, inside viewport, buttons ≥32 px');
  // Hotbar is the first backpack row; the context action follows the selected cell (no fake mining with food in hand).
  await click('[data-hot="1"]');s=await st();assert.equal(s.hotbar,1);assert.equal(s.cells[1].itemId,'pulp');
  await page.waitForFunction(()=>window.__vireon.getState().action==='none');assert.equal(s.handItem,false);
@@ -101,3 +101,4 @@ try{
  assert.deepEqual(report.errors,[]);check('No console errors');
 }catch(e){report.failure=String(e?.stack||e);console.error(e);process.exitCode=1;}
 finally{await writeFile('artifacts/s1-verification.json',JSON.stringify(report,null,2)+'\n');await browser?.close();await server.close();}
+
