@@ -314,14 +314,16 @@ input[type=range]::-moz-range-track{height:3px;background:var(--line)}input[type
 .raster-figure .fig-part.sel:not(.off) img{filter:drop-shadow(0 0 3px rgba(26,241,248,.8))}
 .raster-figure .fig-helmet{left:30%;top:0;width:40%;height:23%;z-index:4}
 .raster-figure .fig-chest{left:0;top:16%;width:100%;height:45%;z-index:3}
-.raster-figure .fig-legs{left:20%;top:43%;width:60%;height:48%;z-index:2}
+/* Keep the previous rendered leg height; match the hip width to the chest belt. */
+.raster-figure .fig-legs{left:14%;top:47%;width:72%;height:40%;z-index:2}
+.raster-figure .fig-legs img{object-fit:fill}
 .raster-figure .fig-boots{inset:0;z-index:1}
 .raster-figure .fig-boots img,.raster-figure .fig-boots.sel:not(.off) img{filter:none}
 /* Glow follows the separated silhouettes, rather than their clipping edges. */
 .raster-figure .fig-boots.sel:not(.off){filter:drop-shadow(0 0 3px rgba(26,241,248,.8))}
 .fig-boot{position:absolute;width:36%;height:24%}
-.fig-boot-left{left:30%;top:73%;clip-path:polygon(0 0,50% 0,50% 65%,44% 80%,44% 100%,0 100%)}
-.fig-boot-right{left:34.3%;top:76%;clip-path:polygon(50% 0,100% 0,100% 100%,44% 100%,44% 80%,50% 65%)}
+.fig-boot-left{left:28.5%;top:73%;clip-path:polygon(0 0,50% 0,50% 65%,44% 80%,44% 100%,0 100%)}
+.fig-boot-right{left:36.9%;top:76%;clip-path:polygon(50% 0,100% 0,100% 100%,44% 100%,44% 80%,50% 65%)}
 .figure-platform{position:absolute;left:16%;right:16%;bottom:0;height:6%;border:1px solid rgba(58,229,240,.25);border-radius:50%;background:radial-gradient(ellipse,rgba(36,195,207,.13),transparent 70%);z-index:0}
 .fig-part path,.fig-part circle{fill:#e9e8e3;stroke:#3d4648;stroke-width:1.4}.fig-part .fig-accent{fill:#e8742a;stroke:#e8742a}.fig-part .fig-dark{fill:none;stroke:#2b3234;stroke-width:4}.fig-part .fig-visor{fill:#12181a;stroke:#e8742a}
 .fig-part.off path,.fig-part.off circle{fill:none;stroke:rgba(160,220,225,.45);stroke-dasharray:4 3}.fig-part.off .fig-accent,.fig-part.off .fig-visor{fill:none}

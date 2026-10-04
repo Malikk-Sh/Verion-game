@@ -231,5 +231,47 @@
       "environment": "Chromium with SwiftShader; visual correctness only"
     },
     "physicalPhoneTested": false
+  },
+  "legProportionsCorrection": {
+    "date": "2026-10-04",
+    "change": "Leg artwork widened by 20% at unchanged rendered height; ankle alignment updated.",
+    "verification": {
+      "metrics": [
+        {
+          "viewport": [
+            844,
+            390
+          ],
+          "legWidth": 111.828125,
+          "legHeight": 93.1875,
+          "figureHeight": 233,
+          "legTop": 109.5
+        },
+        {
+          "viewport": [
+            1366,
+            768
+          ],
+          "legWidth": 207.359375,
+          "legHeight": 172.796875,
+          "figureHeight": 432,
+          "legTop": 203.03125
+        },
+        {
+          "viewport": [
+            667,
+            320
+          ],
+          "legWidth": 78.21875,
+          "legHeight": 65.1875,
+          "figureHeight": 163,
+          "legTop": 76.609375
+        }
+      ],
+      "errors": [],
+      "removeReequipLegsAndBoots": true,
+      "environment": "Chromium SwiftShader; correctness only"
+    },
+    "build": "TypeScript and Vite passed; standalone not updated"
   }
 }
