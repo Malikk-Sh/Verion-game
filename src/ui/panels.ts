@@ -30,8 +30,8 @@ export function itemState(s: NonNullable<Slot>) {
  return null;
 }
 /** One cell: number, art, count, durability bar (shared by the hotbar and the backpack grid). */
-export function cellContent(cell: HTMLElement, s: Slot, index: number, opts: { label?: boolean } = {}) {
- cell.replaceChildren(h('span', 'cell-n', String(index + 1)));
+export function cellContent(cell: HTMLElement, s: Slot, index: number, opts: { label?: boolean; number?: boolean } = {}) {
+ cell.replaceChildren(...(opts.number === false ? [] : [h('span', 'cell-n', String(index + 1))]));
  cell.classList.remove('broken');
  if (!s) { cell.classList.add('empty'); return; }
  cell.classList.remove('empty');

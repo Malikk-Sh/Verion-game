@@ -14,7 +14,7 @@ const server=await createServer({server:{host:'127.0.0.1',port:5177,strictPort:t
  document.body.dataset.started='true';document.body.dataset.running='true';document.querySelector('#veil').hidden=true;
  document.querySelector('#boot').hidden=true;document.querySelector('#portrait').hidden=true;
  const slots=[{itemId:'tool_stone',count:1,durability:106},{itemId:'pulp',count:4},{itemId:'iron_raw',count:4},{itemId:'copper_raw',count:13},{itemId:'ice',count:24},{itemId:'stone',count:13}];
- slots.forEach((s,i)=>{const b=document.createElement('button');b.className='cell';cellContent(b,s,i);document.querySelector('#hotbar-slots').append(b)});
+ slots.forEach((s,i)=>{const b=document.createElement('button');b.className='cell';cellContent(b,s,i,{number:false});document.querySelector('#hotbar-slots').append(b)});
  document.querySelector('#hotbar-name').textContent='Каменный мультитул';document.querySelector('#hotbar-meta').textContent='106 / 160';
  document.querySelector('#target-name').textContent='Железный выход';document.querySelector('#target-distance').textContent='180 м';
  document.querySelector('#aim').hidden=false;document.querySelector('#aim-name').textContent='Железная руда';document.querySelector('#aim-meta').textContent='Выберите мультитул';
@@ -40,9 +40,11 @@ try{
   await page.setViewportSize({width,height});
   for(const size of [80,100,150]){
    await page.evaluate(size=>window.hudTest.apply(Object.fromEntries(Object.keys(window.hudTest.defaults()).map(k=>[k,size]))),size);
-   const r=await layout(page);if(r.overlap.length)console.log(await page.evaluate(()=>Object.fromEntries(['objective','aim','hotbar','compass-wrap'].map(id=>[id,document.getElementById(id).getBoundingClientRect().toJSON()]))));assert.deepEqual(r,{overlap:[],out:[],small:[]},`${width}×${height} ${size}%: ${JSON.stringify(r)}`);report.layout.push({width,height,size,...r});
+   const r=await layout(page);if(r.overlap.length)console.log(await page.evaluate(()=>Object.fromEntries(['objective','aim','hotbar','compass-wrap'].map(id=>[id,document.getElementById(id).getBoundingClientRect().toJSON()]))));assert.ok(await page.locator('#compass-wrap').evaluate(e=>{const r=e.getBoundingClientRect();return Math.abs(r.left+r.width/2-innerWidth/2)<.1}),'Compass center');assert.deepEqual(r,{overlap:[],out:[],small:[]},`${width}×${height} ${size}%: ${JSON.stringify(r)}`);report.layout.push({width,height,size,...r});
   }
  }
+ const compact=await page.evaluate(()=>({caption:!!document.querySelector('#hotbar-caption'),numbers:document.querySelectorAll('#hotbar .cell-n').length,actionText:document.querySelector('#actions').textContent.trim(),center:document.querySelector('#compass-wrap').getBoundingClientRect().left+document.querySelector('#compass-wrap').getBoundingClientRect().width/2-innerWidth/2}));
+ assert.deepEqual(compact,{caption:false,numbers:0,actionText:'',center:0});check('Icon-only actions, unnumbered hotbar without caption and centered compass');
  check('Actual HUD CSS at eight viewports, 80/100/150%: no intersections, inside screen, buttons ≥32px');
  await page.setViewportSize({width:667,height:320});
  await page.evaluate(()=>{document.querySelector('#hud-safe-area').style.padding='10px 44px 21px';window.hudTest.apply(Object.fromEntries(Object.keys(window.hudTest.defaults()).map(k=>[k,150])))});
@@ -68,7 +70,7 @@ try{
  const game=await context.newPage();debugPage=game;game.setDefaultTimeout(30000);game.on('pageerror',e=>report.errors.push(e.message));
  const ready=()=>game.waitForFunction(()=>document.body.dataset.ready==='true');
  const click=sel=>game.$eval(sel,e=>e.click());
- const shot=async name=>{await game.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>resolve())));await game.waitForTimeout(300);const path=`artifacts/hud-new-${name}.png`;await game.screenshot({path,timeout:30000});report.screenshots.push(path);};
+ const shot=async name=>{await game.waitForFunction(()=>!document.body.classList.contains('booting'));await game.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>resolve())));await game.waitForTimeout(300);const path=`artifacts/hud-new-${name}.png`;await game.screenshot({path,timeout:30000});report.screenshots.push(path);};
  await game.goto('http://127.0.0.1:5177');await ready();
  await game.evaluate(async()=>{
   const [{newGame},{SaveStore},{heightAt}]=await Promise.all([import('/src/game/state.ts'),import('/src/persist/store.ts'),import('/src/world.ts')]);

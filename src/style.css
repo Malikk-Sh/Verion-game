@@ -21,8 +21,8 @@ kbd{font-family:var(--mono);font-size:9px;padding:2px 5px;border:1px solid curre
 
 /* ---------- Visor: soft helmet shading with a faint optical texture ---------- */
 #visor{position:absolute;inset:0;pointer-events:none;z-index:1;
- background:radial-gradient(ellipse 88% 100% at 50% 48%,transparent 58%,rgba(4,16,20,.06) 76%,rgba(3,12,17,.22) 100%),repeating-linear-gradient(0deg,rgba(140,222,230,.007) 0 1px,transparent 1px 4px);
- box-shadow:inset 0 0 5vmin rgba(12,42,49,.12)}
+ background:radial-gradient(ellipse 64% 76% at 50% 48%,transparent 42%,rgba(3,14,19,.12) 68%,rgba(2,9,14,.42) 100%),repeating-linear-gradient(0deg,rgba(140,222,230,.007) 0 1px,transparent 1px 4px);
+ box-shadow:inset 0 0 5vmin rgba(7,24,32,.2)}
 body[data-started=false] #visor{opacity:0}#visor{transition:opacity 1.2s}
 
 #hud{pointer-events:none;position:absolute;inset:0;z-index:2;text-shadow:0 0 2px rgba(0,0,0,.7),0 1px 8px rgba(0,0,0,.55);transition:opacity .4s}
@@ -87,7 +87,6 @@ body[data-aim=true] #reticle{width:40px;height:40px}body[data-aim=true] #reticle
 #hotbar-title{align-self:flex-start;display:flex;gap:10px;align-items:baseline;min-height:26px;padding:4px 30px 2px 14px;font-size:13px;background:linear-gradient(180deg,rgba(13,48,54,.92),rgba(7,30,35,.92));box-shadow:inset 0 0 0 1px var(--glow-soft);clip-path:polygon(0 0,calc(100% - 22px) 0,100% 100%,0 100%);white-space:nowrap}
 #hotbar-title b{font-weight:600}#hotbar-meta{font-weight:500;color:rgba(233,245,241,.85);font-variant-numeric:tabular-nums}#hotbar-meta:not(:empty):before{content:"· ";color:var(--muted)}
 #hotbar-slots{display:flex;gap:6px;padding:7px;background:linear-gradient(180deg,rgba(9,38,43,.9),rgba(5,22,26,.9));box-shadow:inset 0 0 0 1px var(--glow),0 0 18px rgba(67,227,238,.12);clip-path:polygon(0 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,10px 100%,0 calc(100% - 10px))}
-#hotbar-caption{margin-top:-1px;padding:1px 22px 3px;font-size:10px;color:rgba(233,245,241,.72);background:rgba(5,22,26,.8);clip-path:polygon(10px 0,calc(100% - 10px) 0,100% 100%,0 100%)}
 /* Cells (hotbar and backpack grid) */
 .cell{position:relative;display:grid;place-items:center;width:var(--cell);height:var(--cell);min-width:48px;min-height:48px;padding:0;border:0;background:linear-gradient(180deg,rgba(16,58,64,.85),rgba(7,30,35,.9));box-shadow:inset 0 0 0 1px rgba(84,226,236,.32);clip-path:none;backdrop-filter:none;-webkit-backdrop-filter:none}
 .cell:hover{background:linear-gradient(180deg,rgba(22,72,79,.9),rgba(9,36,42,.92))}

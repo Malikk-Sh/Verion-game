@@ -29,13 +29,15 @@ export type HudInsets = { left: number; right: number; top: number; bottom: numb
 export function hudLayout(width: number, height: number, inset: HudInsets, prefs: HudSettings) {
  const s = Object.fromEntries(Object.entries(parseHudSettings(prefs)).map(([k, v]) => [k, v * HUD_BASE[k as HudGroup] / 10000])) as Record<HudGroup, number>;
  const room = width - inset.left - inset.right, gap = 8;
- // Reserve a readable compass between the two top groups, rather than rely on a device breakpoint.
- const topFit = Math.max(.3, Math.min(1, (room - 128 - gap * 2) / (164 * s.vitals + 256 * s.menu)));
- s.vitals *= topFit; s.menu = Math.max(.8, s.menu * topFit);
+ // Keep the compass on the screen center even with asymmetric safe areas or menu sizes.
+ const center = width / 2;
+ const minCompass = Math.min(128, width - 2 * (Math.max(inset.left, inset.right) + 256 * .8 + gap));
+ s.vitals = Math.min(s.vitals, Math.max(.3, (center - inset.left - gap - minCompass / 2) / 164));
+ s.menu = Math.min(s.menu, Math.max(.8, (center - inset.right - gap - minCompass / 2) / 256));
  const vitalsWidth = 164 * s.vitals, menuWidth = 256 * s.menu;
- const compassRoom = Math.max(1, room - vitalsWidth - menuWidth - gap * 2);
+ const compassRoom = Math.max(1, 2 * Math.min(center - inset.left - vitalsWidth - gap, center - inset.right - menuWidth - gap));
  const compassWidth = Math.min(300 * s.compass, compassRoom);
- const compassLeft = inset.left + vitalsWidth + gap + (compassRoom - compassWidth) / 2;
+ const compassLeft = center - compassWidth / 2;
  const topHeight = Math.max(52 * s.vitals, 48 * s.menu, 56 * s.compass);
  const objectiveTop = inset.top + topHeight + gap;
  // Keep the bottom groups in three lanes even with independently enlarged controls.
@@ -51,7 +53,7 @@ export function hudLayout(width: number, height: number, inset: HudInsets, prefs
   for (let i = 0; i < 24; i++) { const mid = (low + high) / 2; if (fitBottom(mid)) low = mid; else high = mid; }
   fitBottom(low);
  }
- const barUnits = width <= 760 ? 70 : 86;
+ const barUnits = 70;
  // Reserve the band under the reticle for the aim label, even with a large hotbar on a short screen.
  s.hotbar = Math.min(s.hotbar, Math.max(.8, (height / 2 - inset.bottom - 36 - 32 * .8) / barUnits));
  const aimRoom = height / 2 - inset.bottom - barUnits * s.hotbar;

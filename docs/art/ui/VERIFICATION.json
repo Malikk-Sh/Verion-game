@@ -605,7 +605,7 @@
     "physicalPhoneTested": false
   },
   "hudCustomization": {
-    "date": "2026-10-04",
+    "date": "2026-10-05",
     "unitTests": "42/42",
     "build": "tsc --noEmit + vite build passed; standalone preview unchanged",
     "baseline": {
@@ -621,6 +621,7 @@
     "hudVersion": 2,
     "browser": {
       "checks": [
+        "Icon-only actions, unnumbered hotbar without caption and centered compass",
         "Actual HUD CSS at eight viewports, 80/100/150%: no intersections, inside screen, buttons ≥32px",
         "Simulated landscape safe areas with largest preferences",
         "Broken → bottle → empty → healthy tool resets status and renders remaining gas",
@@ -638,7 +639,8 @@
         "artifacts/hud-new-844x390.png",
         "artifacts/hud-new-667x320-quest.png",
         "artifacts/hud-new-settings.png",
-        "artifacts/hud-new-visor-default.png"
+        "artifacts/hud-final-844x390.png",
+        "artifacts/hud-final-667x320.png"
       ],
       "errors": [],
       "environment": "Chromium / SwiftShader; UI correctness, not phone FPS",
@@ -863,6 +865,39 @@
         }
       ]
     },
-    "physicalPhoneTested": false
+    "physicalPhoneTested": false,
+    "finalGameCapture": {
+      "screenshots": [
+        "artifacts/hud-final-844x390.png",
+        "artifacts/hud-final-667x320.png"
+      ],
+      "errors": [],
+      "layouts": [
+        {
+          "width": 844,
+          "height": 390,
+          "overlap": [],
+          "centerError": 0,
+          "numbers": 0,
+          "booting": false
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "overlap": [],
+          "centerError": -0.015625,
+          "numbers": 0,
+          "booting": false
+        }
+      ]
+    },
+    "polish": {
+      "actions": "Icons with contextual accessible names; no visible action/run/jump labels",
+      "hotbar": "No caption or slot numbers; backpack still numbered and keyboard 1–6 unchanged",
+      "text": "Vital values max(8px,11×scale); GU max(6.5px,7×scale); stack counts reduced",
+      "compass": "Screen center including asymmetric safe areas; width and side groups adapt",
+      "visor": "Noticeable smooth edge shading; transparent central view; does not intercept touch",
+      "cuts": "6px×scale at slot panel corners, thin diagonal borders; 8px×scale on title"
+    }
   }
 }

@@ -144,7 +144,7 @@ function boot(){
  function updateHotbar(){
   if(!game)return;const inv=game.player.inventory,key=JSON.stringify([game.player.hotbar,inv.slice(0,HOTBAR_SIZE)]);
   if(key===hudKey)return;hudKey=key;
-  hotCells.forEach((c,i)=>{cellContent(c,inv[i],i);c.classList.toggle('active',i===game!.player.hotbar);c.setAttribute('aria-label',cellAria(inv[i],i));c.setAttribute('aria-pressed',String(i===game!.player.hotbar));});
+  hotCells.forEach((c,i)=>{cellContent(c,inv[i],i,{number:false});c.classList.toggle('active',i===game!.player.hotbar);c.setAttribute('aria-label',cellAria(inv[i],i));c.setAttribute('aria-pressed',String(i===game!.player.hotbar));});
   const s=inv[game.player.hotbar];
   el('hotbar-name').textContent=s?ITEMS[s.itemId].name:`Ячейка ${game.player.hotbar+1} пуста`;
   el('hotbar-meta').textContent=!s?'':s.durability!==undefined?`${s.durability} / ${TOOLS[s.itemId].durability}`:s.milliGU!==undefined?`${Math.round(s.milliGU/1000)} GU`:ITEMS[s.itemId].stack>1?`×${s.count}`:'';
@@ -377,8 +377,9 @@ function boot(){
   const disabled=kind==='none'||!!blocked||!running;
   actionKind=disabled?'none':kind;if(disabled)holdMine=false;
   actionBtn.dataset.kind=kind;actionBtn.setAttribute('aria-disabled',String(disabled));actionBtn.style.setProperty('--p',String(mineRatio));
-  if(el('action-label').textContent!==label){el('action-label').textContent=label;el('action-icon').innerHTML=`<use href="#${iconId}"/>`;actionBtn.setAttribute('aria-label',kind==='mine'?'Добыть (удерживать)':label);}
-  actionBtn.title=blocked;
+  const actionLabel=kind==='mine'?'Добыть (удерживать)':label;
+  if(actionBtn.getAttribute('aria-label')!==actionLabel){el('action-icon').innerHTML=`<use href="#${iconId}"/>`;actionBtn.setAttribute('aria-label',actionLabel);}
+  actionBtn.title=blocked||actionLabel;
  }
  function onMined(ev:Extract<ReturnType<typeof mineTick>,{kind:'block'}>){
   const n=NODE_BY_ID.get(ev.nodeId)!;audio.tone('item');applyNodes();
