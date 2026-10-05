@@ -26,19 +26,41 @@ export function loadHudSettings(value: unknown, version: unknown): HudSettings {
  return parseHudSettings(Object.fromEntries(Object.entries(old).map(([key, n]) => [key, n / HUD_BASE[key as HudGroup] * 100])));
 }
 export type HudInsets = { left: number; right: number; top: number; bottom: number };
+/** Native, resolution-independent visor artwork. Built once, then filled by the live --v ratio. */
+function installVisorWings() {
+ if (document.querySelector('#vitals .visor-rail')) return;
+ const rail = `<svg class="visor-rail" viewBox="0 0 300 80" preserveAspectRatio="none" aria-hidden="true"><path class="visor-glass" d="M1 25 Q100 2 299 2 L299 54 Q100 54 1 77Z"/><path class="visor-edge" d="M1 25 Q100 2 299 2"/><path class="visor-lip" d="M1 55 L1 77 Q100 54 299 54"/></svg>`;
+ document.getElementById('vitals')!.insertAdjacentHTML('afterbegin',rail);
+ document.getElementById('hud-buttons')!.insertAdjacentHTML('afterbegin',rail);
+ document.querySelectorAll<HTMLElement>('#vitals .gauge').forEach((gauge,index)=>{
+  const curve=(x:number)=>2+22*(1-x/300)**2;
+  let segments='';
+  for(let i=0;i<10;i++) {
+   const x=5+i*9.1, end=x+7.1, y=curve(index*100+x)+9, ey=curve(index*100+end)+9;
+   segments+=`<path d="M${x} ${y} L${end} ${ey} L${end} ${ey+7} L${x} ${y+7}Z"/>`;
+  }
+  const meter=`<svg viewBox="0 0 100 80" preserveAspectRatio="none" aria-hidden="true">${segments}</svg>`;
+  gauge.insertAdjacentHTML('afterbegin',`<div class="vital-track">${meter}</div><div class="vital-fill">${meter}</div>`);
+  gauge.style.setProperty('--readout-top',`${(curve(index*100+50)+27)/80*100}%`);
+ });
+}
 export function hudLayout(width: number, height: number, inset: HudInsets, prefs: HudSettings) {
  const s = Object.fromEntries(Object.entries(parseHudSettings(prefs)).map(([k, v]) => [k, v * HUD_BASE[k as HudGroup] / 10000])) as Record<HudGroup, number>;
  const room = width - inset.left - inset.right, gap = 8;
  // Keep the compass on the screen center even with asymmetric safe areas or menu sizes.
  const center = width / 2;
- const minCompass = Math.min(128, width - 2 * (Math.max(inset.left, inset.right) + 256 * .8 + gap));
- s.vitals = Math.min(s.vitals, Math.max(.3, (center - inset.left - gap - minCompass / 2) / 164));
- s.menu = Math.min(s.menu, Math.max(.8, (center - inset.right - gap - minCompass / 2) / 256));
- const vitalsWidth = 164 * s.vitals, menuWidth = 256 * s.menu;
+ const minCompass = Math.min(128, Math.max(1,width - 2 * (Math.max(inset.left, inset.right) + 240 * .8 + gap)));
+ const wingRoom = Math.max(1,center-Math.max(inset.left,inset.right)-gap-minCompass/2);
+ s.vitals = Math.min(s.vitals,wingRoom/270);
+ s.menu = Math.max(.8,Math.min(s.menu,wingRoom/240));
+ // Same frame on both sides; content sizes still follow their independent preferences.
+ const wingWidth = Math.max(270*s.vitals,240*s.menu);
+ const wingHeight = 80*Math.max(s.vitals,s.menu);
+ const vitalsWidth = wingWidth, menuWidth = wingWidth;
  const compassRoom = Math.max(1, 2 * Math.min(center - inset.left - vitalsWidth - gap, center - inset.right - menuWidth - gap));
  const compassWidth = Math.min(300 * s.compass, compassRoom);
  const compassLeft = center - compassWidth / 2;
- const topHeight = Math.max(52 * s.vitals, 48 * s.menu, 56 * s.compass);
+ const topHeight = Math.max(wingHeight,56 * s.compass);
  const objectiveTop = inset.top + topHeight + gap;
  // Keep the bottom groups in three lanes even with independently enlarged controls.
  const actionWidth = () => Math.max(80 * s.action, 102 * s.movement);
@@ -72,7 +94,7 @@ export function hudLayout(width: number, height: number, inset: HudInsets, prefs
  const aimLeftEdge = aimBottom > height - joyBottom - joyWidth && aimTop < height - joyBottom ? inset.left + joyWidth + gap : inset.left;
  const aimRightEdge = aimBottom > height - inset.bottom - actionHeight ? width - inset.right - actionWidth() - gap : width - inset.right;
  const aimWidth = aimRightEdge - aimLeftEdge, aimLeft = aimLeftEdge + aimWidth / 2;
- return { scales: s, compassLeft, compassWidth, objectiveTop, objectiveHeight, objectiveWidth,
+ return { scales: s, wingWidth, wingHeight, compassLeft, compassWidth, objectiveTop, objectiveHeight, objectiveWidth,
   hotbarLeft, hotbarWidth: barWidth, hotbarHeight: barHeight, joystickBottom: joyBottom,
   joystickSize: joyWidth, actionWidth: actionWidth(), actionHeight, aimTop, aimWidth, aimLeft,
   toastTop: objectiveTop, toastWidth: Math.max(1, room - objectiveWidth - gap), saveHeight };
@@ -80,6 +102,7 @@ export function hudLayout(width: number, height: number, inset: HudInsets, prefs
 
 /** Read safe-area values from CSS; called on resize/settings changes, never in the render loop. */
 export function applyHudSettings(prefs: HudSettings) {
+ installVisorWings();
  const root = document.documentElement, style = getComputedStyle(root);
  const inset = (side: string) => parseFloat(style.getPropertyValue(`--hud-inset-${side}`)) || (side === 'top' || side === 'bottom' ? 10 : 16);
  // CSS max()/env() are resolved by layout, rather than parsed as strings.
@@ -91,7 +114,8 @@ export function applyHudSettings(prefs: HudSettings) {
  }, prefs);
  for (const [key, scale] of Object.entries(layout.scales)) root.style.setProperty(`--hud-${key}`, String(scale));
  root.dataset.compactHudMenu = String(layout.scales.menu < 1);
- const positions = { 'compass-left': layout.compassLeft, 'compass-width': layout.compassWidth,
+ const positions = { 'wing-width': layout.wingWidth, 'wing-height': layout.wingHeight,
+  'compass-left': layout.compassLeft, 'compass-width': layout.compassWidth,
   'objective-top': layout.objectiveTop, 'objective-height': layout.objectiveHeight, 'objective-width': layout.objectiveWidth,
   'hotbar-left': layout.hotbarLeft, 'hotbar-width': layout.hotbarWidth, 'joystick-bottom': layout.joystickBottom,
   'aim-top': layout.aimTop, 'aim-width': layout.aimWidth, 'aim-left': layout.aimLeft,

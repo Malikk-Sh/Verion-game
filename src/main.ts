@@ -462,7 +462,7 @@ function boot(){
  }
  function updateVitals(){
   if(!game)return;const g=game,o2=oxygenGU(g),cap=oxygenCapacityGU(g)||1;
-  const set=(id:string,v:number,ratio:number)=>{const e=el(id);e.style.setProperty('--v',String(Math.max(0,Math.min(1,ratio))));const b=e.querySelector('b')!;const t=String(Math.round(v));if(b.textContent!==t)b.textContent=t;};
+  const set=(id:string,v:number,ratio:number)=>{const e=el(id);e.dataset.low=String(ratio<=.2);e.style.setProperty('--v',String(Math.max(0,Math.min(1,ratio))));const b=e.querySelector('b')!;const t=String(Math.round(v));if(b.textContent!==t)b.textContent=t;};
   set('g-health',g.player.vitals.health,g.player.vitals.health/100);set('g-satiety',g.player.vitals.satiety,g.player.vitals.satiety/100);set('g-oxygen',o2,o2/cap);
   el('g-oxygen').setAttribute('aria-label',`Кислород ${Math.round(o2)} GU`);el('g-health').setAttribute('aria-label',`Здоровье ${Math.round(g.player.vitals.health)}`);el('g-satiety').setAttribute('aria-label',`Сытость ${Math.round(g.player.vitals.satiety)}`);
  }

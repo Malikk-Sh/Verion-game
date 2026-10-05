@@ -45,9 +45,9 @@
 <div id="visor" aria-hidden="true"></div>
 <div id="hud">
  <div id="vitals" title="Здоровье и сытость отображаются; их расход появится на этапе «Выживание»">
-  <div class="gauge" id="g-health" data-kind="health" role="img" aria-label="Здоровье"><svg class="ring" viewBox="0 0 64 64"><circle class="track" cx="32" cy="32" r="27"/><circle class="arc" cx="32" cy="32" r="27" pathLength="100"/></svg><svg class="g-icon"><use href="#i-heart"/></svg><b>100</b></div>
-  <div class="gauge" id="g-satiety" data-kind="satiety" role="img" aria-label="Сытость"><svg class="ring" viewBox="0 0 64 64"><circle class="track" cx="32" cy="32" r="27"/><circle class="arc" cx="32" cy="32" r="27" pathLength="100"/></svg><svg class="g-icon"><use href="#i-food"/></svg><b>100</b></div>
-  <div class="gauge" id="g-oxygen" data-kind="oxygen" role="img" aria-label="Кислород"><svg class="ring" viewBox="0 0 64 64"><circle class="track" cx="32" cy="32" r="27"/><circle class="arc" cx="32" cy="32" r="27" pathLength="100"/></svg><svg class="g-icon"><use href="#i-o2"/></svg><b>240</b><small>GU</small></div>
+  <div class="gauge" id="g-health" data-kind="health" role="img" aria-label="Здоровье"><span class="vital-readout"><svg class="g-icon"><use href="#i-heart"/></svg><b>100</b></span></div>
+  <div class="gauge" id="g-satiety" data-kind="satiety" role="img" aria-label="Сытость"><span class="vital-readout"><svg class="g-icon"><use href="#i-food"/></svg><b>100</b></span></div>
+  <div class="gauge" id="g-oxygen" data-kind="oxygen" role="img" aria-label="Кислород"><span class="vital-readout"><svg class="g-icon"><use href="#i-o2"/></svg><b>240</b><small>GU</small></span></div>
  </div>
  <div id="hud-safe-area" aria-hidden="true"></div>
  <button id="objective" aria-expanded="false" aria-controls="objective-panel"><svg class="obj-arrow"><use href="#i-arrow"/></svg><span id="objective-text">Выйдите из капсулы</span><svg class="obj-chevron"><use href="#i-chevron"/></svg></button>

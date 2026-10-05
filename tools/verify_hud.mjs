@@ -58,8 +58,18 @@ try{
  });
  assert.ok(cells.broken&&!cells.bottle.broken&&!cells.empty&&!cells.repaired);assert.match(cells.bottle.bar,/50%/);check('Broken → bottle → empty → healthy tool resets status and renders remaining gas');
  await page.setViewportSize({width:844,height:390});await page.evaluate(()=>window.hudTest.apply(window.hudTest.defaults()));
- report.labels=await page.locator('#hud-buttons .tile>span:last-child:not(#light-icon)').evaluateAll(es=>es.map(e=>({text:e.textContent,width:e.clientWidth,scroll:e.scrollWidth,font:getComputedStyle(e).fontSize})));
- assert.ok(report.labels.every(l=>l.scroll<=l.width+.5),JSON.stringify(report.labels));check('Default top-menu captions are readable without truncation; compact sizes retain accessible names');
+ const wings=await page.evaluate(()=>{
+  const l=document.querySelector('#vitals').getBoundingClientRect(),r=document.querySelector('#hud-buttons').getBoundingClientRect();
+  return{sameFrame:l.width===r.width&&l.height===r.height,controls:[...document.querySelectorAll('#hud-buttons button')].map(e=>({name:e.getAttribute('aria-label'),width:e.getBoundingClientRect().width})),rails:document.querySelectorAll('.visor-rail').length};
+ });
+ assert.ok(wings.sameFrame&&wings.controls.length===5&&wings.controls.every(c=>c.name&&c.width>=32)&&wings.rails===2);report.wings=wings;check('Mirrored visor frames have equal dimensions and five named controls; resizing does not duplicate artwork');
+ const art=await page.evaluate(()=>({buttonBlur:getComputedStyle(document.querySelector('#suit-button')).backdropFilter,glassStroke:getComputedStyle(document.querySelector('.visor-glass')).stroke,segmentStroke:getComputedStyle(document.querySelector('.vital-fill path')).stroke,food:getComputedStyle(document.querySelector('#g-satiety .vital-fill path')).fill,oxygen:getComputedStyle(document.querySelector('#g-oxygen .vital-fill path')).fill}));
+ assert.equal(art.buttonBlur,'none');assert.equal(art.glassStroke,'none');assert.equal(art.segmentStroke,'none');assert.notEqual(art.food,art.oxygen);report.art=art;check('Native visor artwork keeps translucent glass and distinct segment colors without inherited white strokes');
+ const fills=await page.evaluate(()=>{
+  const g=document.querySelector('#g-oxygen'),f=g.querySelector('.vital-fill');
+  return[0,.5,1].map(ratio=>{g.style.setProperty('--v',String(ratio));f.style.transition='none';return getComputedStyle(f).clipPath});
+ });
+ assert.match(fills[0],/100%/);assert.match(fills[1],/50%/);assert.match(fills[2],/0%/);report.fills=fills;check('Segmented oxygen bar renders empty, half-full and full values');
  if(process.argv.includes('--layout-only')){await page.close();await writeFile('artifacts/hud-layout-verification.json',JSON.stringify(report,null,2)+'\n');await browser.close();await server.close();process.exit(0);}
  await page.close();
  // Fresh isolated context: old settings remain intact. Throttle only this software-rendered test browser.
@@ -74,12 +84,17 @@ try{
  await game.goto('http://127.0.0.1:5177');await ready();
  await game.evaluate(async()=>{
   const [{newGame},{SaveStore},{heightAt}]=await Promise.all([import('/src/game/state.ts'),import('/src/persist/store.ts'),import('/src/world.ts')]);
-  const g=newGame('w-hud-settings',12345,Date.now(),heightAt(40,42),'HUD settings');g.player.inventory[0].durability=0;
+  const g=newGame('w-hud-settings',12345,Date.now(),heightAt(40,42),'HUD settings');g.player.inventory[0].durability=0;g.player.vitals.health=18;g.player.vitals.satiety=80;
   [['iron_raw',4],['copper_raw',13],['ice',24],['stone',13]].forEach(([itemId,count],i)=>g.player.inventory[i+2]={itemId,count});
   g.player.inventory[10]={itemId:'bottle_1',count:1,milliGU:120000};g.player.inventory[11]={itemId:'tool_stone',count:1,durability:106};
   const st=await SaveStore.open();await st.createSlot(g,null);st.close();
  });
  await game.reload();await ready();await click('#continue');await game.waitForFunction(()=>window.__vireon.getState().running&&!document.body.classList.contains('booting'));
+ assert.equal(await game.locator('#g-health').getAttribute('data-low'),'true');assert.equal(await game.locator('#g-health b').textContent(),'18');assert.equal(await game.locator('#g-satiety b').textContent(),'80');
+ await game.locator('#suit-button').tap();assert.equal(await game.locator('#suit-panel').isVisible(),true);await click('#close-suit');
+ await game.locator('#map-button').tap();assert.equal(await game.locator('#map-panel').isVisible(),true);await click('#close-map');
+ const dayBefore=await game.evaluate(()=>window.__vireon.getState().dayOffsetTicks);await game.locator('#day').tap();assert.notEqual(await game.evaluate(()=>window.__vireon.getState().dayOffsetTicks),dayBefore);await game.locator('#day').tap();
+ check('Live vital numbers and low-health warning; curved suit/map/day buttons respond to touch');
  await game.evaluate(()=>window.__vireon.teleport(67.3,61.6,.05,-.12));
  await click('#inventory-button');await click('#inventory-grid [data-cell="0"]');await click('#act-move');await click('#inventory-grid [data-cell="10"]');await click('#close-inventory');
  assert.equal(await game.locator('#hotbar-slots .cell.broken').count(),0);assert.match(await game.locator('#hotbar-slots .cell').first().locator('.cell-bar').evaluate(e=>getComputedStyle(e).backgroundImage),/50%/);

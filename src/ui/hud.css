@@ -2,17 +2,33 @@
 :root{--hud-joystick:1;--hud-action:1;--hud-movement:1;--hud-menu:1;--hud-compass:1;--hud-vitals:1;--hud-hotbar:1;--hud-info:1}
 #hud-safe-area{position:absolute;inset:0;visibility:hidden;pointer-events:none;padding:var(--st) var(--sr) var(--sb) var(--sl)}
 #hud button{min-width:32px;min-height:32px}
-#vitals{gap:calc(4px * var(--hud-vitals))}
-.gauge{width:calc(52px * var(--hud-vitals));height:calc(52px * var(--hud-vitals))}
-.gauge .g-icon{width:calc(16px * var(--hud-vitals));height:calc(16px * var(--hud-vitals));margin-top:calc(-13px * var(--hud-vitals))}
-.gauge b{top:calc(27px * var(--hud-vitals));font-size:max(8px,calc(11px * var(--hud-vitals)))}
-.gauge[data-kind=oxygen] b{top:calc(23px * var(--hud-vitals))}
-.gauge small{top:calc(37px * var(--hud-vitals));font-size:max(6.5px,calc(7px * var(--hud-vitals)))}
-#hud-buttons{gap:calc(4px * var(--hud-menu))}
-.tile,.tile.square{width:calc(48px * var(--hud-menu));height:calc(48px * var(--hud-menu));font-size:max(10.5px,calc(10.5px * var(--hud-menu)));gap:calc(3px * var(--hud-menu));clip-path:polygon(4px 0,calc(100% - 4px) 0,100% 4px,100% calc(100% - 4px),calc(100% - 4px) 100%,4px 100%,0 calc(100% - 4px),0 4px)}
-.tile svg,.tile.square svg{width:calc(22px * var(--hud-menu));height:calc(22px * var(--hud-menu))}
-.tile span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-:root[data-compact-hud-menu=true] #hud-buttons .tile>span:last-child:not(#light-icon){display:none}
+/* 3B: mirrored curved visor wings, with upright readouts and icon-only controls. */
+#vitals,#hud-buttons{width:var(--hud-wing-width);height:var(--hud-wing-height);gap:0;isolation:isolate}
+.visor-rail{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:-1;overflow:visible}
+.visor-glass{fill:rgba(5,24,29,.62);stroke:none}.visor-edge{fill:none;stroke:rgba(103,232,238,.58);stroke-width:1;vector-effect:non-scaling-stroke}
+.visor-lip{fill:none;stroke:rgba(103,232,238,.18);stroke-width:.7;vector-effect:non-scaling-stroke}
+#hud-buttons .visor-rail{transform:scaleX(-1)}
+#vitals .gauge{width:33.333333%;height:100%;border-radius:0;background:none;display:block;--c:#9deaf0}
+#vitals .gauge[data-kind=satiety]{--c:#f5b13c}#vitals .gauge[data-kind=oxygen]{--c:#43e3ee}
+#vitals .gauge[data-low=true]{--c:#ff6269}
+.vital-track,.vital-fill{position:absolute;inset:0;pointer-events:none}
+.vital-track svg,.vital-fill svg{width:100%;height:100%;display:block}
+.vital-track path{fill:rgba(160,204,207,.22);stroke:none}.vital-fill path{fill:var(--c);stroke:none}
+.vital-fill{clip-path:inset(0 calc((1 - var(--v,1)) * 100%) 0 0);transition:clip-path .3s;filter:drop-shadow(0 0 2px color-mix(in srgb,var(--c) 25%,transparent))}
+.vital-readout{position:absolute;top:var(--readout-top);left:0;right:0;display:flex;align-items:center;justify-content:center;gap:calc(5px * var(--hud-vitals));white-space:nowrap}
+#vitals .g-icon{width:calc(16px * var(--hud-vitals));height:calc(16px * var(--hud-vitals));margin:0;flex-shrink:0;fill:none;stroke:var(--c)}
+#vitals .gauge b{position:static;font-size:max(9px,calc(14px * var(--hud-vitals)));line-height:1.2}
+#vitals .gauge small{position:static;font-size:max(7px,calc(8px * var(--hud-vitals)));letter-spacing:0;color:var(--c);margin-left:calc(-3px * var(--hud-vitals))}
+#hud-buttons{display:flex;align-items:flex-start;justify-content:space-around}
+#hud-buttons .tile{position:relative;flex:none;width:calc(40px * var(--hud-menu));height:calc(40px * var(--hud-menu));margin-top:calc(var(--hud-wing-height) * var(--button-top));padding:0;border-radius:6px;clip-path:none;box-shadow:none;background:none;backdrop-filter:none;-webkit-backdrop-filter:none;color:#d9eeef}
+#hud-buttons .tile:after{content:"";position:absolute;left:10%;right:10%;bottom:0;height:5px;border:1px solid rgba(103,232,238,.32);border-top:0;border-radius:0 0 5px 5px;pointer-events:none}
+#suit-button{--button-top:.153}#inventory-button{--button-top:.175}#map-button{--button-top:.219}#day{--button-top:.285}#pause-button{--button-top:.373}
+#hud-buttons .tile svg{width:calc(21px * var(--hud-menu));height:calc(21px * var(--hud-menu));stroke-width:1.7}
+#hud-buttons .tile>span:last-child:not(#light-icon){display:none}
+#hud-buttons .tile:hover,#hud-buttons .tile:focus-visible{background:rgba(41,112,120,.35)}
+#hud-buttons .tile:focus-visible{outline:1px solid var(--aqua);outline-offset:1px}
+#hud-buttons .tile:active{background:rgba(41,112,120,.55)}
+#hud-buttons #day[aria-pressed=true]{box-shadow:none;background:rgba(112,147,200,.12)}
 #objective{top:var(--hud-objective-top);width:var(--hud-objective-width);max-width:none;height:var(--hud-objective-height);min-height:32px;padding:0 calc(8px * var(--hud-info));gap:calc(6px * var(--hud-info));font-size:max(12px,calc(12px * var(--hud-info)))}
 #objective .obj-arrow,#objective .obj-chevron{width:calc(16px * var(--hud-info));height:calc(16px * var(--hud-info))}
 #objective .obj-chevron{flex-shrink:0}#objective-text{flex:1}

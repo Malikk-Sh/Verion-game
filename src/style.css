@@ -33,17 +33,11 @@ body[data-running=false] #hud{opacity:.12}body[data-started=false] #hud{opacity:
 :root{--teal:#0b2b31;--teal-2:#0f3a41;--teal-deep:rgba(5,22,26,.82);--glow:rgba(84,226,236,.62);--glow-soft:rgba(84,226,236,.28);--aqua:#43e3ee;--amber-hi:#ffb43c;
  --sl:max(16px,env(safe-area-inset-left));--sr:max(16px,env(safe-area-inset-right));--st:max(10px,env(safe-area-inset-top));--sb:max(10px,env(safe-area-inset-bottom));--cell:58px}
 .hud-plate{background:linear-gradient(180deg,rgba(13,48,54,.86),rgba(5,22,26,.88));box-shadow:inset 0 0 0 1px var(--glow),inset 0 0 18px rgba(67,227,238,.12)}
-/* Vitals: three radial gauges */
-#vitals{position:absolute;left:var(--sl);top:var(--st);display:flex;gap:8px;pointer-events:auto}
-.gauge{position:relative;width:62px;height:62px;display:grid;place-items:center;border-radius:50%;background:radial-gradient(circle,rgba(6,24,28,.92) 55%,rgba(6,24,28,.6) 72%,transparent 74%);--c:#ff4d5a}
-.gauge[data-kind=satiety]{--c:#f5b13c}.gauge[data-kind=oxygen]{--c:#36dbe9}
-.gauge .ring{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg);stroke-linecap:butt}
-.gauge .track{fill:none;stroke:rgba(255,255,255,.1);stroke-width:5}
-.gauge .arc{fill:none;stroke:var(--c);stroke-width:5;stroke-dasharray:calc(var(--v,1)*100) 100;filter:drop-shadow(0 0 3px var(--c));transition:stroke-dasharray .4s}
-.gauge .g-icon{position:relative;width:17px;height:17px;margin-top:-14px;color:var(--c);fill:color-mix(in srgb,var(--c) 70%,transparent);stroke:var(--c)}
-.gauge b{position:absolute;left:0;right:0;top:31px;text-align:center;font-size:15px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
-.gauge small{position:absolute;left:0;right:0;top:46px;text-align:center;font-size:8px;font-weight:700;color:var(--c);letter-spacing:.06em}
-.gauge[data-kind=oxygen] b{top:28px}
+/* Vitals: curved visor artwork and responsive geometry live in ui/hud.css. */
+#vitals{position:absolute;left:var(--sl);top:var(--st);display:flex;pointer-events:auto}
+.gauge{position:relative;--c:#9deaf0}
+.gauge .g-icon{color:var(--c)}
+.gauge b{font-weight:700;font-variant-numeric:tabular-nums}
 /* Objective chip */
 #objective{position:absolute;left:var(--sl);top:calc(var(--st) + 70px);display:flex;align-items:center;gap:10px;min-height:48px;max-width:250px;padding:0 10px 0 12px;font-size:14px;font-weight:600;text-align:left;
  border:0;background:linear-gradient(180deg,rgba(13,48,54,.86),rgba(5,22,26,.88));box-shadow:inset 3px 0 0 var(--amber-hi),inset 0 0 0 1px var(--glow-soft);clip-path:polygon(0 0,calc(100% - 10px) 0,100% 10px,100% 100%,0 100%);pointer-events:auto;backdrop-filter:blur(6px)}
