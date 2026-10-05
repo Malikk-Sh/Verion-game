@@ -56,6 +56,8 @@ try {
  await page.click('#day');await page.screenshot({path:'artifacts/b4-mobile.png'});report.measurements.push(await state());
  // Accepted minimum for every button is 32×32 CSS px (6 October).
  const checkButtonTargets=async(label)=>{
+  // Opening panels start at scale(.98); measure their final geometry, not an animation frame.
+  await page.evaluate(async()=>{await Promise.all([...document.querySelectorAll('.panel:not([hidden])')].flatMap(panel=>panel.getAnimations()).map(animation=>animation.finished.catch(()=>{})));});
   const targets=await page.evaluate(()=>[...document.querySelectorAll('button')].filter(b=>b.getClientRects().length).map(b=>{const r=b.getBoundingClientRect();return{name:b.id||b.getAttribute('aria-label')||b.className,width:r.width,height:r.height};}));
   assert.ok(targets.length>0,`${label}: buttons must be visible`);
   assert.deepEqual(targets.filter(b=>b.width<31.5||b.height<31.5),[],`${label}: buttons must be ≥32px in both dimensions`);
