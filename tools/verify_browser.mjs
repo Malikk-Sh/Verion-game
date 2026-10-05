@@ -54,19 +54,27 @@ try {
  assert.equal((await state()).input.joyY,0);assert.equal((await state()).input.lookPointer,null);check('Two simultaneous real touch contacts move and look independently, then release');
  await cd.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[a]});await cd.send('Input.dispatchTouchEvent',{type:'touchCancel',touchPoints:[]});assert.equal((await state()).input.joyY,0);check('Touch cancellation clears joystick');
  await page.click('#day');await page.screenshot({path:'artifacts/b4-mobile.png'});report.measurements.push(await state());
- // Accepted HUD minimum is 32px (4 October); settings and inventory retain their separate requirements.
- const checkHudTargets=async(label)=>{
-  const targets=await page.evaluate(()=>[...document.querySelectorAll('#hud button')].filter(b=>b.getClientRects().length).map(b=>{const r=b.getBoundingClientRect();return{name:b.id||b.getAttribute('aria-label')||b.className,width:r.width,height:r.height};}));
-  assert.ok(targets.length>0,`${label}: HUD controls must be visible`);
-  assert.deepEqual(targets.filter(b=>b.width<31.5||b.height<31.5),[],`${label}: HUD targets must be ≥32px in both dimensions`);
-  check(`${label} HUD controls are at least 32 CSS pixels wide and tall`);
+ // Accepted minimum for every button is 32×32 CSS px (6 October).
+ const checkButtonTargets=async(label)=>{
+  const targets=await page.evaluate(()=>[...document.querySelectorAll('button')].filter(b=>b.getClientRects().length).map(b=>{const r=b.getBoundingClientRect();return{name:b.id||b.getAttribute('aria-label')||b.className,width:r.width,height:r.height};}));
+  assert.ok(targets.length>0,`${label}: buttons must be visible`);
+  assert.deepEqual(targets.filter(b=>b.width<31.5||b.height<31.5),[],`${label}: buttons must be ≥32px in both dimensions`);
+  check(`${label}: all visible buttons are at least 32 CSS pixels wide and tall`);
  };
- await checkHudTargets('844×390');
+ await checkButtonTargets('844×390 gameplay');
  await page.setViewportSize({width:390,height:844});await page.waitForFunction(()=>!document.getElementById('portrait').hidden);assert.equal((await state()).running,false);await page.screenshot({path:'artifacts/b4-portrait.png'});
  await page.setViewportSize({width:844,height:390});await page.waitForFunction(()=>document.getElementById('portrait').hidden);assert.equal((await state()).running,false);await page.click('#resume');check('Portrait pauses; landscape return requires explicit resume');
- await page.setViewportSize({width:667,height:320});await page.screenshot({path:'artifacts/b4-compact.png'});await checkHudTargets('667×320');
+ await page.setViewportSize({width:667,height:320});await page.screenshot({path:'artifacts/b4-compact.png'});await checkButtonTargets('667×320 gameplay');
  const overlap=await page.evaluate(()=>{const rs=['hotbar','joystick','actions'].map(id=>document.getElementById(id).getBoundingClientRect());return [[0,1],[0,2],[1,2]].some(([i,j])=>rs[i].left<rs[j].right&&rs[i].right>rs[j].left&&rs[i].top<rs[j].bottom&&rs[i].bottom>rs[j].top);});assert.equal(overlap,false);check('Compact 667×320 landscape keeps hotbar clear of movement controls');
- await page.click('#pause-button');await page.click('#settings-button');const smallSettings=await page.evaluate(()=>Array.from(document.querySelectorAll('#settings button, #settings .range-row')).filter(b=>b.getClientRects().length&&b.getBoundingClientRect().height<47).map(b=>b.id||b.className));assert.deepEqual(smallSettings,[]);await page.screenshot({path:'artifacts/b4-compact-settings.png'});await page.click('#settings-back');await page.click('#resume');check('Compact 667×320 settings keep 48 px touch targets');
+ await page.click('#pause-button');await checkButtonTargets('667×320 pause');
+ await page.click('#settings-button');await checkButtonTargets('667×320 settings');
+ const smallRanges=await page.evaluate(()=>[...document.querySelectorAll('#settings .range-row')].filter(e=>e.getClientRects().length&&e.getBoundingClientRect().height<47).map(e=>e.className));assert.deepEqual(smallRanges,[],'Settings range rows retain their 48px height');
+ await page.screenshot({path:'artifacts/b4-compact-settings.png'});
+ await page.click('#hud-settings-button');await checkButtonTargets('667×320 HUD settings');await page.click('#hud-settings-back');
+ await page.click('#visor-settings-button');await checkButtonTargets('667×320 visor settings');await page.click('#visor-settings-back');
+ await page.click('#settings-back');await page.click('#saves-button');await checkButtonTargets('667×320 saves');await page.click('#close-saves');await page.click('#resume');
+ await page.click('#inventory-button');await checkButtonTargets('667×320 inventory');await page.click('#close-inventory');
+ await page.click('#suit-button');await checkButtonTargets('667×320 suit');await page.click('#close-suit');
  // Vercel serves the Vite production build; standalone HTML is no longer maintained.
  production=await preview({preview:{host:'127.0.0.1',port:5174,strictPort:true}});
  await page.goto('http://127.0.0.1:5174');await page.waitForFunction(()=>document.body.dataset.ready==='true');await page.click('#start');await page.waitForFunction(()=>window.__vireon.getState().running);check('Production Vite build initializes and starts (Vercel deployment format)');
