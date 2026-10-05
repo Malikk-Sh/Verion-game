@@ -101,6 +101,12 @@ print(json.dumps({n:{k:list(im.getpixel(p)) for k,p in points.items()} for n,im 
  const game=await context.newPage();debugPage=game;game.setDefaultTimeout(30000);game.on('pageerror',e=>report.errors.push(e.message));
  const ready=()=>game.waitForFunction(()=>document.body.dataset.ready==='true');
  const click=sel=>game.$eval(sel,e=>e.click());
+ const continueAfterReload=async()=>{
+  await click('#continue');await game.waitForFunction(()=>{const s=window.__vireon.getState();return s.running||s.dialog==='lease-panel';});
+  // The previous document may leave an unexpired lease if unload cancels its release.
+  if(await game.evaluate(()=>window.__vireon.getState().dialog==='lease-panel'))await click('#lease-primary');
+  await game.waitForFunction(()=>window.__vireon.getState().running);
+ };
  const shot=async name=>{await game.waitForFunction(()=>!document.body.classList.contains('booting'));await game.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>resolve())));await game.waitForTimeout(300);const path=`artifacts/hud-new-${name}.png`;await game.screenshot({path,timeout:30000});report.screenshots.push(path);};
  await game.goto('http://127.0.0.1:5177');await ready();
  await game.evaluate(async()=>{
@@ -110,7 +116,7 @@ print(json.dumps({n:{k:list(im.getpixel(p)) for k,p in points.items()} for n,im 
   g.player.inventory[10]={itemId:'bottle_1',count:1,milliGU:120000};g.player.inventory[11]={itemId:'tool_stone',count:1,durability:106};
   const st=await SaveStore.open();await st.createSlot(g,null);st.close();
  });
- await game.reload();await ready();await click('#continue');await game.waitForFunction(()=>window.__vireon.getState().running&&!document.body.classList.contains('booting'));
+ await game.reload();await ready();await continueAfterReload();await game.waitForFunction(()=>!document.body.classList.contains('booting'));
  assert.equal(await game.locator('#g-health').getAttribute('data-low'),'true');assert.equal(await game.locator('#g-health b').textContent(),'18');assert.equal(await game.locator('#g-satiety b').textContent(),'80');
  await game.locator('#suit-button').tap();assert.equal(await game.locator('#suit-panel').isVisible(),true);await click('#close-suit');
  await game.locator('#map-button').tap();assert.equal(await game.locator('#map-panel').isVisible(),true);await click('#close-map');
@@ -137,7 +143,7 @@ print(json.dumps({n:{k:list(im.getpixel(p)) for k,p in points.items()} for n,im 
  await game.reload();await ready();await click('#title-settings');await click('#hud-settings-button');
  assert.deepEqual(await game.locator('.hud-size-row input').evaluateAll(es=>es.map(e=>Number(e.value))),values);check('Eight independent preferences persist after reload without replacing previous graphics/audio settings');
  await click('#hud-reset');assert.deepEqual(await game.locator('.hud-size-row input').evaluateAll(es=>es.map(e=>Number(e.value))),Array(8).fill(100));assert.equal(await game.evaluate(()=>JSON.parse(localStorage.getItem('vireon.settings')).fov),76);check('Reset changes HUD sizes only');
- await click('#hud-settings-back');await click('#settings-back');await click('#continue');await game.waitForFunction(()=>window.__vireon.getState().running);
+ await click('#hud-settings-back');await click('#settings-back');await continueAfterReload();
  await game.setViewportSize({width:844,height:390});await game.evaluate(()=>window.__vireon.teleport(44,46,-.20,-.08));await game.waitForTimeout(1200);await shot('visor-default');
  const before=await game.evaluate(()=>window.__vireon.getState());await game.locator('#hotbar-slots .cell').nth(1).tap();await game.waitForFunction(()=>window.__vireon.getState().hotbar===1);
  const after=await game.evaluate(()=>window.__vireon.getState());assert.equal(after.hotbar,1);assert.equal(after.yaw,before.yaw);assert.equal(after.pitch,before.pitch);check('Smaller hotbar cells select items and do not rotate the camera');
@@ -155,7 +161,7 @@ print(json.dumps({n:{k:list(im.getpixel(p)) for k,p in points.items()} for n,im 
  await game.keyboard.press('Escape');assert.equal(await game.locator('#settings').isVisible(),true);await click('#visor-settings-button');await click('#visor-reset');
  const afterVisor=await game.evaluate(()=>JSON.parse(localStorage.getItem('vireon.settings')));assert.deepEqual(afterVisor.visor,{strength:100,spread:100});
  for(const key of ['quality','sound','bob','fov','hud'])assert.deepEqual(afterVisor[key],previous[key]);
- await game.keyboard.press('Escape');assert.equal(await game.locator('#settings').isVisible(),true);await click('#settings-back');await click('#continue');await game.waitForFunction(()=>window.__vireon.getState().running);await click('#pause-button');await click('#settings-button');await click('#visor-settings-button');await click('#visor-preview');assert.equal(await game.evaluate(()=>window.__vireon.getState().running),true);
+ await game.keyboard.press('Escape');assert.equal(await game.locator('#settings').isVisible(),true);await click('#settings-back');await continueAfterReload();await click('#pause-button');await click('#settings-button');await click('#visor-settings-button');await click('#visor-preview');assert.equal(await game.evaluate(()=>window.__vireon.getState().running),true);
  check('Visor preferences persist including 0%; independent resets, Escape navigation and gameplay preview work');
  // Use the real suit controls: no helmet means no decorative visor; other parts must not affect it.
  await game.evaluate(()=>window.__vireon.teleport(40,40,-.2,-.08));await game.waitForTimeout(400);
@@ -166,7 +172,7 @@ print(json.dumps({n:{k:list(im.getpixel(p)) for k,p in points.items()} for n,im 
  await click('#part-grid [data-part="helmet"]');await click('#suit-remove');
  assert.equal(await game.evaluate(()=>window.__vireon.getState().suit.helmet),null);assert.equal(await game.locator('#visor').evaluate(e=>e.hidden),true);
  await click('#close-suit');await game.evaluate(()=>window.__vireon.teleport(44,46,-.2,-.08));await shot('without-helmet');
- await game.evaluate(()=>window.__vireon.save());await game.reload();await ready();await click('#continue');await game.waitForFunction(()=>window.__vireon.getState().running);
+ await game.evaluate(()=>window.__vireon.save());await game.reload();await ready();await continueAfterReload();
  assert.equal(await game.locator('#visor').evaluate(e=>e.hidden),true);assert.equal(await game.evaluate(()=>window.__vireon.getState().suit.helmet),null);
  await click('#suit-button');await click('#part-grid [data-part="helmet"]');await click('#suit-replace');await click('#suit-detail .option');
  assert.ok(await game.evaluate(()=>window.__vireon.getState().suit.helmet));assert.equal(await game.locator('#visor').evaluate(e=>e.hidden),false);
