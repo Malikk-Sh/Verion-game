@@ -1,14 +1,13 @@
 /** Browser verification of the B4 scene and UI, still valid for S1 (see verify_s1.mjs for S1 systems). Starts its own server, so no shared daemon is required. */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+
 import { chromium as playwright } from 'playwright';
-import { createServer } from 'vite';
+import { createServer, preview } from 'vite';
 await mkdir('artifacts',{recursive:true});
 const server=await createServer({server:{host:'127.0.0.1',port:5173,strictPort:true}});
 await server.listen();
-let browser;
+let browser, production;
 const report={checks:[],errors:[],measurements:[],environment:'Headless Chromium; software rendering (SwiftShader) in this verification environment, economy preset for gameplay checks. Not a phone FPS test.'};
 const check=(name)=>{report.checks.push(name);console.log('PASS:',name);};
 try {
@@ -55,14 +54,23 @@ try {
  assert.equal((await state()).input.joyY,0);assert.equal((await state()).input.lookPointer,null);check('Two simultaneous real touch contacts move and look independently, then release');
  await cd.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[a]});await cd.send('Input.dispatchTouchEvent',{type:'touchCancel',touchPoints:[]});assert.equal((await state()).input.joyY,0);check('Touch cancellation clears joystick');
  await page.click('#day');await page.screenshot({path:'artifacts/b4-mobile.png'});report.measurements.push(await state());
- const badTargets=await page.evaluate(()=>Array.from(document.querySelectorAll('button')).filter(b=>b.getClientRects().length&&b.getBoundingClientRect().height<47).map(b=>b.id));assert.deepEqual(badTargets,[]);check('844×390 layout has visible control targets at least 48 CSS pixels tall');
+ // Accepted HUD minimum is 32px (4 October); settings and inventory retain their separate requirements.
+ const checkHudTargets=async(label)=>{
+  const targets=await page.evaluate(()=>[...document.querySelectorAll('#hud button')].filter(b=>b.getClientRects().length).map(b=>{const r=b.getBoundingClientRect();return{name:b.id||b.getAttribute('aria-label')||b.className,width:r.width,height:r.height};}));
+  assert.ok(targets.length>0,`${label}: HUD controls must be visible`);
+  assert.deepEqual(targets.filter(b=>b.width<31.5||b.height<31.5),[],`${label}: HUD targets must be ≥32px in both dimensions`);
+  check(`${label} HUD controls are at least 32 CSS pixels wide and tall`);
+ };
+ await checkHudTargets('844×390');
  await page.setViewportSize({width:390,height:844});await page.waitForFunction(()=>!document.getElementById('portrait').hidden);assert.equal((await state()).running,false);await page.screenshot({path:'artifacts/b4-portrait.png'});
  await page.setViewportSize({width:844,height:390});await page.waitForFunction(()=>document.getElementById('portrait').hidden);assert.equal((await state()).running,false);await page.click('#resume');check('Portrait pauses; landscape return requires explicit resume');
- await page.setViewportSize({width:667,height:320});await page.screenshot({path:'artifacts/b4-compact.png'});
+ await page.setViewportSize({width:667,height:320});await page.screenshot({path:'artifacts/b4-compact.png'});await checkHudTargets('667×320');
  const overlap=await page.evaluate(()=>{const rs=['hotbar','joystick','actions'].map(id=>document.getElementById(id).getBoundingClientRect());return [[0,1],[0,2],[1,2]].some(([i,j])=>rs[i].left<rs[j].right&&rs[i].right>rs[j].left&&rs[i].top<rs[j].bottom&&rs[i].bottom>rs[j].top);});assert.equal(overlap,false);check('Compact 667×320 landscape keeps hotbar clear of movement controls');
  await page.click('#pause-button');await page.click('#settings-button');const smallSettings=await page.evaluate(()=>Array.from(document.querySelectorAll('#settings button, #settings .range-row')).filter(b=>b.getClientRects().length&&b.getBoundingClientRect().height<47).map(b=>b.id||b.className));assert.deepEqual(smallSettings,[]);await page.screenshot({path:'artifacts/b4-compact-settings.png'});await page.click('#settings-back');await page.click('#resume');check('Compact 667×320 settings keep 48 px touch targets');
- await page.goto(pathToFileURL(resolve('artifacts/vireon-verdana-s1.html')).href);await page.waitForFunction(()=>document.body.dataset.ready==='true');await page.click('#start');await page.waitForFunction(()=>window.__vireon.getState().running);check('Standalone HTML initializes and starts from file://');
- const requests=await page.evaluate(()=>performance.getEntriesByType('resource').map(r=>r.name).filter(n=>n.startsWith('http')));assert.deepEqual(requests,[]);check('Standalone requires no remote runtime resources');
+ // Vercel serves the Vite production build; standalone HTML is no longer maintained.
+ production=await preview({preview:{host:'127.0.0.1',port:5174,strictPort:true}});
+ await page.goto('http://127.0.0.1:5174');await page.waitForFunction(()=>document.body.dataset.ready==='true');await page.click('#start');await page.waitForFunction(()=>window.__vireon.getState().running);check('Production Vite build initializes and starts (Vercel deployment format)');
+ const requests=await page.evaluate(()=>performance.getEntriesByType('resource').map(r=>r.name).filter(n=>/^https?:/.test(n)&&new URL(n).origin!==location.origin));assert.deepEqual(requests,[]);check('Production build requires no external runtime resources');
  // Rejected and unavailable fullscreen are explicit UI states, never false success.
  await page.click('#pause-button');await page.click('#settings-button');await page.evaluate(()=>{document.documentElement.requestFullscreen=()=>Promise.reject(new Error('test denial'));});await page.click('#fullscreen-toggle');await page.waitForFunction(()=>document.getElementById('fullscreen-status').textContent.includes('не разрешил'));assert.equal((await state()).fullscreen,false);check('Fullscreen denial leaves scene usable and displays a clear message');
  await page.addInitScript(()=>{Object.defineProperty(document,'fullscreenEnabled',{get:()=>false});});await page.reload();await page.waitForFunction(()=>document.body.dataset.ready==='true');await page.click('#start');await page.waitForFunction(()=>window.__vireon.getState().running);await page.click('#pause-button');await page.click('#settings-button');assert.equal(await page.locator('#fullscreen-toggle').isDisabled(),true);check('Unsupported fullscreen is disabled with an explanation');
@@ -71,4 +79,4 @@ try {
  await art.goto('http://127.0.0.1:5173/tools/scene-review.html?view=capsule&night');await art.waitForFunction(()=>document.body.dataset.ready==='true');await art.screenshot({path:'artifacts/b4-model-night.png'});await art.close();check('All thirteen close-up model views and night variant render');
  assert.deepEqual(report.errors,[]);check('No browser console errors or uncaught exceptions');
  await writeFile('artifacts/browser-verification.json',JSON.stringify(report,null,2)+'\n');
-} finally {await browser?.close();await server.close();}
+} finally {await browser?.close();if(production)await new Promise((resolve,reject)=>production.httpServer.close(e=>e?reject(e):resolve()));await server.close();}
