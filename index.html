@@ -42,7 +42,7 @@
  <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11 12 4l8 7v9h-5v-6H9v6H4Z"/></symbol>
 </defs></svg>
 <canvas id="world" aria-label="Трёхмерная долина Верданы"></canvas>
-<div id="visor" aria-hidden="true"></div>
+<div id="visor" aria-hidden="true" hidden></div>
 <div id="hud">
  <div id="vitals" title="Здоровье и сытость отображаются; их расход появится на этапе «Выживание»">
   <div class="gauge" id="g-health" data-kind="health" role="img" aria-label="Здоровье"><span class="vital-readout"><svg class="g-icon"><use href="#i-heart"/></svg><b>100</b></span></div>
@@ -96,7 +96,7 @@
   <p class="help">Качество: «экономная» — без теней и пыли; «высокая» — большие тени и чёткость экрана. Покачивание отключает качание камеры и расширение обзора при беге. Настройки сохраняются в этом браузере.</p>
  </section>
  <section id="hud-settings-panel" class="panel" hidden aria-label="Размер интерфейса"><div class="hud-settings-head"><h2>Размер интерфейса</h2><button id="hud-settings-back" class="secondary">← Настройки</button></div><div id="hud-settings-grid" class="hud-settings-grid"></div><div class="hud-settings-actions"><button id="hud-reset" class="secondary">Сбросить размеры</button><button id="hud-preview" class="secondary" hidden>Проверить в игре</button></div><p class="help">100% — средний размер. Сохраняется автоматически. Крупные элементы подстраиваются под экран.</p></section>
- <section id="visor-settings-panel" class="panel" hidden aria-label="Эффект визора"><div class="hud-settings-head"><h2>Эффект визора</h2><button id="visor-settings-back" class="secondary">← Настройки</button></div><div id="visor-settings-grid" class="visor-settings-grid"></div><div class="hud-settings-actions"><button id="visor-reset" class="secondary">Сбросить эффект</button><button id="visor-preview" class="secondary" hidden>Проверить в игре</button></div><p class="help">100% — стандартный эффект. Сила 0% отключает виньетку. Настройки сохраняются автоматически.</p></section>
+ <section id="visor-settings-panel" class="panel" hidden aria-label="Эффект визора"><div class="hud-settings-head"><h2>Эффект визора</h2><button id="visor-settings-back" class="secondary">← Настройки</button></div><div id="visor-settings-grid" class="visor-settings-grid"></div><div class="hud-settings-actions"><button id="visor-reset" class="secondary">Сбросить эффект</button><button id="visor-preview" class="secondary" hidden>Проверить в игре</button></div><p class="help">100% — стандартный эффект. Сила 0% отключает эффект. Визор виден только в надетом шлеме. Настройки сохраняются автоматически.</p></section>
  <section id="map-panel" class="panel map-panel" hidden><div class="panel-heading"><div><div class="mono tiny kicker">ВЕРДАНА / НАВИГАЦИЯ</div><h2>Долина прибытия</h2></div><button id="close-map" class="icon-button" aria-label="Закрыть карту">×</button></div><div class="map-layout"><canvas id="map" width="480" height="480" aria-label="Карта участка и положения игрока"></canvas><div><p class="help">Выберите ориентир — указатель появится на компасе и в мире.</p><div id="landmark-list"></div></div></div></section>
  <section id="inventory-panel" class="panel ui-panel inv-panel" hidden aria-label="Инвентарь">
   <div class="ui-head"><h2>Инвентарь</h2><button id="close-inventory" class="ui-close" aria-label="Закрыть инвентарь"><svg><use href="#i-close"/></svg></button></div>

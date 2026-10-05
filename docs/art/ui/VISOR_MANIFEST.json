@@ -1,0 +1,15 @@
+{
+  "date": "2026-10-05",
+  "approvedReference": "Malik holographic visor: neon segments, peripheral scales, hexagons, blue edge haze, transparent center",
+  "generator": "OpenAI imagegen",
+  "sourceFilename": "exec-3ccc3d65-90a8-4bad-8f5f-223eb357d63c.png",
+  "sourceSHA256": "28b38ae8e4e3bdf06761f34a344a0d7026eca0ebea383fef418fa52814a48b55",
+  "asset": "src/assets/ui/visor-overlay.webp",
+  "assetSHA256": "76ed45ec87e0abdb02a6ffb82783786f3998e54bb2821fcc0992e49f6db56cb9",
+  "width": 1846,
+  "height": 852,
+  "bytes": 189440,
+  "format": "RGBA WebP, quality 90, method 6, alpha preserved",
+  "promptSummary": "Standalone transparent visor border matching the provided reference. Thin cyan segmented angular perimeter, sparse side graduations and hexagons, smoky blue feathered edge haze; no world or UI baked into the image.",
+  "integration": "CSS background 100% 100%, under interactive HUD. Soft CSS upper-corner shading responds to spread; strength affects the complete layer. hidden when no helmet."
+}

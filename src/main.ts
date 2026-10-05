@@ -122,7 +122,7 @@ function boot(){
  el<HTMLInputElement>('import-file').addEventListener('change',e=>{const input=e.target as HTMLInputElement,file=input.files?.[0];input.value='';if(file)void importFile(file);});
  // ---------- Inventory / suit screens (live: game time keeps running) ----------
  const panels=createPanels({game:()=>game,hazard:()=>!insideCapsule(),tone:k=>audio.tone(k),
-  changed:what=>{if(what==='drop')syncDrops();hudKey='';updateHotbar();},
+  changed:what=>{if(what==='drop')syncDrops();hudKey='';updateHotbar();updateVisor();},
   show:which=>{if(started&&(running||liveDialogs.has(dialog)))setDialog(which);},close:()=>{void saver?.save();resume();}});
  const openPanel=(which:'inventory-panel'|'suit-panel')=>{audio.tone('ui');if(dialog===which){void saver?.save();resume();return;}if(running||liveDialogs.has(dialog)){if(which==='inventory-panel'&&dialog!=='suit-panel')panels.reset();setDialog(which);}};
  el('inventory-button').onclick=()=>openPanel('inventory-panel');
@@ -480,7 +480,9 @@ function boot(){
   set('g-health',g.player.vitals.health,g.player.vitals.health/100);set('g-satiety',g.player.vitals.satiety,g.player.vitals.satiety/100);set('g-oxygen',o2,o2/cap);
   el('g-oxygen').setAttribute('aria-label',`Кислород ${Math.round(o2)} GU`);el('g-health').setAttribute('aria-label',`Здоровье ${Math.round(g.player.vitals.health)}`);el('g-satiety').setAttribute('aria-label',`Сытость ${Math.round(g.player.vitals.satiety)}`);
  }
+ function updateVisor(){el('visor').hidden=!game?.player.suit.helmet;}
  function updateUI(){
+  updateVisor();
   if(game){const want=!mined('iron_raw')?'iron':!mined('copper_raw')?'copper':!mined('ice')?'ice':!mined('stone')?'capsule':null;if(want&&autoTarget!==want){autoTarget=want;selected=want;}}
   nearDrop=null;if(game)for(const d of game.world.drops)if(Math.hypot(d.x-actor.x,d.z-actor.z)<2.2){nearDrop=d.id;break;}
   const target=LANDMARKS.find(p=>p.id===selected)!;

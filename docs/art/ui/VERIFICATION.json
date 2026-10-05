@@ -1,5 +1,5 @@
 {
-  "date": "2026-10-04",
+  "date": "2026-10-05",
   "unitTests": {
     "passed": 38,
     "failed": 0
@@ -1603,5 +1603,420 @@
       "docs/art/ui/screenshots/visor-settings-844x390.webp"
     ],
     "physicalPhoneTested": false
+  },
+  "holographicVisor": {
+    "date": "2026-10-05",
+    "asset": "src/assets/ui/visor-overlay.webp",
+    "manifest": "docs/art/ui/VISOR_MANIFEST.json",
+    "build": "tsc --noEmit and vite build passed, no standalone HTML",
+    "unitTests": {
+      "passed": 45,
+      "failed": 0
+    },
+    "browserChecks": 20,
+    "hudReport": {
+      "checks": [
+        "Icon-only actions, unnumbered hotbar without caption and centered compass",
+        "Actual HUD CSS at eight viewports, 80/100/150%: no intersections, inside screen, buttons ≥32px",
+        "Simulated landscape safe areas with largest preferences",
+        "Broken → bottle → empty → healthy tool resets status and renders remaining gas",
+        "Mirrored visor frames have equal dimensions and five named controls; resizing does not duplicate artwork",
+        "Native visor artwork keeps translucent glass and distinct segment colors without inherited white strokes",
+        "Segmented oxygen bar renders empty, half-full and full values",
+        "Five fitted menu bays share a closed curved housing without hanging brackets",
+        "Screenshots confirm holographic cyan rails, shaded upper corners, clear center, configurable reach and nonblocking overlay",
+        "Live vital numbers and low-health warning; curved suit/map/day buttons respond to touch",
+        "Real inventory swaps replace broken tool with tank and healthy tool without stale flags",
+        "Task details open separately and close back to gameplay on short screen",
+        "Approved legacy proportions migrate to 100% defaults",
+        "Dedicated HUD settings fit without scrolling at four viewports",
+        "Eight independent preferences persist after reload without replacing previous graphics/audio settings",
+        "Reset changes HUD sizes only",
+        "Smaller hotbar cells select items and do not rotate the camera",
+        "Separate visor settings fit four screens and pause expedition time",
+        "Visor preferences persist including 0%; independent resets, Escape navigation and gameplay preview work",
+        "Removing helmet immediately hides the complete visor, saved bareheaded worlds reload without it, equipping restores it; boots and preferences are independent"
+      ],
+      "screenshots": [
+        "artifacts/hud-new-761x390.png",
+        "artifacts/hud-new-844x390.png",
+        "artifacts/hud-new-667x320-quest.png",
+        "artifacts/hud-new-settings.png",
+        "artifacts/hud-new-visor-default.png",
+        "artifacts/hud-new-visor-settings.png",
+        "artifacts/hud-new-without-helmet.png",
+        "artifacts/hud-new-helmet-restored.png"
+      ],
+      "errors": [],
+      "environment": "Chromium / SwiftShader; UI correctness, not phone FPS",
+      "layout": [
+        {
+          "width": 568,
+          "height": 320,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 568,
+          "height": 320,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 568,
+          "height": 320,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 760,
+          "height": 390,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 760,
+          "height": 390,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 760,
+          "height": 390,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 761,
+          "height": 390,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 761,
+          "height": 390,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 761,
+          "height": 390,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 800,
+          "height": 360,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 800,
+          "height": 360,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 800,
+          "height": 360,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 915,
+          "height": 412,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 915,
+          "height": 412,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 915,
+          "height": 412,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 1366,
+          "height": 768,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 1366,
+          "height": 768,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 1366,
+          "height": 768,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        }
+      ],
+      "wings": {
+        "sameFrame": true,
+        "controls": [
+          {
+            "name": "Костюм",
+            "width": 43.1875
+          },
+          {
+            "name": "Рюкзак",
+            "width": 43.1875
+          },
+          {
+            "name": "Карта",
+            "width": 43.1875
+          },
+          {
+            "name": "Сменить день и ночь",
+            "width": 43.1875
+          },
+          {
+            "name": "Пауза",
+            "width": 43.1875
+          }
+        ],
+        "rails": 2
+      },
+      "art": {
+        "buttonBlur": "none",
+        "glassStroke": "none",
+        "segmentStroke": "none",
+        "food": "rgb(245, 177, 60)",
+        "oxygen": "rgb(67, 227, 238)"
+      },
+      "fills": [
+        "inset(0px 100% 0px 0px)",
+        "inset(0px 50% 0px 0px)",
+        "inset(0px 0% 0px 0px)"
+      ],
+      "visorAsset": {
+        "width": 1846,
+        "height": 852
+      },
+      "layers": {
+        "hud": 2,
+        "visor": 1
+      },
+      "vignettePixels": {
+        "off": {
+          "left": [
+            176,
+            176,
+            176
+          ],
+          "right": [
+            176,
+            176,
+            176
+          ],
+          "center": [
+            176,
+            176,
+            176
+          ],
+          "reach": [
+            176,
+            176,
+            176
+          ],
+          "glow": [
+            176,
+            176,
+            176
+          ]
+        },
+        "default": {
+          "left": [
+            73,
+            77,
+            80
+          ],
+          "right": [
+            73,
+            77,
+            80
+          ],
+          "center": [
+            176,
+            176,
+            176
+          ],
+          "reach": [
+            172,
+            172,
+            173
+          ],
+          "glow": [
+            33,
+            181,
+            192
+          ]
+        },
+        "wide": {
+          "left": [
+            21,
+            27,
+            31
+          ],
+          "right": [
+            20,
+            27,
+            31
+          ],
+          "center": [
+            176,
+            176,
+            176
+          ],
+          "reach": [
+            139,
+            141,
+            142
+          ],
+          "glow": [
+            15,
+            199,
+            212
+          ]
+        }
+      }
+    },
+    "finalCapture": {
+      "screenshots": [
+        "artifacts/hud-final-1366x768.png",
+        "artifacts/hud-final-844x390.png",
+        "artifacts/hud-final-667x320.png",
+        "artifacts/visor-night-844x390.png",
+        "artifacts/visor-without-helmet-844x390.png",
+        "artifacts/visor-helmet-restored-844x390.png"
+      ],
+      "errors": [],
+      "layouts": [
+        {
+          "width": 1366,
+          "height": 768,
+          "overlap": [],
+          "centerError": 0,
+          "numbers": 0,
+          "booting": false
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "overlap": [],
+          "centerError": 0,
+          "numbers": 0,
+          "booting": false
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "overlap": [],
+          "centerError": 0,
+          "numbers": 0,
+          "booting": false
+        }
+      ]
+    },
+    "physicalPhoneTested": false,
+    "notes": [
+      "Verified screenshots in day, night and with/without helmet",
+      "Initial layering issue corrected: HUD z-index 2, visor 1",
+      "Helmet removed and re-equipped with actual suit controls; save/reload without helmet checked; removing boots leaves visor visible",
+      "Strength 0 hides complete decorative layer; settings persist independently of suit and world",
+      "Transparent WebP kept as separate asset, no base64 HTML packaging"
+    ]
   }
 }

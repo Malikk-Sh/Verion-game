@@ -12,7 +12,7 @@ const server=await createServer({server:{host:'127.0.0.1',port:5177,strictPort:t
  res.setHeader('Content-Type','text/html; charset=utf-8');
  res.end(index.replace('<script type="module" src="/src/main.ts"></script>',`<link rel="stylesheet" href="/src/style.css?direct"><link rel="stylesheet" href="/src/ui/hud.css?direct"><script type="module">
  import {applyHudSettings,defaultHudSettings} from '/src/ui/hud.ts';import{applyVisorSettings}from'/src/ui/visor.ts';import {cellContent} from '/src/ui/panels.ts';
- document.body.dataset.started='true';document.body.dataset.running='true';document.querySelector('#veil').hidden=true;
+ document.body.dataset.started='true';document.body.dataset.running='true';document.querySelector('#visor').hidden=false;document.querySelector('#veil').hidden=true;
  document.querySelector('#boot').hidden=true;document.querySelector('#target-marker').hidden=true;document.querySelector('#portrait').hidden=true;
  const slots=[{itemId:'tool_stone',count:1,durability:106},{itemId:'pulp',count:4},{itemId:'iron_raw',count:4},{itemId:'copper_raw',count:13},{itemId:'ice',count:24},{itemId:'stone',count:13}];
  slots.forEach((s,i)=>{const b=document.createElement('button');b.className='cell';cellContent(b,s,i,{number:false});document.querySelector('#hotbar-slots').append(b)});
@@ -80,13 +80,16 @@ try{
  const pixels=JSON.parse(execFileSync('python',['-c',`from PIL import Image
 import json
 frames={n:Image.open('artifacts/vignette-fixture-'+n+'.png').convert('RGB') for n in ['off','default','wide']}
-points={'left':(1,1),'right':(842,1),'center':(422,136),'reach':(150,155)}
+points={'left':(1,1),'right':(842,1),'center':(422,136),'reach':(150,155),'glow':(9,18)}
 print(json.dumps({n:{k:list(im.getpixel(p)) for k,p in points.items()} for n,im in frames.items()}))`],{encoding:'utf8'}));
  for(const key of ['left','right'])assert.ok(pixels.default[key].every((v,i)=>v<pixels.off[key][i]-70),'Upper corner shading must be visible');
  assert.deepEqual(pixels.default.center,pixels.off.center);assert.deepEqual(pixels.wide.center,pixels.off.center);
  assert.ok(pixels.wide.reach.every((v,i)=>v<pixels.default.reach[i]));
- assert.ok(pixels.default.left.every((v,i)=>Math.abs(v-pixels.default.right[i])<=2));
- assert.equal(await page.locator('#visor').evaluate(e=>getComputedStyle(e).pointerEvents),'none');report.vignettePixels=pixels;check('Screenshots confirm stronger symmetric upper corners, clear center, configurable reach and nonblocking overlay');
+ assert.ok(Math.abs(pixels.default.left[0]-pixels.default.right[0])<=20,'Both upper corners are shaded');
+ assert.ok(pixels.default.glow[1]>pixels.default.glow[0]+30&&pixels.default.glow[2]>pixels.default.glow[0]+30,'Cyan perimeter must be visible');
+ assert.equal(await page.locator('#visor').evaluate(e=>getComputedStyle(e).pointerEvents),'none');
+ const layers=await page.evaluate(()=>({hud:Number(getComputedStyle(document.querySelector('#hud')).zIndex),visor:Number(getComputedStyle(document.querySelector('#visor')).zIndex)}));assert.ok(layers.hud>layers.visor,'The visor must stay below readable HUD controls');
+ const image=await page.evaluate(async()=>{const url=getComputedStyle(document.querySelector('#visor'),'::after').backgroundImage.match(/url\(["']?(.*?)["']?\)/)[1];const im=new Image();im.src=url;await im.decode();return {width:im.naturalWidth,height:im.naturalHeight}});assert.deepEqual(image,{width:1846,height:852});report.visorAsset=image;report.layers=layers;report.vignettePixels=pixels;check('Screenshots confirm holographic cyan rails, shaded upper corners, clear center, configurable reach and nonblocking overlay');
  await page.evaluate(()=>window.hudTest.visor({strength:100,spread:100}));
  if(process.argv.includes('--layout-only')){await page.close();await writeFile('artifacts/hud-layout-verification.json',JSON.stringify(report,null,2)+'\n');await browser.close();await server.close();process.exit(0);}
  await page.close();
@@ -154,6 +157,23 @@ print(json.dumps({n:{k:list(im.getpixel(p)) for k,p in points.items()} for n,im 
  for(const key of ['quality','sound','bob','fov','hud'])assert.deepEqual(afterVisor[key],previous[key]);
  await game.keyboard.press('Escape');assert.equal(await game.locator('#settings').isVisible(),true);await click('#settings-back');await click('#continue');await game.waitForFunction(()=>window.__vireon.getState().running);await click('#pause-button');await click('#settings-button');await click('#visor-settings-button');await click('#visor-preview');assert.equal(await game.evaluate(()=>window.__vireon.getState().running),true);
  check('Visor preferences persist including 0%; independent resets, Escape navigation and gameplay preview work');
+ // Use the real suit controls: no helmet means no decorative visor; other parts must not affect it.
+ await game.evaluate(()=>window.__vireon.teleport(40,40,-.2,-.08));await game.waitForTimeout(400);
+ const prefsBeforeHelmet=await game.evaluate(()=>JSON.parse(localStorage.getItem('vireon.settings')).visor);
+ await click('#suit-button');await click('#part-grid [data-part="boots"]');await click('#suit-remove');
+ assert.equal(await game.locator('#visor').evaluate(e=>e.hidden),false);
+ await click('#suit-replace');await click('#suit-detail .option');
+ await click('#part-grid [data-part="helmet"]');await click('#suit-remove');
+ assert.equal(await game.evaluate(()=>window.__vireon.getState().suit.helmet),null);assert.equal(await game.locator('#visor').evaluate(e=>e.hidden),true);
+ await click('#close-suit');await game.evaluate(()=>window.__vireon.teleport(44,46,-.2,-.08));await shot('without-helmet');
+ await game.evaluate(()=>window.__vireon.save());await game.reload();await ready();await click('#continue');await game.waitForFunction(()=>window.__vireon.getState().running);
+ assert.equal(await game.locator('#visor').evaluate(e=>e.hidden),true);assert.equal(await game.evaluate(()=>window.__vireon.getState().suit.helmet),null);
+ await click('#suit-button');await click('#part-grid [data-part="helmet"]');await click('#suit-replace');await click('#suit-detail .option');
+ assert.ok(await game.evaluate(()=>window.__vireon.getState().suit.helmet));assert.equal(await game.locator('#visor').evaluate(e=>e.hidden),false);
+ await click('#close-suit');await shot('helmet-restored');
+ assert.deepEqual(await game.evaluate(()=>JSON.parse(localStorage.getItem('vireon.settings')).visor),prefsBeforeHelmet);
+ check('Removing helmet immediately hides the complete visor, saved bareheaded worlds reload without it, equipping restores it; boots and preferences are independent');
+
  assert.deepEqual(report.errors,[]);
 }catch(e){report.failure=String(e.stack||e);if(debugPage){report.debug=await debugPage.evaluate(()=>({rects:Object.fromEntries(['vitals','hud-buttons','compass-wrap','compass','hotbar'].map(id=>[id,document.getElementById(id).getBoundingClientRect().toJSON()])),styles:[...document.querySelectorAll('style')].map(e=>e.getAttribute('data-vite-dev-id')),variables:document.documentElement.style.cssText}));console.log(report.debug);}console.error(e);process.exitCode=1;}
 finally{await writeFile('artifacts/hud-verification.json',JSON.stringify(report,null,2)+'\n');await browser?.close();await server.close();}

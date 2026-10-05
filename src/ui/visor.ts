@@ -1,6 +1,6 @@
 /** Visual preferences belong to the browser, not the expedition save. */
 export const VISOR_CONTROLS = {
- strength: { label: 'Сила затемнения', min: 0, max: 150 },
+ strength: { label: 'Сила эффекта', min: 0, max: 150 },
  spread: { label: 'Размер затемнения', min: 60, max: 140 },
 } as const;
 export type VisorGroup = keyof typeof VISOR_CONTROLS;
