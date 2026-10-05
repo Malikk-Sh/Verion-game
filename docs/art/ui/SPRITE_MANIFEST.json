@@ -1,0 +1,142 @@
+{
+  "date": "2026-10-04",
+  "generator": "OpenAI image_gen",
+  "style": "Soft low-poly: large matte facets, ivory/orange/charcoal equipment; simplified silhouettes",
+  "format": "WebP RGBA, quality 90, 512 × 512; format conversion only",
+  "assets": [
+    {
+      "id": "suit_helmet",
+      "path": "src/assets/items/suit_helmet.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 29526,
+      "sha256": "d5331b8838c8a6179e4daf1d61db8c6c282bce098efe1d4a0f69bc566140bc81",
+      "sourceSha256": "d852e65f3f27ccb0567957ec38f16757b8d365c99dd38fc5fa58433eeee19991",
+      "prompt": "Create ONE production game inventory sprite on a truly transparent background. Match the approved SOFT LOW-POLY art in the reference board exactly: large faceted matte 3D planes, softly bevelled edges, ivory/off-white panels, burnt orange accents and charcoal mechanical joints. Adult grounded proportions, strongly simplified geometry, no tiny seams/screws, no texture noise/weathering, no photorealistic gloss, no outlines. Consistent upper-left diffuse lighting. Single centered isolated object, no floor, no cast shadow outside object, no text, no UI, no board. Square canvas, object occupies 86% of available height and/or width, fully visible with generous transparent margins. A sealed astronaut helmet matching the helmet in the reference: large dark faceted visor, ivory lower rim and orange crown stripe. Three-quarter view facing viewer's left. Only helmet, no neck/body.",
+      "styleReference": "User-approved variant 1, soft low-poly board, 2026-10-04"
+    },
+    {
+      "id": "suit_chest",
+      "path": "src/assets/items/suit_chest.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 43342,
+      "sha256": "36493d512839cd9103cb7e4d3130dc83b0b556844de906b778a3cf88a648d919",
+      "sourceSha256": "acce99eb631bcc7b2376a41fa7a7917821f532042109d7edac31b0d939d10bef",
+      "prompt": "Create ONE production game inventory sprite on a truly transparent background. Match the approved SOFT LOW-POLY art in the reference board exactly: large faceted matte 3D planes, softly bevelled edges, ivory/off-white panels, burnt orange accents and charcoal mechanical joints. Adult grounded proportions, strongly simplified geometry, no tiny seams/screws, no texture noise/weathering, no photorealistic gloss, no outlines. Consistent upper-left diffuse lighting. Single centered isolated object, no floor, no cast shadow outside object, no text, no UI, no board. Square canvas, object occupies 86% of available height and/or width, fully visible with generous transparent margins. An astronaut torso armor WITH two complete arms and gloves, matching the chest on reference. Open neck collar, adult broad shoulders, ivory breastplate with small orange triangle, orange shoulders, charcoal elbows and waist belt. Standing pose arms at sides slightly away. Three-quarter view facing viewer's left. Cut off cleanly at waist belt. No head, no hips or legs.",
+      "styleReference": "User-approved variant 1, soft low-poly board, 2026-10-04"
+    },
+    {
+      "id": "suit_legs",
+      "path": "src/assets/items/suit_legs.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 29610,
+      "sha256": "4f66737fa717dd8019b13dc4b6860001ce23fee7c9802959542dd5f331063683",
+      "sourceSha256": "877b33bac4a484f6f3b204ee791a8d1d9a88fffb237f06dc36774a3f320a39e4",
+      "prompt": "Use case: precise-object-edit. Edit target: first reference is the current transparent astronaut PANTS sprite. Second reference is unchanged matching torso, for style and waist width only. Primary request: change ONLY the stance of the two legs from wide splayed legs to a natural relaxed standing posture, knees nearly straight, thighs and shins descending almost vertically under the hips. Bring the ankle centres about 35% closer together than current image, with a modest clear transparent gap between the legs. Keep adult hip/pelvis width, waist belt, original leg LENGTH, proportions, ivory/orange/charcoal colors, exact soft low-poly large matte facets, knee armor, hip armor, ankle cuffs, three-quarter left-facing view, viewer-right ankle slightly lower than left, and upper-left lighting. Preserve the square framing and object height. Pants from waist to ankle ONLY, no boots, no feet, no upper torso, no head. Full transparent alpha background. NO crouch, no bowlegs, no outward feet pose, no compressed pelvis or miniaturized pants. Entire object unclipped with clear margins.",
+      "styleReference": "Previous low-poly pants (edit target), unchanged chest (style/waist reference); closer relaxed stance, 2026-10-04"
+    },
+    {
+      "id": "suit_boots",
+      "path": "src/assets/items/suit_boots.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 35292,
+      "sha256": "1dd80bc4dfe5768423f44aaa1d2cb0f84f616363c52d786b16bd2e131bc00894",
+      "sourceSha256": "ffa5e72e3e52ebf18f03605272dcd55512509d1783d60a372ab441a9083244e0",
+      "prompt": "Create ONE production game inventory sprite on a truly transparent background. Match the approved SOFT LOW-POLY art in the reference board exactly: large faceted matte 3D planes, softly bevelled edges, ivory/off-white panels, burnt orange accents and charcoal mechanical joints. Adult grounded proportions, strongly simplified geometry, no tiny seams/screws, no texture noise/weathering, no photorealistic gloss, no outlines. Consistent upper-left diffuse lighting. Single centered isolated object, no floor, no cast shadow outside object, no text, no UI, no board. Square canvas, object occupies 86% of available height and/or width, fully visible with generous transparent margins. Two matching ivory/orange astronaut boots with charcoal soles and open ankle cuffs, compact balanced pair, three-quarter view facing viewer's left. Leave a visible gap so silhouettes are distinct. Only boots.",
+      "styleReference": "User-approved variant 1, soft low-poly board, 2026-10-04"
+    },
+    {
+      "id": "tool_stone",
+      "path": "src/assets/items/tool_stone.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 27834,
+      "sha256": "9acca1f2033e155e32cf0d603bca88ec2474528958065398296db74462d3a3bb",
+      "sourceSha256": "99f9713eed6002fd4fef24aba39a68b026f5cdf0823a8da9c6dce3ce8c8d9939",
+      "prompt": "Create ONE production game inventory sprite on a truly transparent background. Match the approved SOFT LOW-POLY art in the reference board exactly: large faceted matte 3D planes, softly bevelled edges, ivory/off-white panels, burnt orange accents and charcoal mechanical joints. Adult grounded proportions, strongly simplified geometry, no tiny seams/screws, no texture noise/weathering, no photorealistic gloss, no outlines. Consistent upper-left diffuse lighting. Single centered isolated object, no floor, no cast shadow outside object, no text, no UI, no board. Square canvas, object occupies 86% of available height and/or width, fully visible with generous transparent margins. One stone multitool exactly like reference tool: chunky rough faceted grey stone double-ended hammer/axe head mounted on charcoal handle with a broad orange grip panel. Diagonal handle from bottom-left to top-right. No metal axe blade, no text.",
+      "styleReference": "User-approved variant 1, soft low-poly board, 2026-10-04"
+    },
+    {
+      "id": "bottle_1",
+      "path": "src/assets/items/bottle_1.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 23028,
+      "sha256": "5cb4fc0d9f4c00c1472cb79c27f15845294535cdb9db243cc0f9a3813af905ff",
+      "sourceSha256": "886dbd355da62e82e231eb5830912549bcc63a14f6c3843d42f9a16620608df6",
+      "prompt": "Create ONE production game inventory sprite on a truly transparent background. Match the approved SOFT LOW-POLY art in the reference board exactly: large faceted matte 3D planes, softly bevelled edges, ivory/off-white panels, burnt orange accents and charcoal mechanical joints. Adult grounded proportions, strongly simplified geometry, no tiny seams/screws, no texture noise/weathering, no photorealistic gloss, no outlines. Consistent upper-left diffuse lighting. Single centered isolated object, no floor, no cast shadow outside object, no text, no UI, no board. Square canvas, object occupies 86% of available height and/or width, fully visible with generous transparent margins. One compact astronaut oxygen cylinder exactly like reference: ivory faceted cylindrical tank, two broad orange bands, charcoal base and valve with simple orange cap. Diagonal from bottom-left to top-right. No text or logos.",
+      "styleReference": "User-approved variant 1, soft low-poly board, 2026-10-04"
+    },
+    {
+      "id": "pulp",
+      "path": "src/assets/items/pulp.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 27150,
+      "sha256": "d94a972dbac9bf101338fb75661dbf757fc6ad249e3dd766fb271154e6acd26c",
+      "sourceSha256": "cd9e787a27eda52acdcf990df300f15fd4c7b54b13e2f61177d04643f45ad5de",
+      "prompt": "Create ONE production game inventory sprite on a truly transparent background. Match the approved SOFT LOW-POLY art in the reference board exactly: large faceted matte 3D planes, softly bevelled edges, ivory/off-white panels, burnt orange accents and charcoal mechanical joints. Adult grounded proportions, strongly simplified geometry, no tiny seams/screws, no texture noise/weathering, no photorealistic gloss, no outlines. Consistent upper-left diffuse lighting. Single centered isolated object, no floor, no cast shadow outside object, no text, no UI, no board. Square canvas, object occupies 86% of available height and/or width, fully visible with generous transparent margins. One sealed upright ivory food pouch with flat base and one broad orange stripe near the top. Simple broad triangular folds, matching reference, no tiny wrinkles.",
+      "styleReference": "User-approved variant 1, soft low-poly board, 2026-10-04"
+    },
+    {
+      "id": "iron_raw",
+      "path": "src/assets/items/iron_raw.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 33100,
+      "sha256": "d8515dfbdf3120bb3339c76ab38e321821aecb3c84587f0a5162c805e817bcf9",
+      "sourceSha256": "d9e2475da4d3ccebf6a21e331f370b18df4e273975cd0cfb31f607de61bbd913",
+      "prompt": "Create ONE production game inventory sprite on a truly transparent background. Match the approved SOFT LOW-POLY art in the reference board exactly: large faceted matte 3D planes, softly bevelled edges, ivory/off-white panels, burnt orange accents and charcoal mechanical joints. Adult grounded proportions, strongly simplified geometry, no tiny seams/screws, no texture noise/weathering, no photorealistic gloss, no outlines. Consistent upper-left diffuse lighting. Single centered isolated object, no floor, no cast shadow outside object, no text, no UI, no board. Square canvas, object occupies 86% of available height and/or width, fully visible with generous transparent margins. One angular charcoal-grey iron ore rock with broad rusty orange mineral patches on large flat facets. Exactly like the ore on reference board, no lava/glow, no granular texture. Dark grey silhouette clearly different from copper.",
+      "styleReference": "User-approved variant 1, soft low-poly board, 2026-10-04"
+    },
+    {
+      "id": "copper_raw",
+      "path": "src/assets/items/copper_raw.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 32270,
+      "sha256": "4c36284ab84ac5e3ea48bca5d5ee16af0e15ed896d4d4ecca0551ff0495216f7",
+      "sourceSha256": "32f79814a28f14ae31457b53ae8d5c88d69bbff0ed71dfd200ec1b72541d4c4e",
+      "prompt": "Create ONE production game inventory sprite on a truly transparent background. Match the approved SOFT LOW-POLY art in the reference board exactly: large faceted matte 3D planes, softly bevelled edges, ivory/off-white panels, burnt orange accents and charcoal mechanical joints. Adult grounded proportions, strongly simplified geometry, no tiny seams/screws, no texture noise/weathering, no photorealistic gloss, no outlines. Consistent upper-left diffuse lighting. Single centered isolated object, no floor, no cast shadow outside object, no text, no UI, no board. Square canvas, object occupies 86% of available height and/or width, fully visible with generous transparent margins. One angular copper ore rock with broad matte warm terracotta and muted copper orange polygon facets, a few darker brown faces. Simple chunky irregular shape, no reflections or glints, no orange-on-grey rust veins.",
+      "styleReference": "User-approved variant 1, soft low-poly board, 2026-10-04"
+    },
+    {
+      "id": "ice",
+      "path": "src/assets/items/ice.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 24140,
+      "sha256": "4318a8575cca616810d3f328053b8abeeb1cc74e2493ce2f66ed0436093c18f7",
+      "sourceSha256": "4281dd9ea533f19fb900dd3b229346e06fb89db96c0065e740a75a62b30b7d5c",
+      "prompt": "Create ONE production game inventory sprite on a truly transparent background. Match the approved SOFT LOW-POLY art in the reference board exactly: large faceted matte 3D planes, softly bevelled edges, ivory/off-white panels, burnt orange accents and charcoal mechanical joints. Adult grounded proportions, strongly simplified geometry, no tiny seams/screws, no texture noise/weathering, no photorealistic gloss, no outlines. Consistent upper-left diffuse lighting. Single centered isolated object, no floor, no cast shadow outside object, no text, no UI, no board. Square canvas, object occupies 86% of available height and/or width, fully visible with generous transparent margins. One angular pale icy cyan ice chunk made of large simple polygon faces, frosted light blue matte surfaces with a few broad white facets. No tiny cracks, no translucent glass sparkle. Blue silhouette.",
+      "styleReference": "User-approved variant 1, soft low-poly board, 2026-10-04"
+    },
+    {
+      "id": "stone",
+      "path": "src/assets/items/stone.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 19432,
+      "sha256": "1dcd22763eeb1f004febd2ffb092d195a34da35cb4991a614c53f0a4e6f4b7f3",
+      "sourceSha256": "08ceb4921be4d2f9ce799b7d1971f6535e18731226af6ed923e4751eb8748c92",
+      "prompt": "Create ONE production game inventory sprite on a truly transparent background. Match the approved SOFT LOW-POLY art in the reference board exactly: large faceted matte 3D planes, softly bevelled edges, ivory/off-white panels, burnt orange accents and charcoal mechanical joints. Adult grounded proportions, strongly simplified geometry, no tiny seams/screws, no texture noise/weathering, no photorealistic gloss, no outlines. Consistent upper-left diffuse lighting. Single centered isolated object, no floor, no cast shadow outside object, no text, no UI, no board. Square canvas, object occupies 86% of available height and/or width, fully visible with generous transparent margins. One angular warm grey stone chunk, broad simple flat polygon faces in muted grey and taupe, about 20 visible facets. No veins, no mineral crystals, no texture.",
+      "styleReference": "User-approved variant 1, soft low-poly board, 2026-10-04"
+    }
+  ],
+  "figureAssets": [
+    {
+      "id": "figure_boots",
+      "path": "src/assets/figure/suit_boots.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 31190,
+      "sha256": "ea7141aceb94782ae012fdfe93cb872ebb08ce713f03016eb10b8b22702d6a49",
+      "sourceSha256": "bccc3dff6d3fb224ecf61fa321ee7377526b5a3c2eb6889e66ce4f7718332f3a",
+      "prompt": "Create ONE production game inventory sprite on a truly transparent background. Match the approved SOFT LOW-POLY art in the reference board exactly: large faceted matte 3D planes, softly bevelled edges, ivory/off-white panels, burnt orange accents and charcoal mechanical joints. Adult grounded proportions, strongly simplified geometry, no tiny seams/screws, no texture noise/weathering, no photorealistic gloss, no outlines. Consistent upper-left diffuse lighting. Single centered isolated object, no floor, no cast shadow outside object, no text, no UI, no board. Square canvas, object occupies 86% of available height and/or width, fully visible with generous transparent margins. Two astronaut boots matching the ivory/orange boots in reference, FULLY separated by a VERY WIDE transparent gap: the ankle centres are 45% of canvas width apart. Two isolated silhouettes, no touching, no overlapping. Three-quarter front view facing viewer's left, left cuff slightly higher than right. Simple matte chunky geometry, open ankle cuffs. Only boots, no legs. Pair fits in canvas with 8% margin. This is a spread adult standing stance rather than a compact inventory pair.",
+      "styleReference": "User-approved variant 1, soft low-poly board, 2026-10-04"
+    }
+  ]
+}

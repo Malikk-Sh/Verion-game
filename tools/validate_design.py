@@ -16,7 +16,7 @@ for r in rs:
 # Qualitative reachability including station, technology, world and tool gates.
 # Does NOT prove quantities, path geometry, random seed arrival time or power uptime.
 def reach(scopes):
- avail={'hand','suit','bottle_1','tool_stone'}; tech={'start'}; worlds={'verdana'}; used=set()
+ avail={'hand','suit_helmet','suit_chest','suit_legs','suit_boots','bottle_1','tool_stone'}; tech={'start'}; worlds={'verdana'}; used=set()
  for iteration in range(100):
   before=(len(avail),len(tech),len(worlds),len(used))
   tier=3 if 'drill_1' in avail else 2 if 'pick_steel' in avail else 1 if 'pick_iron' in avail else 0

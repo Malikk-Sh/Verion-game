@@ -1,6 +1,6 @@
 {
   "name": "vireon-verdana-blockout",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -11,7 +11,11 @@
     "build": "tsc --noEmit && vite build && node tools/build_standalone.mjs",
     "preview": "vite preview --host 0.0.0.0",
     "test": "node --import tsx --test tests/*.test.ts",
-    "verify:browser": "node tools/verify_browser.mjs"
+    "verify:browser": "node tools/verify_browser.mjs",
+    "verify:s1": "node tools/verify_s1.mjs",
+    "verify:art": "node tools/verify_art.mjs",
+    "shots": "node tools/shot.mjs",
+    "verify:hud": "node tools/verify_hud.mjs"
   },
   "dependencies": {
     "three": "0.180.0"
@@ -19,6 +23,7 @@
   "devDependencies": {
     "@types/three": "0.180.0",
     "esbuild": "0.25.10",
+    "fake-indexeddb": "^6.2.5",
     "playwright": "1.62.1",
     "tsx": "4.20.6",
     "typescript": "5.9.2",

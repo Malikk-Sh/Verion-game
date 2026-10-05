@@ -63,8 +63,10 @@ export class Terrain {
  * Baked sun visibility on a 4 m grid: terrain self-shadowing plus large rock formations.
  * Replaces shadow-map shadows from mountains, which popped in and out at the edge of the
  * moving shadow frustum (B3 video). Small objects still use the real shadow map.
+ * S1: the sun moves with the day cycle, so the bake is incremental — `step(rows)` computes a
+ * few rows per frame into a back texture; the material cross-fades between two textures.
  */
-export function bakeSunShade(sun:THREE.Vector3,extra:{x:number;z:number;r:number;top:number}[]=[]){
+export function createShadeBaker(extra:{x:number;z:number;r:number;top:number}[]=[]){
  const S=4,N=SIZE/S+1,occ=new Float32Array(N*N);
  for(let j=0;j<N;j++)for(let i=0;i<N;i++)occ[j*N+i]=gridHeight(i*S,j*S);
  const stamp=(x:number,z:number,r:number,top:number)=>{for(let j=Math.max(0,Math.floor((z-r-MIN)/S));j<=Math.min(N-1,Math.ceil((z+r-MIN)/S));j++)for(let i=Math.max(0,Math.floor((x-r-MIN)/S));i<=Math.min(N-1,Math.ceil((x+r-MIN)/S));i++){
@@ -72,19 +74,32 @@ export function bakeSunShade(sun:THREE.Vector3,extra:{x:number;z:number;r:number
  for(const f of FORMATIONS)stamp(f.x,f.z,f.w*1.1,f.base+f.h*.92);
  for(const e of extra)stamp(e.x,e.z,e.r,e.top);
  const O=(x:number,z:number)=>{const gx=Math.max(0,Math.min(N-1.001,(x-MIN)/S)),gz=Math.max(0,Math.min(N-1.001,(z-MIN)/S)),ix=Math.floor(gx),iz=Math.floor(gz),u=gx-ix,v=gz-iz,a=occ[iz*N+ix],b=occ[iz*N+ix+1],c=occ[(iz+1)*N+ix],d=occ[(iz+1)*N+ix+1];return a+(b-a)*u+(c-a)*v+(a-b-c+d)*u*v;};
- const hl=Math.hypot(sun.x,sun.z),dx=sun.x/hl,dz=sun.z/hl,tan=sun.y/hl,data=new Uint8Array(N*N*4);
- for(let j=0;j<N;j++)for(let i=0;i<N;i++){
-  const x=MIN+i*S,z=MIN+j*S,h0=occ[j*N+i]+.4;let res=1;
-  for(let t=3;t<260;t+=t<40?3:6){const ox=x+dx*t,oz=z+dz*t;if(ox<MIN-300||ox>MAX+300||oz<MIN-300||oz>MAX+300)break;const ray=h0+t*tan,o=ox<MIN||ox>MAX||oz<MIN||oz>MAX?rawHeight(Math.max(MIN,Math.min(MAX,ox)),Math.max(MIN,Math.min(MAX,oz)))+Math.max(0,Math.max(MIN-ox,ox-MAX,MIN-oz,oz-MAX))*.3:O(ox,oz);
-   res=Math.min(res,(ray-o)/(t*.07)+.5);if(res<=0)break;}
-  const v=Math.max(0,Math.min(1,res));data[(j*N+i)*4]=Math.round(v*v*(3-2*v)*255);data[(j*N+i)*4+3]=255;
+ const make=()=>{const t=new THREE.DataTexture(new Uint8Array(N*N*4),N,N);t.magFilter=THREE.LinearFilter;t.minFilter=THREE.LinearFilter;t.wrapS=t.wrapT=THREE.ClampToEdgeWrapping;return t;};
+ const textures=[make(),make()];
+ let back=0,row=N,dx=0,dz=0,tan=0;
+ const sun=new THREE.Vector3();
+ function begin(dir:THREE.Vector3){sun.copy(dir);if(sun.y<.04)sun.y=.04;const hl=Math.hypot(sun.x,sun.z)||1;dx=sun.x/hl;dz=sun.z/hl;tan=sun.y/hl;row=0;}
+ /** Computes up to `rows` grid rows; returns true when the back texture is complete. */
+ function step(rows:number){
+  const data=textures[back].image.data as Uint8Array;
+  for(const end=Math.min(N,row+rows);row<end;row++){const j=row;
+   for(let i=0;i<N;i++){
+    const x=MIN+i*S,z=MIN+j*S,h0=occ[j*N+i]+.4;let res=1;
+    for(let t=3;t<260;t+=t<40?3:6){const ox=x+dx*t,oz=z+dz*t;if(ox<MIN-300||ox>MAX+300||oz<MIN-300||oz>MAX+300)break;const ray=h0+t*tan,o=ox<MIN||ox>MAX||oz<MIN||oz>MAX?rawHeight(Math.max(MIN,Math.min(MAX,ox)),Math.max(MIN,Math.min(MAX,oz)))+Math.max(0,Math.max(MIN-ox,ox-MAX,MIN-oz,oz-MAX))*.3:O(ox,oz);
+     res=Math.min(res,(ray-o)/(t*.07)+.5);if(res<=0)break;}
+    const v=Math.max(0,Math.min(1,res));data[(j*N+i)*4]=Math.round(v*v*(3-2*v)*255);data[(j*N+i)*4+3]=255;
+   }}
+  if(row>=N){textures[back].needsUpdate=true;return true;}
+  return false;
  }
- const tex=new THREE.DataTexture(data,N,N);tex.magFilter=THREE.LinearFilter;tex.minFilter=THREE.LinearFilter;tex.wrapS=tex.wrapT=THREE.ClampToEdgeWrapping;tex.needsUpdate=true;
- return {texture:tex,min:new THREE.Vector2(MIN-S/2,MIN-S/2),size:new THREE.Vector2(N*S,N*S)};
+ /** After a completed bake: the finished texture becomes the target of the cross-fade; the other one is next to be written. */
+ function flip(){const done=textures[back];back=1-back;return done;}
+ return {N,textures,begin,step,flip,get busy(){return row<N;},min:new THREE.Vector2(MIN-S/2,MIN-S/2),size:new THREE.Vector2(N*S,N*S)};
 }
+export type ShadeUniforms={uBake:{value:THREE.Texture};uBake2:{value:THREE.Texture};uBakeMix:{value:number};uBakeMin:{value:THREE.Vector2};uBakeSize:{value:THREE.Vector2};uBakeAmount:{value:number}};
 
 /** Patch any standard material so directional light is attenuated by the baked sun shade. */
-export function useBakedShade(m:THREE.Material,uniforms:{uBake:{value:THREE.Texture};uBakeMin:{value:THREE.Vector2};uBakeSize:{value:THREE.Vector2};uBakeAmount:{value:number}},previous?:(s:THREE.WebGLProgramParametersWithUniforms,r:THREE.WebGLRenderer)=>void){
+export function useBakedShade(m:THREE.Material,uniforms:ShadeUniforms,previous?:(s:THREE.WebGLProgramParametersWithUniforms,r:THREE.WebGLRenderer)=>void){
  m.onBeforeCompile=(s,r)=>{
   previous?.(s,r);Object.assign(s.uniforms,uniforms);
   s.vertexShader='varying vec2 vBakeXZ;\n'+s.vertexShader.replace('#include <project_vertex>',`#include <project_vertex>
@@ -93,8 +108,8 @@ export function useBakedShade(m:THREE.Material,uniforms:{uBake:{value:THREE.Text
    bakeW=instanceMatrix*bakeW;
   #endif
   vBakeXZ=(modelMatrix*bakeW).xz;`);
-  s.fragmentShader='varying vec2 vBakeXZ;uniform sampler2D uBake;uniform vec2 uBakeMin,uBakeSize;uniform float uBakeAmount;\n'+s.fragmentShader.replace('#include <lights_fragment_end>',`#include <lights_fragment_end>
-  float bakeV=mix(1.0,texture2D(uBake,(vBakeXZ-uBakeMin)/uBakeSize).r,uBakeAmount);
+  s.fragmentShader='varying vec2 vBakeXZ;uniform sampler2D uBake,uBake2;uniform vec2 uBakeMin,uBakeSize;uniform float uBakeAmount,uBakeMix;\n'+s.fragmentShader.replace('#include <lights_fragment_end>',`#include <lights_fragment_end>
+  vec2 bakeUV=(vBakeXZ-uBakeMin)/uBakeSize;float bakeV=mix(1.0,mix(texture2D(uBake,bakeUV).r,texture2D(uBake2,bakeUV).r,uBakeMix),uBakeAmount);
   reflectedLight.directDiffuse*=bakeV;reflectedLight.directSpecular*=bakeV;`);
  };
  const key=previous?'baked-'+m.uuid:'baked-shade';m.customProgramCacheKey=()=>key;m.needsUpdate=true;

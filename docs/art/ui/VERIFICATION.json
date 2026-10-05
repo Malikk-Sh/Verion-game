@@ -1,0 +1,2022 @@
+{
+  "date": "2026-10-05",
+  "unitTests": {
+    "passed": 38,
+    "failed": 0
+  },
+  "s1": {
+    "checks": [
+      "Fresh browser: no saves, \"Новая экспедиция\" only",
+      "New expedition creates a saved slot (revision 1) with the starting kit",
+      "Aiming at the iron outcrop shows the mining prompt",
+      "Holding F mines one block: node 32→31, ore in inventory, tool wear 1",
+      "HUD at 844×390, 1366×768 and 667×320: no overlapping groups, inside viewport, buttons ≥48 px",
+      "Hotbar = backpack row 1: selecting food disables «Добыть», key 1 returns the multitool",
+      "Touch-drag across a hotbar cell does not rotate the camera or move the player",
+      "Inventory opens and game time keeps running inside it",
+      "Inventory UI: move to empty cell, swap with occupied, cancel; «Сортировать остальное» keeps row 1",
+      "Suit screen: tap does not remove in hazard, 1 s hold removes helmet to backpack, «Надеть» returns it, back to inventory",
+      "Day/night: button and N shift the cycle, scene light follows, phase advances with game time",
+      "Pause freezes the clock and commits a new revision",
+      "Reload → Продолжить restores deposits, inventory, position, hotbar, suit and day offset from IndexedDB",
+      "Second tab is told the world is open elsewhere",
+      "Take-over: new tab writes, old tab stops and offers export",
+      "Export downloads a .vireon.json envelope",
+      "Import creates a second slot without touching the first",
+      "Damaged file is rejected with a message",
+      "No console errors"
+    ],
+    "errors": [],
+    "environment": "Headless Chromium, software WebGL (SwiftShader), economy preset. Correctness only."
+  },
+  "build": "TypeScript and Vite passed; standalone intentionally not updated",
+  "designValidation": "198 items, 213 recipes; PASS",
+  "physicalPhoneTested": false,
+  "bootCorrection": {
+    "date": "2026-10-04",
+    "build": "TypeScript, Vite, standalone passed",
+    "screenshots": [
+      "screenshots/suit-844x390.webp",
+      "screenshots/suit-1366x768.webp",
+      "screenshots/suit-667x320.webp",
+      "screenshots/inventory-844x390.webp"
+    ],
+    "interaction": {
+      "viewports": [
+        "844x390",
+        "1366x768",
+        "667x320"
+      ],
+      "removedAndReequipped": true,
+      "errors": [],
+      "environment": "Chromium with SwiftShader; visual correctness only"
+    },
+    "physicalPhoneTested": false
+  },
+  "legProportionsCorrection": {
+    "date": "2026-10-04",
+    "change": "Leg artwork widened by 20% at unchanged rendered height; ankle alignment updated.",
+    "verification": {
+      "metrics": [
+        {
+          "viewport": [
+            844,
+            390
+          ],
+          "legWidth": 111.828125,
+          "legHeight": 93.1875,
+          "figureHeight": 233,
+          "legTop": 109.5
+        },
+        {
+          "viewport": [
+            1366,
+            768
+          ],
+          "legWidth": 207.359375,
+          "legHeight": 172.796875,
+          "figureHeight": 432,
+          "legTop": 203.03125
+        },
+        {
+          "viewport": [
+            667,
+            320
+          ],
+          "legWidth": 78.21875,
+          "legHeight": 65.1875,
+          "figureHeight": 163,
+          "legTop": 76.609375
+        }
+      ],
+      "errors": [],
+      "removeReequipLegsAndBoots": true,
+      "environment": "Chromium SwiftShader; correctness only"
+    },
+    "build": "TypeScript and Vite passed; standalone not updated"
+  },
+  "legacySprites20261003": {
+    "checks": [
+      "Six hotbar slots use loaded raster sprites from backpack row 1",
+      "All 11 current items load at 512px with transparent margins and solid object pixels",
+      "HUD, inventory and suit raster layers fit at 844×390, 1366×768 and 667×320",
+      "Selection follows the part; removing/reequipping changes the raster figure",
+      "Standalone HTML loads embedded WebP sprites without external image requests",
+      "No browser console or runtime errors"
+    ],
+    "errors": [],
+    "screenshots": [
+      "artifacts/sprites-844-hud.png",
+      "artifacts/sprites-844-inventory.png",
+      "artifacts/sprites-844-suit.png",
+      "artifacts/sprites-1366-hud.png",
+      "artifacts/sprites-1366-inventory.png",
+      "artifacts/sprites-1366-suit.png",
+      "artifacts/sprites-667-hud.png",
+      "artifacts/sprites-667-inventory.png",
+      "artifacts/sprites-667-suit.png",
+      "artifacts/sprites-844-suit-removed.png"
+    ],
+    "environment": "Chromium, SwiftShader; visual correctness, not phone FPS",
+    "assets": [
+      {
+        "id": "tool_stone",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "bottle_1",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "suit_helmet",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "suit_chest",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "suit_legs",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "suit_boots",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "pulp",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "iron_raw",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "copper_raw",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "ice",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "stone",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      }
+    ]
+  },
+  "legacyCompactSprites20261003": {
+    "checks": [
+      "Six hotbar slots use loaded raster sprites from backpack row 1",
+      "All 11 current items load at 512px with transparent margins and solid object pixels",
+      "HUD, inventory and suit raster layers fit at 667×320",
+      "Selection follows the part; removing/reequipping changes the raster figure",
+      "Standalone HTML loads embedded WebP sprites without external image requests",
+      "No browser console or runtime errors"
+    ],
+    "errors": [],
+    "screenshots": [
+      "artifacts/sprites-667-hud.png",
+      "artifacts/sprites-667-inventory.png",
+      "artifacts/sprites-667-inventory-scrolled.png",
+      "artifacts/sprites-667-suit.png",
+      "artifacts/sprites-844-suit-removed.png"
+    ],
+    "environment": "Chromium, SwiftShader; visual correctness, not phone FPS",
+    "assets": [
+      {
+        "id": "tool_stone",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "bottle_1",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "suit_helmet",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "suit_chest",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "suit_legs",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "suit_boots",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "pulp",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "iron_raw",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "copper_raw",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "ice",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "stone",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      }
+    ]
+  },
+  "sprites": {
+    "checks": [
+      "Six hotbar slots use loaded raster sprites from backpack row 1",
+      "All 11 current items load at 512px with transparent margins and solid object pixels",
+      "HUD, inventory and suit raster layers fit at 844×390, 1366×768, 667×320",
+      "Helmet, legs and boots remain independently selectable, removable and equipable",
+      "No browser console or runtime errors"
+    ],
+    "errors": [],
+    "screenshots": [
+      "artifacts/sprites-844-hud.png",
+      "artifacts/sprites-844-inventory.png",
+      "artifacts/sprites-844-suit.png",
+      "artifacts/sprites-1366-hud.png",
+      "artifacts/sprites-1366-inventory.png",
+      "artifacts/sprites-1366-suit.png",
+      "artifacts/sprites-667-hud.png",
+      "artifacts/sprites-667-inventory.png",
+      "artifacts/sprites-667-inventory-scrolled.png",
+      "artifacts/sprites-667-suit.png",
+      "artifacts/sprites-844-suit-removed.png"
+    ],
+    "environment": "Chromium, SwiftShader; visual correctness, not phone FPS",
+    "assets": [
+      {
+        "id": "tool_stone",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "bottle_1",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "suit_helmet",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "suit_chest",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "suit_legs",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "suit_boots",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "pulp",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "iron_raw",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "copper_raw",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "ice",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      },
+      {
+        "id": "stone",
+        "width": 512,
+        "cornerAlpha": 0,
+        "opaque": true
+      }
+    ]
+  },
+  "lowPoly": {
+    "date": "2026-10-04",
+    "approvedVariant": 1,
+    "assets": 12,
+    "bytes": 355914,
+    "screenshotsReviewed": [
+      "HUD 844×390",
+      "suit 1366×768",
+      "inventory 667×320"
+    ],
+    "figure": "Hip width matched to chest belt; waist and ankles overlapped; stance boot layers independent of leg state",
+    "physicalPhoneTested": false
+  },
+  "stanceCorrection": {
+    "date": "2026-10-04",
+    "change": "Regenerated pants with 35% closer ankle centres; pelvis width and rendered leg dimensions unchanged. Both boots repositioned to new ankle centres.",
+    "verification": {
+      "checks": [
+        "Natural stance shown in inventory and suit at three viewports; pelvis scale unchanged",
+        "Legs and boots remain independently selectable, removable and equipable",
+        "No browser errors"
+      ],
+      "errors": [],
+      "screenshots": [
+        "artifacts/sprites-844-stance-inventory.png",
+        "artifacts/sprites-844-stance-suit.png",
+        "artifacts/sprites-1366-stance-inventory.png",
+        "artifacts/sprites-1366-stance-suit.png",
+        "artifacts/sprites-667-stance-inventory.png",
+        "artifacts/sprites-667-stance-suit.png"
+      ],
+      "environment": "Chromium, SwiftShader; visual correctness, not phone FPS",
+      "metrics": [
+        {
+          "viewport": [
+            844,
+            390
+          ],
+          "figureWidth": 155.328125,
+          "legWidth": 139.78125,
+          "legHeight": 93.1875,
+          "leftBoot": 44.265625,
+          "rightBoot": 54.046875
+        },
+        {
+          "viewport": [
+            1366,
+            768
+          ],
+          "figureWidth": 288,
+          "legWidth": 259.1875,
+          "legHeight": 172.796875,
+          "leftBoot": 82.078125,
+          "rightBoot": 100.21875
+        },
+        {
+          "viewport": [
+            667,
+            320
+          ],
+          "figureWidth": 108.65625,
+          "legWidth": 97.78125,
+          "legHeight": 65.1875,
+          "leftBoot": 30.953125,
+          "rightBoot": 37.796875
+        }
+      ]
+    },
+    "build": "TypeScript and Vite passed; standalone not updated"
+  },
+  "figureAspectCorrection": {
+    "date": "2026-10-04",
+    "cause": "The figure used object-fit: fill on a nonsquare pants box, widening the same sprite used by the slot.",
+    "change": "All part boxes are square; native sprite proportions preserved. Canvas 5:9; waist, ankles and platform realigned.",
+    "verification": {
+      "checks": [
+        "Inventory and figure use identical pants sprite, with preserved image proportions, at three viewports",
+        "Legs and boots remain independently selectable, removable and equipable",
+        "No browser errors"
+      ],
+      "errors": [],
+      "screenshots": [
+        "artifacts/sprites-844-stance-inventory.png",
+        "artifacts/sprites-844-stance-suit.png",
+        "artifacts/sprites-1366-stance-inventory.png",
+        "artifacts/sprites-1366-stance-suit.png",
+        "artifacts/sprites-667-stance-inventory.png",
+        "artifacts/sprites-667-stance-suit.png"
+      ],
+      "environment": "Chromium, SwiftShader; visual correctness, not phone FPS",
+      "consistency": [
+        {
+          "viewport": [
+            844,
+            390
+          ],
+          "sameSprite": true,
+          "aspectError": 0.00013412017167380164
+        },
+        {
+          "viewport": [
+            1366,
+            768
+          ],
+          "sameSprite": true,
+          "aspectError": 0
+        },
+        {
+          "viewport": [
+            667,
+            320
+          ],
+          "sameSprite": true,
+          "aspectError": 0.00019171779141102796
+        }
+      ],
+      "metrics": [
+        {
+          "viewport": [
+            844,
+            390
+          ],
+          "figureWidth": 129.4375,
+          "legWidth": 116.484375,
+          "legHeight": 116.5,
+          "leftBoot": 36.875,
+          "rightBoot": 45.03125
+        },
+        {
+          "viewport": [
+            1366,
+            768
+          ],
+          "figureWidth": 240,
+          "legWidth": 216,
+          "legHeight": 216,
+          "leftBoot": 68.390625,
+          "rightBoot": 83.515625
+        },
+        {
+          "viewport": [
+            667,
+            320
+          ],
+          "figureWidth": 90.546875,
+          "legWidth": 81.484375,
+          "legHeight": 81.5,
+          "leftBoot": 25.796875,
+          "rightBoot": 31.5
+        }
+      ]
+    },
+    "build": "TypeScript and Vite passed; standalone not updated"
+  },
+  "bootFitCorrection": {
+    "date": "2026-10-04",
+    "cause": "Boot shafts were narrower than the trouser ankle openings; cuffs were exposed below the leg ends.",
+    "change": "Uniform boot scale increased by one third; ankle centres realigned and boot cuffs moved under trouser hems. Legs artwork and geometry unchanged.",
+    "pantsSha256": "4f66737fa717dd8019b13dc4b6860001ce23fee7c9802959542dd5f331063683",
+    "verification": {
+      "checks": [
+        "Boot fit shown at three viewports; pants sprite and proportions unchanged",
+        "Legs and boots remain independently selectable, removable and equipable",
+        "No browser errors"
+      ],
+      "errors": [],
+      "screenshots": [
+        "artifacts/sprites-844-bootfit-inventory.png",
+        "artifacts/sprites-844-bootfit-suit.png",
+        "artifacts/sprites-1366-bootfit-suit.png",
+        "artifacts/sprites-667-bootfit-suit.png"
+      ],
+      "environment": "Chromium, SwiftShader; visual correctness, not phone FPS",
+      "consistency": [
+        {
+          "viewport": [
+            844,
+            390
+          ],
+          "sameSprite": true,
+          "aspectError": 0.00013412017167380164
+        },
+        {
+          "viewport": [
+            1366,
+            768
+          ],
+          "sameSprite": true,
+          "aspectError": 0
+        },
+        {
+          "viewport": [
+            667,
+            320
+          ],
+          "sameSprite": true,
+          "aspectError": 0.00019171779141102796
+        }
+      ],
+      "metrics": [
+        {
+          "viewport": [
+            844,
+            390
+          ],
+          "figureWidth": 129.4375,
+          "legWidth": 116.484375,
+          "legHeight": 116.5,
+          "leftBoot": 31.578125,
+          "rightBoot": 32.09375
+        },
+        {
+          "viewport": [
+            1366,
+            768
+          ],
+          "figureWidth": 240,
+          "legWidth": 216,
+          "legHeight": 216,
+          "leftBoot": 58.546875,
+          "rightBoot": 59.515625
+        },
+        {
+          "viewport": [
+            667,
+            320
+          ],
+          "figureWidth": 90.546875,
+          "legWidth": 81.484375,
+          "legHeight": 81.5,
+          "leftBoot": 22.078125,
+          "rightBoot": 22.453125
+        }
+      ]
+    },
+    "build": "TypeScript and Vite passed; standalone not updated",
+    "physicalPhoneTested": false
+  },
+  "hudCustomization": {
+    "date": "2026-10-05",
+    "unitTests": "42/42",
+    "build": "tsc --noEmit + vite build passed; standalone preview unchanged",
+    "baseline": {
+      "joystick": 110,
+      "action": 115,
+      "movement": 95,
+      "menu": 90,
+      "compass": 90,
+      "vitals": 80,
+      "hotbar": 90,
+      "info": 80
+    },
+    "hudVersion": 2,
+    "browser": {
+      "checks": [
+        "Icon-only actions, unnumbered hotbar without caption and centered compass",
+        "Actual HUD CSS at eight viewports, 80/100/150%: no intersections, inside screen, buttons ≥32px",
+        "Simulated landscape safe areas with largest preferences",
+        "Broken → bottle → empty → healthy tool resets status and renders remaining gas",
+        "Default top-menu captions are readable without truncation; compact sizes retain accessible names",
+        "Real inventory swaps replace broken tool with tank and healthy tool without stale flags",
+        "Task details open separately and close back to gameplay on short screen",
+        "Approved legacy proportions migrate to 100% defaults",
+        "Dedicated HUD settings fit without scrolling at four viewports",
+        "Eight independent preferences persist after reload without replacing previous graphics/audio settings",
+        "Reset changes HUD sizes only",
+        "Smaller hotbar cells select items and do not rotate the camera"
+      ],
+      "screenshots": [
+        "artifacts/hud-new-761x390.png",
+        "artifacts/hud-new-844x390.png",
+        "artifacts/hud-new-667x320-quest.png",
+        "artifacts/hud-new-settings.png",
+        "artifacts/hud-final-844x390.png",
+        "artifacts/hud-final-667x320.png"
+      ],
+      "errors": [],
+      "environment": "Chromium / SwiftShader; UI correctness, not phone FPS",
+      "layout": [
+        {
+          "width": 568,
+          "height": 320,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 568,
+          "height": 320,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 568,
+          "height": 320,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 760,
+          "height": 390,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 760,
+          "height": 390,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 760,
+          "height": 390,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 761,
+          "height": 390,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 761,
+          "height": 390,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 761,
+          "height": 390,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 800,
+          "height": 360,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 800,
+          "height": 360,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 800,
+          "height": 360,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 915,
+          "height": 412,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 915,
+          "height": 412,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 915,
+          "height": 412,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 1366,
+          "height": 768,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 1366,
+          "height": 768,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 1366,
+          "height": 768,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        }
+      ],
+      "labels": [
+        {
+          "text": "Костюм",
+          "width": 0,
+          "scroll": 0,
+          "font": "10.5px"
+        },
+        {
+          "text": "Рюкзак",
+          "width": 0,
+          "scroll": 0,
+          "font": "10.5px"
+        },
+        {
+          "text": "Карта",
+          "width": 0,
+          "scroll": 0,
+          "font": "10.5px"
+        },
+        {
+          "text": "День",
+          "width": 0,
+          "scroll": 0,
+          "font": "10.5px"
+        }
+      ]
+    },
+    "physicalPhoneTested": false,
+    "finalGameCapture": {
+      "screenshots": [
+        "artifacts/hud-final-844x390.png",
+        "artifacts/hud-final-667x320.png"
+      ],
+      "errors": [],
+      "layouts": [
+        {
+          "width": 844,
+          "height": 390,
+          "overlap": [],
+          "centerError": 0,
+          "numbers": 0,
+          "booting": false
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "overlap": [],
+          "centerError": -0.015625,
+          "numbers": 0,
+          "booting": false
+        }
+      ]
+    },
+    "polish": {
+      "actions": "Icons with contextual accessible names; no visible action/run/jump labels",
+      "hotbar": "No caption or slot numbers; backpack still numbered and keyboard 1–6 unchanged",
+      "text": "Vital values max(8px,11×scale); GU max(6.5px,7×scale); stack counts reduced",
+      "compass": "Screen center including asymmetric safe areas; width and side groups adapt",
+      "visor": "Noticeable smooth edge shading; transparent central view; does not intercept touch",
+      "cuts": "6px×scale at slot panel corners, thin diagonal borders; 8px×scale on title"
+    }
+  },
+  "curvedVisor": {
+    "date": "2026-10-05",
+    "design": "Approved variant 2 / 3B: curved segmented vitals and mirrored menu wing",
+    "unitTests": "42/42",
+    "build": "tsc --noEmit and vite build passed; standalone unchanged",
+    "browserChecks": [
+      "Icon-only actions, unnumbered hotbar without caption and centered compass",
+      "Actual HUD CSS at eight viewports, 80/100/150%: no intersections, inside screen, buttons ≥32px",
+      "Simulated landscape safe areas with largest preferences",
+      "Broken → bottle → empty → healthy tool resets status and renders remaining gas",
+      "Mirrored visor frames have equal dimensions and five named controls; resizing does not duplicate artwork",
+      "Segmented oxygen bar renders empty, half-full and full values",
+      "Live vital numbers and low-health warning; curved suit/map/day buttons respond to touch",
+      "Real inventory swaps replace broken tool with tank and healthy tool without stale flags",
+      "Task details open separately and close back to gameplay on short screen",
+      "Approved legacy proportions migrate to 100% defaults",
+      "Dedicated HUD settings fit without scrolling at four viewports",
+      "Eight independent preferences persist after reload without replacing previous graphics/audio settings",
+      "Reset changes HUD sizes only",
+      "Smaller hotbar cells select items and do not rotate the camera"
+    ],
+    "finalLayout": {
+      "checks": [
+        "Icon-only actions, unnumbered hotbar without caption and centered compass",
+        "Actual HUD CSS at eight viewports, 80/100/150%: no intersections, inside screen, buttons ≥32px",
+        "Simulated landscape safe areas with largest preferences",
+        "Broken → bottle → empty → healthy tool resets status and renders remaining gas",
+        "Mirrored visor frames have equal dimensions and five named controls; resizing does not duplicate artwork",
+        "Native visor artwork keeps translucent glass and distinct segment colors without inherited white strokes",
+        "Segmented oxygen bar renders empty, half-full and full values"
+      ],
+      "screenshots": [],
+      "errors": [],
+      "environment": "Chromium / SwiftShader; UI correctness, not phone FPS",
+      "layout": [
+        {
+          "width": 568,
+          "height": 320,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 568,
+          "height": 320,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 568,
+          "height": 320,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 760,
+          "height": 390,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 760,
+          "height": 390,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 760,
+          "height": 390,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 761,
+          "height": 390,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 761,
+          "height": 390,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 761,
+          "height": 390,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 800,
+          "height": 360,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 800,
+          "height": 360,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 800,
+          "height": 360,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 915,
+          "height": 412,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 915,
+          "height": 412,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 915,
+          "height": 412,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 1366,
+          "height": 768,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 1366,
+          "height": 768,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 1366,
+          "height": 768,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        }
+      ],
+      "wings": {
+        "sameFrame": true,
+        "controls": [
+          {
+            "name": "Костюм",
+            "width": 36
+          },
+          {
+            "name": "Рюкзак",
+            "width": 36
+          },
+          {
+            "name": "Карта",
+            "width": 36
+          },
+          {
+            "name": "Сменить день и ночь",
+            "width": 36
+          },
+          {
+            "name": "Пауза",
+            "width": 36
+          }
+        ],
+        "rails": 2
+      },
+      "art": {
+        "buttonBlur": "none",
+        "glassStroke": "none",
+        "segmentStroke": "none",
+        "food": "rgb(245, 177, 60)",
+        "oxygen": "rgb(67, 227, 238)"
+      },
+      "fills": [
+        "inset(0px 100% 0px 0px)",
+        "inset(0px 50% 0px 0px)",
+        "inset(0px 0% 0px 0px)"
+      ]
+    },
+    "gameScreenshots": [
+      "docs/art/ui/screenshots/hud-844x390.webp",
+      "docs/art/ui/screenshots/hud-667x320.webp",
+      "docs/art/ui/screenshots/hud-1366x768.webp"
+    ],
+    "capture": {
+      "screenshots": [
+        "artifacts/hud-final-1366x768.png",
+        "artifacts/hud-final-844x390.png",
+        "artifacts/hud-final-667x320.png"
+      ],
+      "errors": [],
+      "layouts": [
+        {
+          "width": 1366,
+          "height": 768,
+          "overlap": [],
+          "centerError": 0,
+          "numbers": 0,
+          "booting": false
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "overlap": [],
+          "centerError": 0,
+          "numbers": 0,
+          "booting": false
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "overlap": [],
+          "centerError": 0,
+          "numbers": 0,
+          "booting": false
+        }
+      ]
+    },
+    "physicalPhoneTested": false
+  },
+  "unifiedMenuAndVignette": {
+    "date": "2026-10-05",
+    "menu": "Approved first variant: one closed curved housing, five fitted bays and four seams",
+    "vignette": {
+      "strength": [
+        0,
+        150
+      ],
+      "spread": [
+        60,
+        140
+      ],
+      "defaults": {
+        "strength": 100,
+        "spread": 100
+      },
+      "storage": "vireon.settings.visor",
+      "separatePanel": true
+    },
+    "unitTests": "45/45",
+    "build": "tsc --noEmit and vite build passed; standalone unchanged",
+    "browser": {
+      "checks": [
+        "Icon-only actions, unnumbered hotbar without caption and centered compass",
+        "Actual HUD CSS at eight viewports, 80/100/150%: no intersections, inside screen, buttons ≥32px",
+        "Simulated landscape safe areas with largest preferences",
+        "Broken → bottle → empty → healthy tool resets status and renders remaining gas",
+        "Mirrored visor frames have equal dimensions and five named controls; resizing does not duplicate artwork",
+        "Native visor artwork keeps translucent glass and distinct segment colors without inherited white strokes",
+        "Segmented oxygen bar renders empty, half-full and full values",
+        "Five fitted menu bays share a closed curved housing without hanging brackets",
+        "Screenshots confirm stronger symmetric upper corners, clear center, configurable reach and nonblocking overlay",
+        "Live vital numbers and low-health warning; curved suit/map/day buttons respond to touch",
+        "Real inventory swaps replace broken tool with tank and healthy tool without stale flags",
+        "Task details open separately and close back to gameplay on short screen",
+        "Approved legacy proportions migrate to 100% defaults",
+        "Dedicated HUD settings fit without scrolling at four viewports",
+        "Eight independent preferences persist after reload without replacing previous graphics/audio settings",
+        "Reset changes HUD sizes only",
+        "Smaller hotbar cells select items and do not rotate the camera",
+        "Separate visor settings fit four screens and pause expedition time",
+        "Visor preferences persist including 0%; independent resets, Escape navigation and gameplay preview work"
+      ],
+      "screenshots": [
+        "artifacts/hud-new-761x390.png",
+        "artifacts/hud-new-844x390.png",
+        "artifacts/hud-new-667x320-quest.png",
+        "artifacts/hud-new-settings.png",
+        "artifacts/hud-new-visor-default.png",
+        "artifacts/hud-new-visor-settings.png"
+      ],
+      "errors": [],
+      "environment": "Chromium / SwiftShader; UI correctness, not phone FPS",
+      "layout": [
+        {
+          "width": 568,
+          "height": 320,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 568,
+          "height": 320,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 568,
+          "height": 320,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 760,
+          "height": 390,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 760,
+          "height": 390,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 760,
+          "height": 390,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 761,
+          "height": 390,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 761,
+          "height": 390,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 761,
+          "height": 390,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 800,
+          "height": 360,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 800,
+          "height": 360,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 800,
+          "height": 360,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 915,
+          "height": 412,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 915,
+          "height": 412,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 915,
+          "height": 412,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 1366,
+          "height": 768,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 1366,
+          "height": 768,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 1366,
+          "height": 768,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        }
+      ],
+      "wings": {
+        "sameFrame": true,
+        "controls": [
+          {
+            "name": "Костюм",
+            "width": 43.1875
+          },
+          {
+            "name": "Рюкзак",
+            "width": 43.1875
+          },
+          {
+            "name": "Карта",
+            "width": 43.1875
+          },
+          {
+            "name": "Сменить день и ночь",
+            "width": 43.1875
+          },
+          {
+            "name": "Пауза",
+            "width": 43.1875
+          }
+        ],
+        "rails": 2
+      },
+      "art": {
+        "buttonBlur": "none",
+        "glassStroke": "none",
+        "segmentStroke": "none",
+        "food": "rgb(245, 177, 60)",
+        "oxygen": "rgb(67, 227, 238)"
+      },
+      "fills": [
+        "inset(0px 100% 0px 0px)",
+        "inset(0px 50% 0px 0px)",
+        "inset(0px 0% 0px 0px)"
+      ],
+      "vignettePixels": {
+        "off": {
+          "left": [
+            176,
+            176,
+            176
+          ],
+          "right": [
+            176,
+            176,
+            176
+          ],
+          "center": [
+            176,
+            176,
+            176
+          ],
+          "reach": [
+            176,
+            176,
+            176
+          ]
+        },
+        "default": {
+          "left": [
+            13,
+            20,
+            25
+          ],
+          "right": [
+            13,
+            19,
+            24
+          ],
+          "center": [
+            176,
+            176,
+            176
+          ],
+          "reach": [
+            157,
+            158,
+            158
+          ]
+        },
+        "wide": {
+          "left": [
+            1,
+            8,
+            13
+          ],
+          "right": [
+            1,
+            8,
+            13
+          ],
+          "center": [
+            176,
+            176,
+            176
+          ],
+          "reach": [
+            112,
+            117,
+            120
+          ]
+        }
+      }
+    },
+    "finalCapture": {
+      "screenshots": [
+        "artifacts/hud-final-1366x768.png",
+        "artifacts/hud-final-844x390.png",
+        "artifacts/hud-final-667x320.png"
+      ],
+      "errors": [],
+      "layouts": [
+        {
+          "width": 1366,
+          "height": 768,
+          "overlap": [],
+          "centerError": 0,
+          "numbers": 0,
+          "booting": false
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "overlap": [],
+          "centerError": 0,
+          "numbers": 0,
+          "booting": false
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "overlap": [],
+          "centerError": 0,
+          "numbers": 0,
+          "booting": false
+        }
+      ]
+    },
+    "screenshots": [
+      "docs/art/ui/screenshots/hud-844x390.webp",
+      "docs/art/ui/screenshots/hud-667x320.webp",
+      "docs/art/ui/screenshots/hud-1366x768.webp",
+      "docs/art/ui/screenshots/visor-settings-844x390.webp"
+    ],
+    "physicalPhoneTested": false
+  },
+  "holographicVisor": {
+    "date": "2026-10-05",
+    "asset": "src/assets/ui/visor-overlay.webp",
+    "manifest": "docs/art/ui/VISOR_MANIFEST.json",
+    "build": "tsc --noEmit and vite build passed, no standalone HTML",
+    "unitTests": {
+      "passed": 45,
+      "failed": 0
+    },
+    "browserChecks": 20,
+    "hudReport": {
+      "checks": [
+        "Icon-only actions, unnumbered hotbar without caption and centered compass",
+        "Actual HUD CSS at eight viewports, 80/100/150%: no intersections, inside screen, buttons ≥32px",
+        "Simulated landscape safe areas with largest preferences",
+        "Broken → bottle → empty → healthy tool resets status and renders remaining gas",
+        "Mirrored visor frames have equal dimensions and five named controls; resizing does not duplicate artwork",
+        "Native visor artwork keeps translucent glass and distinct segment colors without inherited white strokes",
+        "Segmented oxygen bar renders empty, half-full and full values",
+        "Five fitted menu bays share a closed curved housing without hanging brackets",
+        "Screenshots confirm holographic cyan rails, shaded upper corners, clear center, configurable reach and nonblocking overlay",
+        "Live vital numbers and low-health warning; curved suit/map/day buttons respond to touch",
+        "Real inventory swaps replace broken tool with tank and healthy tool without stale flags",
+        "Task details open separately and close back to gameplay on short screen",
+        "Approved legacy proportions migrate to 100% defaults",
+        "Dedicated HUD settings fit without scrolling at four viewports",
+        "Eight independent preferences persist after reload without replacing previous graphics/audio settings",
+        "Reset changes HUD sizes only",
+        "Smaller hotbar cells select items and do not rotate the camera",
+        "Separate visor settings fit four screens and pause expedition time",
+        "Visor preferences persist including 0%; independent resets, Escape navigation and gameplay preview work",
+        "Removing helmet immediately hides the complete visor, saved bareheaded worlds reload without it, equipping restores it; boots and preferences are independent"
+      ],
+      "screenshots": [
+        "artifacts/hud-new-761x390.png",
+        "artifacts/hud-new-844x390.png",
+        "artifacts/hud-new-667x320-quest.png",
+        "artifacts/hud-new-settings.png",
+        "artifacts/hud-new-visor-default.png",
+        "artifacts/hud-new-visor-settings.png",
+        "artifacts/hud-new-without-helmet.png",
+        "artifacts/hud-new-helmet-restored.png"
+      ],
+      "errors": [],
+      "environment": "Chromium / SwiftShader; UI correctness, not phone FPS",
+      "layout": [
+        {
+          "width": 568,
+          "height": 320,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 568,
+          "height": 320,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 568,
+          "height": 320,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 760,
+          "height": 390,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 760,
+          "height": 390,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 760,
+          "height": 390,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 761,
+          "height": 390,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 761,
+          "height": 390,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 761,
+          "height": 390,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 800,
+          "height": 360,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 800,
+          "height": 360,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 800,
+          "height": 360,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 915,
+          "height": 412,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 915,
+          "height": 412,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 915,
+          "height": 412,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 1366,
+          "height": 768,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 1366,
+          "height": 768,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 1366,
+          "height": 768,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        }
+      ],
+      "wings": {
+        "sameFrame": true,
+        "controls": [
+          {
+            "name": "Костюм",
+            "width": 43.1875
+          },
+          {
+            "name": "Рюкзак",
+            "width": 43.1875
+          },
+          {
+            "name": "Карта",
+            "width": 43.1875
+          },
+          {
+            "name": "Сменить день и ночь",
+            "width": 43.1875
+          },
+          {
+            "name": "Пауза",
+            "width": 43.1875
+          }
+        ],
+        "rails": 2
+      },
+      "art": {
+        "buttonBlur": "none",
+        "glassStroke": "none",
+        "segmentStroke": "none",
+        "food": "rgb(245, 177, 60)",
+        "oxygen": "rgb(67, 227, 238)"
+      },
+      "fills": [
+        "inset(0px 100% 0px 0px)",
+        "inset(0px 50% 0px 0px)",
+        "inset(0px 0% 0px 0px)"
+      ],
+      "visorAsset": {
+        "width": 1846,
+        "height": 852
+      },
+      "layers": {
+        "hud": 2,
+        "visor": 1
+      },
+      "vignettePixels": {
+        "off": {
+          "left": [
+            176,
+            176,
+            176
+          ],
+          "right": [
+            176,
+            176,
+            176
+          ],
+          "center": [
+            176,
+            176,
+            176
+          ],
+          "reach": [
+            176,
+            176,
+            176
+          ],
+          "glow": [
+            176,
+            176,
+            176
+          ]
+        },
+        "default": {
+          "left": [
+            73,
+            77,
+            80
+          ],
+          "right": [
+            73,
+            77,
+            80
+          ],
+          "center": [
+            176,
+            176,
+            176
+          ],
+          "reach": [
+            172,
+            172,
+            173
+          ],
+          "glow": [
+            33,
+            181,
+            192
+          ]
+        },
+        "wide": {
+          "left": [
+            21,
+            27,
+            31
+          ],
+          "right": [
+            20,
+            27,
+            31
+          ],
+          "center": [
+            176,
+            176,
+            176
+          ],
+          "reach": [
+            139,
+            141,
+            142
+          ],
+          "glow": [
+            15,
+            199,
+            212
+          ]
+        }
+      }
+    },
+    "finalCapture": {
+      "screenshots": [
+        "artifacts/hud-final-1366x768.png",
+        "artifacts/hud-final-844x390.png",
+        "artifacts/hud-final-667x320.png",
+        "artifacts/visor-night-844x390.png",
+        "artifacts/visor-without-helmet-844x390.png",
+        "artifacts/visor-helmet-restored-844x390.png"
+      ],
+      "errors": [],
+      "layouts": [
+        {
+          "width": 1366,
+          "height": 768,
+          "overlap": [],
+          "centerError": 0,
+          "numbers": 0,
+          "booting": false
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "overlap": [],
+          "centerError": 0,
+          "numbers": 0,
+          "booting": false
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "overlap": [],
+          "centerError": 0,
+          "numbers": 0,
+          "booting": false
+        }
+      ]
+    },
+    "physicalPhoneTested": false,
+    "notes": [
+      "Verified screenshots in day, night and with/without helmet",
+      "Initial layering issue corrected: HUD z-index 2, visor 1",
+      "Helmet removed and re-equipped with actual suit controls; save/reload without helmet checked; removing boots leaves visor visible",
+      "Strength 0 hides complete decorative layer; settings persist independently of suit and world",
+      "Transparent WebP kept as separate asset, no base64 HTML packaging"
+    ]
+  }
+}

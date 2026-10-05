@@ -24,6 +24,6 @@ const views:Record<string,{eye:number[];target:number[];label:string;rel?:boolea
 };
 const params=new URLSearchParams(location.search),view=views[params.get('view')??'capsule']??views.capsule;
 if(view.rel){view.eye[1]+=heightAt(view.eye[0],view.eye[2]);view.target[1]+=heightAt(view.target[0],view.target[2]);}
-camera.position.fromArray(view.eye);camera.lookAt(new THREE.Vector3().fromArray(view.target));world.setNight(params.has('night'),true);world.setQuality((params.get('q') as Quality)??'high');
+camera.position.fromArray(view.eye);camera.lookAt(new THREE.Vector3().fromArray(view.target));world.setTime(params.has('night')?900:240,true);world.setQuality((params.get('q') as Quality)??'high');
 document.getElementById('label')!.textContent=view.label;
 world.terrain.update(camera.position,99);world.update(.016,camera,renderer);renderer.render(scene,camera);world.update(.016,camera,renderer);renderer.render(scene,camera);document.body.dataset.ready='true';

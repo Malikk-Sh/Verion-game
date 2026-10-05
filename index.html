@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="ru">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#081214"><meta name="description" content="Vireon — исследуйте первую долину Верданы. Мобильная 3D-игра о жизни на новых планетах."><title>Vireon · Вердана / B4</title><link rel="icon" href="data:,"></head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#081214"><meta name="description" content="Vireon — исследуйте первую долину Верданы. Мобильная 3D-игра о жизни на новых планетах."><title>Vireon · Вердана / S1.1</title><link rel="icon" href="data:,"></head>
 <body>
 <svg class="icon-defs" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>
  <symbol id="i-map" viewBox="0 0 24 24"><path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2Zm6-2v16m6-14v16"/></symbol>
@@ -17,28 +17,56 @@
  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M4.9 4.9 7 7m10 10 2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></symbol>
  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
  <symbol id="i-wave" viewBox="0 0 24 24"><path d="M2 12c3-6 5-6 8 0s5 6 8 0 3-4 4-4"/></symbol>
+ <symbol id="i-pick" viewBox="0 0 24 24"><path d="M14 4c3 0 6 2 7 5-3-1.5-6-1.5-8 0M14 4c-1 2-1 3 0 5M13 9 4 20"/></symbol>
+ <symbol id="i-pack" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0v12H6Zm3 0V6a3 3 0 0 1 6 0v2M9 13h6v4H9Z"/></symbol>
+ <symbol id="i-save" viewBox="0 0 24 24"><path d="M5 3h11l3 3v15H5Zm3 0v5h7V3M8 21v-7h8v7"/></symbol>
+ <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 19h16"/></symbol>
+ <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5M4 19h16"/></symbol>
+ <symbol id="i-helmet" viewBox="0 0 24 24"><path d="M5 14a7 7 0 1 1 14 0v3a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2Z"/><path d="M8 12.5a4 3 0 0 1 8 0v1.5H8Z"/></symbol>
+ <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20s-7-4.4-8.5-9A4.6 4.6 0 0 1 12 6.6 4.6 4.6 0 0 1 20.5 11C19 15.6 12 20 12 20Z"/></symbol>
+ <symbol id="i-food" viewBox="0 0 24 24"><path d="M7 3v8m-2.5-8v5a2.5 2.5 0 0 0 5 0V3M7 11v10M17 21V3c-2 1-3.5 3.5-3.5 7v3H17"/></symbol>
+ <symbol id="i-o2" viewBox="0 0 24 24"><path d="M9 3h6M10 3v3M14 3v3M8 6h8a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z"/><path d="M10 12a2 2 0 1 0 4 0 2 2 0 1 0-4 0M13.5 17h1.5l-1.5 1.8H15"/></symbol>
+ <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+ <symbol id="i-swap" viewBox="0 0 24 24"><path d="M4 8h14m-4-4 4 4-4 4M20 16H6m4-4-4 4 4 4"/></symbol>
+ <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 11v6M14 11v6"/></symbol>
+ <symbol id="i-split" viewBox="0 0 24 24"><path d="M12 21v-8L5 6m7 7 7-7M5 6v4M5 6h4M19 6v4M19 6h-4"/></symbol>
+ <symbol id="i-back" viewBox="0 0 24 24"><path d="M20 12H5m6-6-6 6 6 6"/></symbol>
+ <symbol id="i-next" viewBox="0 0 24 24"><path d="M4 12h15m-6-6 6 6-6 6"/></symbol>
+ <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+ <symbol id="i-hand" viewBox="0 0 24 24"><path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V11m0-6.5a1.5 1.5 0 0 1 3 0V11m0-5a1.5 1.5 0 0 1 3 0v7c0 4-2.5 7-6.5 7-3 0-4.5-1.7-6-4l-2-3.3a1.5 1.5 0 0 1 2.5-1.6L8 13"/></symbol>
+ <symbol id="i-chip" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1"/><path d="M10 3v4m4-4v4m-4 10v4m4-4v4M3 10h4m-4 4h4m10-4h4m-4 4h4"/></symbol>
+ <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="1.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+ <symbol id="i-warn" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v6m0 3.5v.5"/></symbol>
+ <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.7 2.7L16 9.5"/></symbol>
+ <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 14 5 18m4-8 5 5m-7-3 5-5 2-2a3 3 0 0 1 4 4l-2 2-5 5Z"/></symbol>
  <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11 12 4l8 7v9h-5v-6H9v6H4Z"/></symbol>
 </defs></svg>
 <canvas id="world" aria-label="Трёхмерная долина Верданы"></canvas>
-<div id="visor" aria-hidden="true"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i></div>
+<div id="visor" aria-hidden="true" hidden></div>
 <div id="hud">
- <header>
-  <div class="status-cluster">
-   <div class="emblem" aria-hidden="true">V</div>
-   <div class="status-copy"><span class="mono tiny">ВЕРДАНА · ЭКСП-01</span><strong>Долина прибытия</strong><span class="mono tiny coords" id="coords">X 040 · Z 042</span></div>
-  </div>
-  <div id="compass-wrap"><canvas id="compass" aria-hidden="true"></canvas><div id="navigation"><span class="nav-arrow"><svg><use href="#i-arrow"/></svg></span><span id="target-name">Местная трава</span><span id="target-distance"></span></div></div>
-  <nav aria-label="Инструменты"><button id="day" class="chip" title="Сменить освещение" aria-label="Сменить день и ночь"><span id="light-icon"><svg><use href="#i-sun"/></svg></span><span id="light-text">День</span></button><button id="map-button" class="chip" title="Карта участка [M]" aria-label="Карта"><svg><use href="#i-map"/></svg><span>Карта</span></button><button id="pause-button" class="chip square" aria-label="Пауза" title="Меню [Esc]"><svg><use href="#i-pause"/></svg></button></nav>
- </header>
- <div id="objective" aria-live="polite"><span class="mono tiny">ЗАДАЧА</span><span id="objective-text">Выйдите из капсулы</span></div>
+ <div id="vitals" title="Здоровье и сытость отображаются; их расход появится на этапе «Выживание»">
+  <div class="gauge" id="g-health" data-kind="health" role="img" aria-label="Здоровье"><span class="vital-readout"><svg class="g-icon"><use href="#i-heart"/></svg><b>100</b></span></div>
+  <div class="gauge" id="g-satiety" data-kind="satiety" role="img" aria-label="Сытость"><span class="vital-readout"><svg class="g-icon"><use href="#i-food"/></svg><b>100</b></span></div>
+  <div class="gauge" id="g-oxygen" data-kind="oxygen" role="img" aria-label="Кислород"><span class="vital-readout"><svg class="g-icon"><use href="#i-o2"/></svg><b>240</b><small>GU</small></span></div>
+ </div>
+ <div id="hud-safe-area" aria-hidden="true"></div>
+ <button id="objective" aria-expanded="false" aria-controls="objective-panel"><svg class="obj-arrow"><use href="#i-arrow"/></svg><span id="objective-text">Выйдите из капсулы</span><svg class="obj-chevron"><use href="#i-chevron"/></svg></button>
+ <div id="compass-wrap"><canvas id="compass" aria-hidden="true"></canvas><div id="navigation"><span class="nav-arrow"><svg><use href="#i-arrow"/></svg></span><span id="target-name">Железо</span><span id="target-distance"></span></div></div>
+ <nav id="hud-buttons" aria-label="Меню">
+  <button id="suit-button" class="tile" title="Костюм [C]" aria-label="Костюм"><svg><use href="#i-helmet"/></svg><span>Костюм</span></button>
+  <button id="inventory-button" class="tile" title="Рюкзак [I]" aria-label="Рюкзак"><svg><use href="#i-pack"/></svg><span>Рюкзак</span></button>
+  <button id="map-button" class="tile" title="Карта [M]" aria-label="Карта"><svg><use href="#i-map"/></svg><span>Карта</span></button>
+  <button id="day" class="tile" title="Сменить день и ночь [N]" aria-label="Сменить день и ночь"><span id="light-icon"><svg><use href="#i-sun"/></svg></span><span id="light-text">День</span></button>
+  <button id="pause-button" class="tile square" aria-label="Пауза" title="Меню [Esc]"><svg><use href="#i-pause"/></svg></button>
+ </nav>
  <div id="toast" aria-live="polite" hidden><span class="mono tiny" id="toast-kind">ОБНАРУЖЕНО</span><strong id="toast-text"></strong></div>
  <div id="target-marker" aria-hidden="true"><i></i><span id="marker-distance"></span></div>
  <div id="reticle" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
- <aside id="discovery" hidden><div class="discovery-copy"><span id="discovery-kind" class="mono tiny"></span><strong id="discovery-title"></strong></div><button id="inspect" aria-label="Осмотреть объект"><svg><use href="#i-scan"/></svg>Сканировать <kbd>E</kbd></button></aside>
- <div id="route-status"><span id="progress" class="mono tiny">ОСМОТРЕНО 0 / 12</span><span id="progress-bar" aria-hidden="true"></span></div>
- <div id="joystick" role="group" aria-label="Джойстик движения"><div class="stick-ring"><span class="stick-ticks"></span><div id="stick"></div></div></div>
- <div id="actions"><button id="run" class="hex" aria-pressed="false"><svg><use href="#i-run"/></svg><span>Бег</span></button><button id="jump" class="hex"><svg><use href="#i-jump"/></svg><span>Прыжок</span></button></div>
- <div id="look-hint" class="mono tiny">СВАЙП — ОБЗОР</div>
+ <div id="aim" hidden aria-live="polite"><span id="aim-name"></span><span id="aim-meta"></span><i id="aim-bar"><b></b></i></div>
+ <div id="hotbar" role="group" aria-label="Быстрый доступ — первая строка рюкзака"><div id="hotbar-title"><b id="hotbar-name"></b><span id="hotbar-meta"></span></div><div id="hotbar-slots"></div></div>
+ <div id="joystick" role="group" aria-label="Джойстик движения"><div class="stick-ring"><span class="stick-ticks"></span><i class="stick-dir up"></i><i class="stick-dir down"></i><i class="stick-dir left"></i><i class="stick-dir right"></i><div id="stick"></div></div></div>
+ <div id="save-status" data-kind="idle"><svg><use href="#i-check"/></svg><span id="save-text">Без мира</span></div>
+ <div id="actions"><button id="action" class="act-main" aria-label="Действие" data-kind="none" aria-disabled="true"><i class="act-ring"></i><svg id="action-icon"><use href="#i-hand"/></svg></button><button id="run" class="hex" aria-label="Бег" aria-pressed="false"><svg><use href="#i-run"/></svg></button><button id="jump" class="hex" aria-label="Прыжок"><svg><use href="#i-jump"/></svg></button></div>
  <div id="boot" aria-hidden="true"></div>
 </div>
 <div id="veil" class="veil">
@@ -47,12 +75,13 @@
    <div class="mono tiny kicker">ЭКСПЕДИЦИЯ 01 · ПЛАНЕТА ВЕРДАНА</div>
    <h1 class="wordmark">VIREON</h1>
    <p class="lede">Холодная долина. Одна капсула.<br>Первый шаг человека на новой планете.</p>
-   <div class="title-actions"><button id="start" class="primary">Начать экспедицию <span aria-hidden="true">→</span></button><button id="title-settings" class="secondary" aria-label="Настройки"><svg><use href="#i-gear"/></svg><span>Настройки</span></button></div>
-   <p class="help">Телефон: джойстик и свайп. Компьютер: WASD, обзор мышью, Space — прыжок, E — сканер.<br>Лучше всего — в горизонтальном режиме, со звуком.</p>
+   <div class="title-actions"><button id="continue" class="primary" hidden>Продолжить <span aria-hidden="true">→</span></button><button id="start" class="primary">Новая экспедиция <span aria-hidden="true">→</span></button><button id="title-saves" class="secondary" aria-label="Сохранения"><svg><use href="#i-save"/></svg><span>Сохранения</span></button><button id="title-settings" class="secondary" aria-label="Настройки"><svg><use href="#i-gear"/></svg><span>Настройки</span></button></div>
+   <p id="title-continue-info" class="help mono" hidden></p><p class="help">Телефон: джойстик и свайп, основная кнопка справа — действие (удерживайте «Добыть»). Компьютер: WASD, обзор мышью, Space — прыжок, F — действие, 1–6 — быстрый доступ, I — рюкзак, C — костюм, N — день/ночь.<br>Лучше всего — в горизонтальном режиме, со звуком.</p>
   </div>
-  <div class="title-foot mono tiny"><span class="build-tag">B4</span> Визуальный образец: мир 560 × 560 м, модели и интерфейс. Выживание, добыча, ровер и сохранения появятся на следующих этапах.</div>
+  <div class="title-foot mono tiny"><span class="build-tag">S1.1</span> Этап «Основа»: добыча конечных ресурсов, рюкзак с быстрым доступом, костюм из четырёх частей, смена дня и ночи, сохранение в браузере и экспорт/импорт файла. Кислород, крафт и строительство — следующий этап.</div>
  </section>
- <section id="paused" class="panel pause-panel" hidden><div class="mono tiny kicker">VIREON / МЕНЮ ЭКСПЕДИЦИИ</div><h2 id="pause-title">Пауза</h2><div class="menu-grid"><button id="resume" class="primary">Продолжить <span aria-hidden="true">→</span></button><button id="settings-button" class="secondary"><svg><use href="#i-gear"/></svg><span>Настройки</span></button><button id="reset" class="secondary"><svg><use href="#i-home"/></svg><span>К капсуле</span></button></div><p class="help">«К капсуле» — служебный возврат для осмотра образца, не телепортация будущей игры.</p></section>
+ <section id="paused" class="panel pause-panel" hidden><div class="mono tiny kicker">VIREON / МЕНЮ ЭКСПЕДИЦИИ</div><h2 id="pause-title">Пауза</h2><div class="menu-grid"><button id="resume" class="primary">Продолжить <span aria-hidden="true">→</span></button><button id="save-now" class="secondary"><svg><use href="#i-save"/></svg><span>Сохранить</span></button><button id="saves-button" class="secondary"><svg><use href="#i-download"/></svg><span>Сохранения</span></button><button id="settings-button" class="secondary"><svg><use href="#i-gear"/></svg><span>Настройки</span></button><button id="reset" class="secondary"><svg><use href="#i-home"/></svg><span>К капсуле</span></button></div><p id="pause-save-info" class="help mono"></p><p class="help">Мир сохраняется сам каждые 30 активных секунд, при паузе и сворачивании. «К капсуле» — служебный возврат, не телепортация будущей игры.</p></section>
+ <section id="objective-panel" class="panel" hidden aria-label="Текущая задача"><div class="panel-heading"><h2>Задача</h2><button id="close-objective" class="icon-button" aria-label="Закрыть задачу">×</button></div><p id="objective-detail"></p><button id="objective-back" class="primary">Продолжить</button></section>
  <section id="settings" class="panel settings-panel" hidden><div class="panel-heading"><div><div class="mono tiny kicker">VIREON / НАСТРОЙКИ</div><h2>Настройки</h2></div><button id="settings-back" class="icon-button" aria-label="Закрыть настройки">×</button></div>
   <div class="settings-grid">
    <button id="fullscreen-toggle" class="secondary" aria-pressed="false"><svg><use href="#i-expand"/></svg><span data-fullscreen-label>На весь экран</span></button>
@@ -62,10 +91,42 @@
    <label class="range-row" for="fov-range"><svg><use href="#i-eye"/></svg><span>Поле зрения</span><input id="fov-range" type="range" min="60" max="95" step="1" value="70"><output id="fov-value">70°</output></label>
    <button id="metrics-toggle" class="ghost">Показать показатели сцены</button>
   </div>
+  <div class="settings-ui-links"><button id="hud-settings-button" class="secondary">Размер интерфейса →</button><button id="visor-settings-button" class="secondary">Эффект визора →</button></div>
   <p id="fullscreen-status" role="status" aria-live="polite"></p>
   <p class="help">Качество: «экономная» — без теней и пыли; «высокая» — большие тени и чёткость экрана. Покачивание отключает качание камеры и расширение обзора при беге. Настройки сохраняются в этом браузере.</p>
  </section>
+ <section id="hud-settings-panel" class="panel" hidden aria-label="Размер интерфейса"><div class="hud-settings-head"><h2>Размер интерфейса</h2><button id="hud-settings-back" class="secondary">← Настройки</button></div><div id="hud-settings-grid" class="hud-settings-grid"></div><div class="hud-settings-actions"><button id="hud-reset" class="secondary">Сбросить размеры</button><button id="hud-preview" class="secondary" hidden>Проверить в игре</button></div><p class="help">100% — средний размер. Сохраняется автоматически. Крупные элементы подстраиваются под экран.</p></section>
+ <section id="visor-settings-panel" class="panel" hidden aria-label="Эффект визора"><div class="hud-settings-head"><h2>Эффект визора</h2><button id="visor-settings-back" class="secondary">← Настройки</button></div><div id="visor-settings-grid" class="visor-settings-grid"></div><div class="hud-settings-actions"><button id="visor-reset" class="secondary">Сбросить эффект</button><button id="visor-preview" class="secondary" hidden>Проверить в игре</button></div><p class="help">100% — стандартный эффект. Сила 0% отключает эффект. Визор виден только в надетом шлеме. Настройки сохраняются автоматически.</p></section>
  <section id="map-panel" class="panel map-panel" hidden><div class="panel-heading"><div><div class="mono tiny kicker">ВЕРДАНА / НАВИГАЦИЯ</div><h2>Долина прибытия</h2></div><button id="close-map" class="icon-button" aria-label="Закрыть карту">×</button></div><div class="map-layout"><canvas id="map" width="480" height="480" aria-label="Карта участка и положения игрока"></canvas><div><p class="help">Выберите ориентир — указатель появится на компасе и в мире.</p><div id="landmark-list"></div></div></div></section>
+ <section id="inventory-panel" class="panel ui-panel inv-panel" hidden aria-label="Инвентарь">
+  <div class="ui-head"><h2>Инвентарь</h2><button id="close-inventory" class="ui-close" aria-label="Закрыть инвентарь"><svg><use href="#i-close"/></svg></button></div>
+  <div class="inv-body">
+   <div class="inv-gear"><h3>Снаряжение</h3>
+    <div class="suit-card"><span class="card-label">Костюм</span><div class="suit-card-row"><div id="suit-thumb" class="suit-thumb"></div><div class="suit-card-side"><div id="suit-minis" class="suit-minis"></div><button id="open-suit" class="ui-btn">Открыть <svg><use href="#i-next"/></svg></button></div></div></div>
+    <div class="tanks"><button id="tank-0" class="tank-card"></button><button id="tank-1" class="tank-card"></button></div>
+   </div>
+   <div class="inv-pack"><div class="pack-head"><h3>Рюкзак <span id="pack-count">0 / 24</span></h3><button id="sort-rest" class="ui-btn"><svg><use href="#i-swap"/></svg><span>Сортировать остальное</span></button></div>
+    <div id="inventory-grid" class="pack-grid" role="grid" aria-label="Рюкзак, 24 ячейки"></div>
+    <p id="pack-hint" class="pack-hint" aria-live="polite"></p></div>
+   <div id="inv-detail" class="inv-detail"></div>
+  </div>
+ </section>
+ <section id="suit-panel" class="panel ui-panel suit-panel" hidden aria-label="Костюм">
+  <div class="ui-head"><button id="suit-back" class="ui-btn back"><svg><use href="#i-back"/></svg><span>Инвентарь</span></button><h2>Костюм</h2><button id="close-suit" class="ui-close" aria-label="Закрыть костюм"><svg><use href="#i-close"/></svg></button></div>
+  <div class="suit-body">
+   <div class="suit-parts"><div class="parts-head"><h3>Части костюма</h3><span id="worn-count">4 / 4 надето</span></div><div id="part-grid" class="part-grid"></div></div>
+   <div id="suit-figure" class="suit-figure" aria-hidden="true"></div>
+   <div class="suit-modules"><h3>Модули</h3><div class="module-row" title="Модули появятся позже"><span class="module"><svg><use href="#i-chip"/></svg></span><span class="module"><svg><use href="#i-chip"/></svg></span><span class="module"><svg><use href="#i-chip"/></svg></span><span class="module locked"><svg><use href="#i-lock"/></svg></span></div></div>
+   <div id="suit-detail" class="suit-detail"></div>
+  </div>
+ </section>
+ <section id="saves-panel" class="panel saves-panel" hidden><div class="panel-heading"><div><div class="mono tiny kicker">VIREON / ХРАНИЛИЩЕ</div><h2>Сохранения</h2></div><button id="close-saves" class="icon-button" aria-label="Закрыть сохранения">×</button></div>
+  <div id="slot-list" class="slot-list"></div>
+  <div class="saves-actions"><button id="export-current" class="secondary"><svg><use href="#i-download"/></svg><span>Экспорт текущего мира</span></button><button id="import-button" class="secondary"><svg><use href="#i-upload"/></svg><span>Импорт файла</span></button></div>
+  <p id="saves-status" class="help mono" role="status" aria-live="polite"></p>
+  <p class="help">Сохранения хранятся в этом браузере (IndexedDB) и могут быть удалены при очистке данных сайта. Экспорт — ваша независимая копия файла .vireon.json; импорт всегда создаёт новый мир и не перезаписывает существующие.</p>
+  <input id="import-file" type="file" accept=".json,application/json" hidden></section>
+ <section id="lease-panel" class="panel lease-panel" hidden><div class="mono tiny kicker">VIREON / ДОСТУП К МИРУ</div><h2 id="lease-title">Мир открыт в другой вкладке</h2><p id="lease-text"></p><div class="menu-grid"><button id="lease-primary" class="primary">Открыть здесь <span aria-hidden="true">→</span></button><button id="lease-export" class="secondary"><svg><use href="#i-download"/></svg><span>Экспорт копии</span></button><button id="lease-back" class="secondary"><span>Назад</span></button></div></section>
  <section id="info-panel" class="panel scan-panel" hidden><div class="scan-head"><span class="mono tiny kicker" id="info-kind"></span><span class="mono tiny scan-state">СКАН ЗАВЕРШЁН</span></div><h2 id="info-title"></h2><p id="info-text"></p><dl id="info-data"></dl><button id="close-info" class="primary">Продолжить осмотр <span aria-hidden="true">→</span></button></section>
 </div>
 <div id="fade" aria-hidden="true"></div>
