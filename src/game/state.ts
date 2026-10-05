@@ -55,13 +55,14 @@ function arr(v: unknown, p: string, max: number) { if (!Array.isArray(v) || v.le
 const ID = /^[a-z0-9_\-]+$/;
 /** One item entry. Stateful items (tools with durability, tanks with gas) always have count 1. */
 function entry(v: unknown, p: string, maxCount?: number): ItemStack {
- const o = obj(v, p), itemId = str(o.itemId, p + '.itemId', 40, ID), def = ITEMS[itemId];
- if (!def) throw new InvalidState(p + '.itemId', `неизвестный предмет ${itemId}`);
+ const o = obj(v, p), itemId = str(o.itemId, p + '.itemId', 40, ID);
+ if (!Object.hasOwn(ITEMS, itemId)) throw new InvalidState(p + '.itemId', `неизвестный предмет ${itemId}`);
+ const def = ITEMS[itemId], tool = Object.hasOwn(TOOLS, itemId) ? TOOLS[itemId] : undefined, tank = Object.hasOwn(TANKS, itemId) ? TANKS[itemId] : undefined;
  const s: ItemStack = { itemId, count: int(o.count, p + '.count', 1, def.stack === 1 ? 1 : maxCount ?? def.stack) };
- if (o.durability !== undefined) { if (!TOOLS[itemId]) throw new InvalidState(p, 'прочность у не-инструмента'); s.durability = int(o.durability, p + '.durability', 0, TOOLS[itemId].durability); }
- if (o.milliGU !== undefined) { if (!TANKS[itemId]) throw new InvalidState(p, 'газ у не-баллона'); s.milliGU = int(o.milliGU, p + '.milliGU', 0, TANKS[itemId].capacity); }
- if (TOOLS[itemId] && s.durability === undefined) throw new InvalidState(p, 'нет прочности инструмента');
- if (TANKS[itemId] && s.milliGU === undefined) throw new InvalidState(p, 'нет остатка газа');
+ if (o.durability !== undefined) { if (!tool) throw new InvalidState(p, 'прочность у не-инструмента'); s.durability = int(o.durability, p + '.durability', 0, tool.durability); }
+ if (o.milliGU !== undefined) { if (!tank) throw new InvalidState(p, 'газ у не-баллона'); s.milliGU = int(o.milliGU, p + '.milliGU', 0, tank.capacity); }
+ if (tool && s.durability === undefined) throw new InvalidState(p, 'нет прочности инструмента');
+ if (tank && s.milliGU === undefined) throw new InvalidState(p, 'нет остатка газа');
  return s;
 }
 const slot = (v: unknown, p: string): Slot => v === null ? null : entry(v, p);
@@ -70,7 +71,7 @@ function suitSlot(v: unknown, part: SuitPart): Slot {
  if (s && ITEMS[s.itemId].part !== part) throw new InvalidState(`player.suit.${part}`, 'предмет не подходит к этому слоту');
  return s;
 }
-function bottleSlot(v: unknown, p: string): Slot { const s = slot(v, p); if (s && !TANKS[s.itemId]) throw new InvalidState(p, 'в слоте баллона не баллон'); return s; }
+function bottleSlot(v: unknown, p: string): Slot { const s = slot(v, p); if (s && !Object.hasOwn(TANKS, s.itemId)) throw new InvalidState(p, 'в слоте баллона не баллон'); return s; }
 
 /**
  * v1 → v2 (content 1.0.0 → 1.1.0). The old single `suit: 'suit'` becomes the four basic parts;
@@ -109,6 +110,11 @@ export function sanitizeState(input: unknown): GameState {
  const dropIds = new Set<string>();
  const drops = arr(w.drops, 'world.drops', 4096).map((d, i) => { const o = obj(d, `world.drops[${i}]`), id = str(o.id, `world.drops[${i}].id`, 24, ID); if (dropIds.has(id)) throw new InvalidState('world.drops', 'повтор id'); dropIds.add(id);
   return { id, x: num(o.x, 'drop.x', -200, 360), z: num(o.z, 'drop.z', -200, 360), items: arr(o.items, 'drop.items', 64).map((s, j) => entry(s, `world.drops[${i}].items[${j}]`, 1e6)) }; });
+ const nextDropId = int(w.nextDropId, 'world.nextDropId', 1, Number.MAX_SAFE_INTEGER);
+ for (const d of drops) {
+  const generatedId = /^drop-(\d+)$/.exec(d.id);
+  if (generatedId && Number(generatedId[1]) >= nextDropId) throw new InvalidState('world.nextDropId', 'счётчик должен быть больше всех существующих идентификаторов куч');
+ }
  const ids = (v: unknown, p: string) => arr(v, p, 64).map((x, i) => str(x, `${p}[${i}]`, 32, ID));
  return {
   meta: { worldId: str(m.worldId, 'meta.worldId', 48, ID), name: str(m.name, 'meta.name', 48), seed: int(m.seed, 'meta.seed', 0, 0xffffffff), planetId: 'verdana', generatorVersion: GENERATOR_VERSION, contentVersion: CONTENT_VERSION, stateVersion: STATE_VERSION, createdAt: int(m.createdAt, 'meta.createdAt', 0, 8.64e15), activeTicks: int(m.activeTicks, 'meta.activeTicks', 0, Number.MAX_SAFE_INTEGER) },
@@ -117,7 +123,7 @@ export function sanitizeState(input: unknown): GameState {
    suit: Object.fromEntries(SUIT_PARTS.map(p => [p, suitSlot(suitRaw[p], p)])) as Suit,
    bottles: [bottleSlot(bottles[0], 'player.bottles[0]'), bottleSlot(bottles[1], 'player.bottles[1]')], inventory: inv.map((s, i) => slot(s, `player.inventory[${i}]`)),
    hotbar: int(pl.hotbar, 'player.hotbar', 0, HOTBAR_SIZE - 1) },
-  world: { nodes, drops, nextDropId: int(w.nextDropId, 'world.nextDropId', 1, Number.MAX_SAFE_INTEGER), dayOffsetTicks: int(w.dayOffsetTicks, 'world.dayOffsetTicks', 0, CYCLE_TICKS - 1) },
+  world: { nodes, drops, nextDropId, dayOffsetTicks: int(w.dayOffsetTicks, 'world.dayOffsetTicks', 0, CYCLE_TICKS - 1) },
   progress: { visited: ids(pr.visited, 'progress.visited'), discovered: ids(pr.discovered, 'progress.discovered'), selected: str(pr.selected, 'progress.selected', 32, ID) },
  };
 }

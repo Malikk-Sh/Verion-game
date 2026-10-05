@@ -13,7 +13,14 @@ try{
  if(process.env.VIREON_CHROMIUM_PATH)launch.executablePath=process.env.VIREON_CHROMIUM_PATH;
  browser=await playwright.launch(launch);
  const ctx=await browser.newContext({viewport:{width:844,height:390},hasTouch:true,acceptDownloads:true});
- await ctx.addInitScript(()=>{if(!localStorage.getItem('vireon.settings'))localStorage.setItem('vireon.settings',JSON.stringify({quality:'low',sound:false}));});
+ // Optional throttling lets a software GPU service two tabs without blocking their timers.
+ // This changes only the test browser, never the game's rendering or save rules.
+ const frameDelay = Math.max(0, Math.min(1000, Number(process.env.VIREON_TEST_FRAME_DELAY_MS) || 0));
+ await ctx.addInitScript(delay=>{
+  if(!localStorage.getItem('vireon.settings'))localStorage.setItem('vireon.settings',JSON.stringify({quality:'low',sound:false}));
+  if(delay){const raf=window.requestAnimationFrame.bind(window);window.requestAnimationFrame=fn=>raf(t=>setTimeout(()=>fn(t),delay));}
+ },frameDelay);
+ report.frameDelayMs=frameDelay;
  const page=await ctx.newPage();page.setDefaultTimeout(300000);
  const watch=p=>{p.on('pageerror',e=>report.errors.push(e.message));p.on('console',m=>{if(m.type()==='error')report.errors.push(m.text());});};watch(page);
  const st=(p=page)=>p.evaluate(()=>window.__vireon.getState());
@@ -81,7 +88,11 @@ try{
  await page.screenshot({path:'artifacts/s1-pause.png'});
  await page.reload();await page.waitForFunction(()=>document.body.dataset.ready==='true');
  assert.equal(await page.locator('#continue').isVisible(),true);await page.screenshot({path:'artifacts/s1-title-continue.png'});
- await click('#continue');await page.waitForFunction(()=>window.__vireon.getState().running);
+ await click('#continue');await page.waitForFunction(()=>{const s=window.__vireon.getState();return s.running||s.dialog==='lease-panel';});
+ // An unload may cancel the old document's asynchronous release. A fresh leftover
+ // lease still requires explicit confirmation until its 15 s expiry, even on reload.
+ if((await st()).dialog==='lease-panel')await click('#lease-primary');
+ await page.waitForFunction(()=>window.__vireon.getState().running);
  s=await st();assert.equal(s.nodes['iron-a'],31);assert.ok(s.inventory.some(i=>i.itemId==='iron_raw'));assert.ok(Math.abs(s.position.z-61.6)<1);assert.equal(s.hotbar,2);assert.equal(s.worn,4);assert.equal(s.dayOffsetTicks,off0);check('Reload → Продолжить restores deposits, inventory, position, hotbar, suit and day offset from IndexedDB');
  // Second tab: lease is held; explicit take-over revokes the first tab.
  const page2=await ctx.newPage();page2.setDefaultTimeout(300000);watch(page2);
@@ -101,4 +112,3 @@ try{
  assert.deepEqual(report.errors,[]);check('No console errors');
 }catch(e){report.failure=String(e?.stack||e);console.error(e);process.exitCode=1;}
 finally{await writeFile('artifacts/s1-verification.json',JSON.stringify(report,null,2)+'\n');await browser?.close();await server.close();}
-

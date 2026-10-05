@@ -330,7 +330,7 @@ function boot(){
   if(!store)return false;
   if(slotId===id&&game)return true;
   try{
-   const r=await openSavedSlot(store,id,token,force,holderAlive,closeCurrent);
+   const r=await openSavedSlot(store,id,token,force,closeCurrent);
    if(!r){
     el('lease-title').textContent='Мир открыт в другой вкладке';
     el('lease-text').textContent=`Этот мир сейчас записывает другая вкладка (или она закрыта меньше 15 секунд назад). Если открыть его здесь, другая вкладка перестанет сохранять изменения.`;
@@ -344,15 +344,6 @@ function boot(){
   }catch(e){el('saves-status').textContent='Не удалось загрузить: '+(e instanceof Error?e.message:String(e))+'. Мир не изменён; его можно экспортировать для диагностики.';setDialog('saves-panel');return false;}
  }
  const enterOrResume=()=>{if(started)resume();else enter();};
- // Live-holder probe: a lease left by a reloaded or crashed tab has no one answering, so it is taken silently;
- // a tab that is really open answers and the player gets the explicit choice (TECHNICAL §9).
- const leaseChannel=typeof BroadcastChannel==='function'?new BroadcastChannel('vireon-lease'):null;
- leaseChannel?.addEventListener('message',e=>{const m=e.data as {type:string;slotId:string;nonce:string};if(m?.type==='ping'&&m.slotId===slotId&&saver&&!saver.halted)leaseChannel.postMessage({type:'pong',nonce:m.nonce});});
- function holderAlive(id:string){
-  if(!leaseChannel)return Promise.resolve(true);
-  return new Promise<boolean>(ok=>{const nonce=Math.random().toString(36).slice(2),on=(e:MessageEvent)=>{if(e.data?.type==='pong'&&e.data.nonce===nonce){leaseChannel.removeEventListener('message',on);ok(true);}};
-   leaseChannel.addEventListener('message',on);leaseChannel.postMessage({type:'ping',slotId:id,nonce});setTimeout(()=>{leaseChannel.removeEventListener('message',on);ok(false);},400);});
- }
  async function importFile(file:File){
   const status=el('saves-status');
   if(!store){status.textContent='Импорт недоступен без хранилища браузера';return;}

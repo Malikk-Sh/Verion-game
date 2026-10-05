@@ -7,7 +7,7 @@ import { buildExport, exportText, parseImport, ImportError } from '../src/persis
 import { importSlot } from '../src/persist/import.ts';
 import { openSavedSlot } from '../src/persist/open.ts';
 import { newGame, cloneState, type GameState } from '../src/game/state.ts';
-import { mineTick, type Mining } from '../src/game/mining.ts';
+import { dropItems, mineTick, pickUp, type Mining } from '../src/game/mining.ts';
 
 const mine = (s: GameState, node: string, ticks: number) => { const m: Mining = { nodeId: null, ticks: 0 }; for (let i = 0; i < ticks; i++) mineTick(s, m, node, true); return s; };
 const played = (id = 'w-a') => { const s = newGame(id, 99, 1, .5); mine(s, 'iron-a', 80 * 5); mine(s, 'ice-a', 30 * 3); s.player.x = 61.25; s.meta.activeTicks = 4321; s.progress.visited.push('iron'); s.world.drops.push({ id: 'drop-1', x: 60, z: 60, items: [{ itemId: 'stone', count: 3 }] }); s.world.nextDropId = 2; return s; };
@@ -23,7 +23,7 @@ test('V17: export → import into a new slot preserves state and the next produc
  const slot = await importSlot(store, text, 'w-import');
  assert.equal(slot.name, s.meta.name + ' · импорт');
  assert.equal(slot.lease, null, 'import does not invent a writer for a closed world');
- const r = await openSavedSlot(store, 'w-import', 'tok2', false, async () => { assert.fail('free imported slot must not probe another tab'); }, async () => {});
+ const r = await openSavedSlot(store, 'w-import', 'tok2', false, async () => {});
  assert.ok(r, 'the imported world opens immediately without forcing the lease');
  const loaded = r.state;
  assert.deepEqual({ ...loaded, meta: { ...loaded.meta, worldId: 'w-a', name: s.meta.name } }, s);
@@ -143,8 +143,8 @@ for (const failure of ['busy', 'missing', 'corrupt'] as const) test(`V20: ${fail
  let current = cloneState(original), saver: Saver | null = new Saver(store, 'w-current', 'A', 1, original.meta.activeTicks, () => cloneState(current));
  const attached = saver; let detached = false;
  const leave = async () => { detached = true; await saver!.save(); saver!.stopHeartbeat(); await store.releaseLease('w-current', 'A'); saver = null; };
- if (failure === 'busy') assert.equal(await openSavedSlot(store, 'w-target', 'A', false, async () => true, leave), null);
- else await assert.rejects(openSavedSlot(store, 'w-target', 'A', false, async () => true, leave), (e: any) => e.code === failure);
+ if (failure === 'busy') assert.equal(await openSavedSlot(store, 'w-target', 'A', false, leave), null);
+ else await assert.rejects(openSavedSlot(store, 'w-target', 'A', false, leave), (e: any) => e.code === failure);
  assert.equal(detached, false); assert.equal(saver, attached, 'Back → resume keeps the same autosaver');
  assert.equal((await store.getSlot('w-current'))!.lease!.token, 'A');
  if (failure === 'corrupt') assert.equal((await store.getSlot('w-target'))!.lease, null, 'failed loading releases only the target');
@@ -161,7 +161,7 @@ test('V20: a successful switch loads the target before closing the current write
  const next = mine(cloneState(original), 'copper-a', 80);
  const saver = new Saver(store, 'w-current', 'A', 1, original.meta.activeTicks, () => next);
  let detached = false;
- const loaded = await openSavedSlot(store, 'w-target', 'A', false, async () => true, async () => {
+ const loaded = await openSavedSlot(store, 'w-target', 'A', false, async () => {
   assert.equal((await store.getSlot('w-target'))!.lease!.token, 'A');
   assert.deepEqual((await store.load('w-target')).state, target);
   await saver.save(); saver.stopHeartbeat(); await store.releaseLease('w-current', 'A'); detached = true;
@@ -208,4 +208,77 @@ test('V20: a released lease (pagehide → back/forward cache) is re-taken by the
  await a.releaseLease('w-bf', 'A'); assert.equal(await a.commit('w-bf', 'A', 1, s), 2, 'commit on a free lease takes it');
  assert.deepEqual(await b.acquireLease('w-bf', 'B', true), { ok: true });
  assert.equal(await a.heartbeat('w-bf', 'A'), false, 'a lease held by another token is never re-taken');
+});
+
+test('V20: a silent background tab keeps its fresh lease until explicit take-over', async () => {
+ const f = new IDBFactory(); let now = 1000;
+ const a = await SaveStore.open(f, 'silent-tab', () => now), b = await SaveStore.open(f, 'silent-tab', () => now);
+ const original = played('w-silent'); await a.createSlot(original, 'A');
+ let leftCurrent = false;
+ for (const elapsed of [401, 5000, LEASE_EXPIRY_MS - 1]) {
+  now = 1000 + elapsed;
+  const loaded = await openSavedSlot(b, 'w-silent', 'B', false, async () => { leftCurrent = true; });
+  assert.equal(loaded, null, 'silence must not revoke an unexpired lease');
+  assert.equal((await a.getSlot('w-silent'))!.lease!.token, 'A');
+ }
+ assert.equal(leftCurrent, false, 'the other current world remains attached while confirmation is pending');
+ const loaded = await openSavedSlot(b, 'w-silent', 'B', true, async () => { leftCurrent = true; });
+ assert.ok(loaded); assert.equal(leftCurrent, true);
+ const updated = mine(cloneState(loaded.state), 'copper-b', 80);
+ assert.equal(await b.commit('w-silent', 'B', loaded.baseRevision, updated), 2);
+ await assert.rejects(a.commit('w-silent', 'A', 1, original), (e: any) => e.code === 'lease');
+ assert.deepEqual((await b.load('w-silent')).state, updated);
+ a.close(); b.close();
+});
+
+test('V20: an expired lease opens without force or a BroadcastChannel probe', async () => {
+ const f = new IDBFactory(); let now = 1000;
+ const a = await SaveStore.open(f, 'expired-tab', () => now), b = await SaveStore.open(f, 'expired-tab', () => now);
+ await a.createSlot(played('w-expired'), 'A'); now += LEASE_EXPIRY_MS;
+ let leftCurrent = false;
+ const loaded = await openSavedSlot(b, 'w-expired', 'B', false, async () => { leftCurrent = true; });
+ assert.ok(loaded); assert.equal(leftCurrent, true);
+ assert.equal((await b.getSlot('w-expired'))!.lease!.token, 'B');
+ a.close(); b.close();
+});
+
+test('V17: correctly hashed imports reject inherited item names in every item container', async () => {
+ const store = await open(new IDBFactory()), original = played('w-valid');
+ await store.createSlot(original, 'A');
+ for (const itemId of ['constructor', '__proto__']) for (const container of ['inventory', 'bottles', 'drops']) {
+  const bad = cloneState(original), item = { itemId, count: 1, durability: 0, milliGU: 0 };
+  if (container === 'inventory') bad.player.inventory[2] = item;
+  else if (container === 'bottles') bad.player.bottles[1] = item;
+  else bad.world.drops[0].items.push(item);
+  const text = exportText(buildExport(bad, 1, 0));
+  await assert.rejects(importSlot(store, text, 'w-invalid'), /неизвестный предмет/);
+  assert.equal((await store.listSlots()).length, 1, 'invalid imports must not create a slot');
+ }
+ assert.deepEqual((await store.load('w-valid')).state, original);
+ store.close();
+});
+
+test('V17: a colliding drop counter is rejected before an imported slot is created', async () => {
+ const store = await open(new IDBFactory()), original = played('w-valid');
+ await store.createSlot(original, 'A');
+ for (const [id, nextDropId] of [['drop-1', 1], ['drop-20', 19], ['drop-9007199254740992', Number.MAX_SAFE_INTEGER]] as const) {
+  const bad = cloneState(original); bad.world.drops[0].id = id; bad.world.nextDropId = nextDropId;
+  await assert.rejects(importSlot(store, exportText(buildExport(bad, 1, 0)), 'w-invalid'), /world.nextDropId/);
+  assert.equal((await store.listSlots()).length, 1);
+ }
+ assert.deepEqual((await store.load('w-valid')).state, original);
+ store.close();
+});
+
+test('V17: imported drop IDs remain unique and both separate piles can be picked up', async () => {
+ const store = await open(new IDBFactory()), original = played('w-valid');
+ await importSlot(store, exportText(buildExport(original, 1, 0)), 'w-import');
+ const imported = (await store.load('w-import')).state;
+ dropItems(imported, 100, 100, [{ itemId: 'stone', count: 2 }]);
+ assert.deepEqual(imported.world.drops.map(d => d.id), ['drop-1', 'drop-2']);
+ assert.equal(imported.world.nextDropId, 3);
+ const next = parseImport(exportText(buildExport(imported, 1, 0))).state;
+ assert.equal(pickUp(next, 'drop-2'), 2); assert.equal(pickUp(next, 'drop-1'), 3);
+ assert.equal(next.world.drops.length, 0);
+ store.close();
 });
