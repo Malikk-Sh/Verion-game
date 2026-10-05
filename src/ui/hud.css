@@ -7,7 +7,8 @@
 .visor-rail{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:-1;overflow:visible}
 .visor-glass{fill:rgba(5,24,29,.62);stroke:none}.visor-edge{fill:none;stroke:rgba(103,232,238,.58);stroke-width:1;vector-effect:non-scaling-stroke}
 .visor-lip{fill:none;stroke:rgba(103,232,238,.18);stroke-width:.7;vector-effect:non-scaling-stroke}
-#hud-buttons .visor-rail{transform:scaleX(-1)}
+.menu-outline{fill:none;stroke:rgba(103,232,238,.62);stroke-width:1;vector-effect:non-scaling-stroke}
+.menu-seam{fill:none;stroke:rgba(103,232,238,.3);stroke-width:.7;vector-effect:non-scaling-stroke}
 #vitals .gauge{width:33.333333%;height:100%;border-radius:0;background:none;display:block;--c:#9deaf0}
 #vitals .gauge[data-kind=satiety]{--c:#f5b13c}#vitals .gauge[data-kind=oxygen]{--c:#43e3ee}
 #vitals .gauge[data-low=true]{--c:#ff6269}
@@ -19,14 +20,13 @@
 #vitals .g-icon{width:calc(16px * var(--hud-vitals));height:calc(16px * var(--hud-vitals));margin:0;flex-shrink:0;fill:none;stroke:var(--c)}
 #vitals .gauge b{position:static;font-size:max(9px,calc(14px * var(--hud-vitals)));line-height:1.2}
 #vitals .gauge small{position:static;font-size:max(7px,calc(8px * var(--hud-vitals)));letter-spacing:0;color:var(--c);margin-left:calc(-3px * var(--hud-vitals))}
-#hud-buttons{display:flex;align-items:flex-start;justify-content:space-around}
-#hud-buttons .tile{position:relative;flex:none;width:calc(40px * var(--hud-menu));height:calc(40px * var(--hud-menu));margin-top:calc(var(--hud-wing-height) * var(--button-top));padding:0;border-radius:6px;clip-path:none;box-shadow:none;background:none;backdrop-filter:none;-webkit-backdrop-filter:none;color:#d9eeef}
-#hud-buttons .tile:after{content:"";position:absolute;left:10%;right:10%;bottom:0;height:5px;border:1px solid rgba(103,232,238,.32);border-top:0;border-radius:0 0 5px 5px;pointer-events:none}
-#suit-button{--button-top:.153}#inventory-button{--button-top:.175}#map-button{--button-top:.219}#day{--button-top:.285}#pause-button{--button-top:.373}
+#hud-buttons{display:flex;align-items:stretch}
+#hud-buttons .tile{position:relative;flex:none;width:20%;height:100%;margin:0;padding:0;border-radius:0;box-shadow:none;background:none;backdrop-filter:none;-webkit-backdrop-filter:none;color:#d9eeef}
+#hud-buttons .tile>svg,#hud-buttons .tile>#light-icon{position:absolute;left:50%;top:var(--button-center-y);transform:translate(-50%,-50%)}
 #hud-buttons .tile svg{width:calc(21px * var(--hud-menu));height:calc(21px * var(--hud-menu));stroke-width:1.7}
 #hud-buttons .tile>span:last-child:not(#light-icon){display:none}
 #hud-buttons .tile:hover,#hud-buttons .tile:focus-visible{background:rgba(41,112,120,.35)}
-#hud-buttons .tile:focus-visible{outline:1px solid var(--aqua);outline-offset:1px}
+#hud-buttons .tile:focus-visible{outline:none;box-shadow:inset 0 0 0 1px var(--aqua)}
 #hud-buttons .tile:active{background:rgba(41,112,120,.55)}
 #hud-buttons #day[aria-pressed=true]{box-shadow:none;background:rgba(112,147,200,.12)}
 #objective{top:var(--hud-objective-top);width:var(--hud-objective-width);max-width:none;height:var(--hud-objective-height);min-height:32px;padding:0 calc(8px * var(--hud-info));gap:calc(6px * var(--hud-info));font-size:max(12px,calc(12px * var(--hud-info)))}
@@ -71,14 +71,19 @@
 #marker-distance{font-size:max(11px,calc(11px * var(--hud-info)))}
 #target-marker{gap:calc(3px * var(--hud-info))}#target-marker i{width:calc(11px * var(--hud-info));height:calc(11px * var(--hud-info))}
 #reticle{width:calc(46px * var(--hud-info));height:calc(46px * var(--hud-info))}body[data-aim=true] #reticle{width:calc(40px * var(--hud-info));height:calc(40px * var(--hud-info))}
-#hud-settings-button{margin-top:12px;min-height:40px}
+.settings-ui-links{display:flex;gap:10px;margin-top:12px}.settings-ui-links .secondary{flex:1;min-width:0;min-height:40px;padding:0 8px;font-size:12px}
 #hud-settings-panel{width:min(800px,calc(100vw - var(--sl) - var(--sr)));height:min(440px,calc(100dvh - 20px));padding:12px 16px;overflow:hidden;display:flex;flex-direction:column;gap:8px}
 .hud-settings-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-shrink:0}
 #hud-settings-panel h2{font-size:22px;margin:0}.hud-settings-head .secondary{width:auto;min-height:36px;font-size:12px;padding:0 12px;white-space:nowrap}
 .hud-settings-grid{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(4,minmax(0,1fr));gap:6px 16px}
-.hud-size-row{display:grid;grid-template-columns:minmax(0,1fr) 48px;gap:4px 8px;font-size:12px;align-items:center}
-.hud-size-row input{grid-column:1/-1;width:100%;margin:0;accent-color:var(--aqua);min-height:32px;height:32px;touch-action:pan-y}
-.hud-size-row output{text-align:right;color:var(--aqua);font-variant-numeric:tabular-nums}
+.hud-size-row,.visor-size-row{display:grid;grid-template-columns:minmax(0,1fr) 48px;gap:4px 8px;font-size:12px;align-items:center}
+.hud-size-row input,.visor-size-row input{grid-column:1/-1;width:100%;margin:0;accent-color:var(--aqua);min-height:32px;height:32px;touch-action:pan-y}
+.hud-size-row output,.visor-size-row output{text-align:right;color:var(--aqua);font-variant-numeric:tabular-nums}
 .hud-settings-actions{display:flex;gap:10px;flex-shrink:0}.hud-settings-actions .secondary{flex:1;min-height:36px;font-size:12px;padding:0 8px}
 #hud-settings-panel .help{font-size:11px;line-height:1.35;margin:0;flex-shrink:0}
 @media(max-height:360px){.hud-settings-grid{grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr))}#hud-settings-panel h2{font-size:20px}.hud-size-row{font-size:11px;gap:2px 4px;grid-template-columns:minmax(0,1fr) 38px}}
+
+#visor-settings-panel{width:min(620px,calc(100vw - var(--sl) - var(--sr)));max-height:calc(100dvh - 20px);padding:16px;display:flex;flex-direction:column;gap:16px;overflow:hidden}
+#visor-settings-panel h2{font-size:22px;margin:0}.visor-settings-grid{display:grid;gap:12px}.visor-size-row{font-size:14px;gap:6px 8px}
+#visor-settings-panel .help{font-size:11px;line-height:1.35;margin:0}
+@media(max-height:360px){#visor-settings-panel{padding:12px 16px;gap:10px}.visor-settings-grid{gap:8px}.visor-size-row{font-size:12px;gap:4px 8px}}

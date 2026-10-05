@@ -31,7 +31,20 @@ function installVisorWings() {
  if (document.querySelector('#vitals .visor-rail')) return;
  const rail = `<svg class="visor-rail" viewBox="0 0 300 80" preserveAspectRatio="none" aria-hidden="true"><path class="visor-glass" d="M1 25 Q100 2 299 2 L299 54 Q100 54 1 77Z"/><path class="visor-edge" d="M1 25 Q100 2 299 2"/><path class="visor-lip" d="M1 55 L1 77 Q100 54 299 54"/></svg>`;
  document.getElementById('vitals')!.insertAdjacentHTML('afterbegin',rail);
- document.getElementById('hud-buttons')!.insertAdjacentHTML('afterbegin',rail);
+ // One closed menu housing with fitted bays, following the approved first concept.
+ const curve=(x:number)=>2+22*(x/300)**2;
+ let seams='';
+ for(let i=1;i<5;i++) {
+  const x=i*60,y=curve(x),bottom=y+52;
+  seams+=`<path class="menu-seam" d="M${x-3} ${y} L${x+2} ${y+5} L${x+2} ${bottom-5} L${x+6} ${bottom}"/>`;
+ }
+ const outline='M5 2 Q200 2 295 23 L299 27 L299 73 L294 77 Q195 54 5 54 L1 50 L1 6Z';
+ document.getElementById('hud-buttons')!.insertAdjacentHTML('afterbegin',`<svg class="visor-rail menu-rail" viewBox="0 0 300 80" preserveAspectRatio="none" aria-hidden="true"><path class="visor-glass" d="${outline}"/><path class="menu-outline" d="${outline}"/>${seams}</svg>`);
+ document.querySelectorAll<HTMLElement>('#hud-buttons button').forEach((button,i)=>{
+  const start=curve(i*60)/80*100,end=curve((i+1)*60)/80*100;
+  button.style.clipPath=`polygon(0 ${start}%,100% ${end}%,100% ${end+65}%,0 ${start+65}%)`;
+  button.style.setProperty('--button-center-y',`${(curve(i*60+30)+26)/80*100}%`);
+ });
  document.querySelectorAll<HTMLElement>('#vitals .gauge').forEach((gauge,index)=>{
   const curve=(x:number)=>2+22*(1-x/300)**2;
   let segments='';

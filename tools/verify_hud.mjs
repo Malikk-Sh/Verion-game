@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
+import { execFileSync } from 'node:child_process';
 await mkdir('artifacts',{recursive:true});
 const report={checks:[],screenshots:[],errors:[],environment:'Chromium / SwiftShader; UI correctness, not phone FPS'};
 const check=name=>{report.checks.push(name);console.log('PASS:',name);};
@@ -10,15 +11,15 @@ const index=await readFile('index.html','utf8');
 const server=await createServer({server:{host:'127.0.0.1',port:5177,strictPort:true},logLevel:'error',plugins:[{name:'hud-test-fixture',configureServer(server){server.middlewares.use('/__hud-check',(_req,res)=>{
  res.setHeader('Content-Type','text/html; charset=utf-8');
  res.end(index.replace('<script type="module" src="/src/main.ts"></script>',`<link rel="stylesheet" href="/src/style.css?direct"><link rel="stylesheet" href="/src/ui/hud.css?direct"><script type="module">
- import {applyHudSettings,defaultHudSettings} from '/src/ui/hud.ts';import {cellContent} from '/src/ui/panels.ts';
+ import {applyHudSettings,defaultHudSettings} from '/src/ui/hud.ts';import{applyVisorSettings}from'/src/ui/visor.ts';import {cellContent} from '/src/ui/panels.ts';
  document.body.dataset.started='true';document.body.dataset.running='true';document.querySelector('#veil').hidden=true;
- document.querySelector('#boot').hidden=true;document.querySelector('#portrait').hidden=true;
+ document.querySelector('#boot').hidden=true;document.querySelector('#target-marker').hidden=true;document.querySelector('#portrait').hidden=true;
  const slots=[{itemId:'tool_stone',count:1,durability:106},{itemId:'pulp',count:4},{itemId:'iron_raw',count:4},{itemId:'copper_raw',count:13},{itemId:'ice',count:24},{itemId:'stone',count:13}];
  slots.forEach((s,i)=>{const b=document.createElement('button');b.className='cell';cellContent(b,s,i,{number:false});document.querySelector('#hotbar-slots').append(b)});
  document.querySelector('#hotbar-name').textContent='Каменный мультитул';document.querySelector('#hotbar-meta').textContent='106 / 160';
  document.querySelector('#target-name').textContent='Железный выход';document.querySelector('#target-distance').textContent='180 м';
  document.querySelector('#aim').hidden=false;document.querySelector('#aim-name').textContent='Железная руда';document.querySelector('#aim-meta').textContent='Выберите мультитул';
- window.hudTest={apply:applyHudSettings,defaults:defaultHudSettings,cellContent};applyHudSettings(defaultHudSettings());
+ window.hudTest={apply:applyHudSettings,defaults:defaultHudSettings,cellContent,visor:applyVisorSettings};applyHudSettings(defaultHudSettings());
  </script>`));
 });}}]});
 await server.listen();let browser,debugPage;
@@ -70,6 +71,23 @@ try{
   return[0,.5,1].map(ratio=>{g.style.setProperty('--v',String(ratio));f.style.transition='none';return getComputedStyle(f).clipPath});
  });
  assert.match(fills[0],/100%/);assert.match(fills[1],/50%/);assert.match(fills[2],/0%/);report.fills=fills;check('Segmented oxygen bar renders empty, half-full and full values');
+ const menu=await page.evaluate(()=>({seams:document.querySelectorAll('.menu-seam').length,closed:document.querySelector('.menu-outline').getAttribute('d').endsWith('Z'),oldBrackets:document.querySelectorAll('#hud-buttons .tile').length&&getComputedStyle(document.querySelector('#suit-button'),'::after').content}));
+ assert.equal(menu.seams,4);assert.ok(menu.closed);assert.equal(menu.oldBrackets,'none');check('Five fitted menu bays share a closed curved housing without hanging brackets');
+ await page.evaluate(()=>{document.querySelector('#world').style.background='#b0b0b0';window.hudTest.visor({strength:0,spread:100})});
+ await page.waitForFunction(()=>getComputedStyle(document.querySelector('#visor')).opacity==='1');
+ await page.screenshot({path:'artifacts/vignette-fixture-off.png'});
+ for(const [strength,spread,name]of [[100,100,'default'],[150,140,'wide']]){await page.evaluate(p=>window.hudTest.visor(p),{strength,spread});await page.screenshot({path:'artifacts/vignette-fixture-'+name+'.png'});}
+ const pixels=JSON.parse(execFileSync('python',['-c',`from PIL import Image
+import json
+frames={n:Image.open('artifacts/vignette-fixture-'+n+'.png').convert('RGB') for n in ['off','default','wide']}
+points={'left':(1,1),'right':(842,1),'center':(422,136),'reach':(150,155)}
+print(json.dumps({n:{k:list(im.getpixel(p)) for k,p in points.items()} for n,im in frames.items()}))`],{encoding:'utf8'}));
+ for(const key of ['left','right'])assert.ok(pixels.default[key].every((v,i)=>v<pixels.off[key][i]-70),'Upper corner shading must be visible');
+ assert.deepEqual(pixels.default.center,pixels.off.center);assert.deepEqual(pixels.wide.center,pixels.off.center);
+ assert.ok(pixels.wide.reach.every((v,i)=>v<pixels.default.reach[i]));
+ assert.ok(pixels.default.left.every((v,i)=>Math.abs(v-pixels.default.right[i])<=2));
+ assert.equal(await page.locator('#visor').evaluate(e=>getComputedStyle(e).pointerEvents),'none');report.vignettePixels=pixels;check('Screenshots confirm stronger symmetric upper corners, clear center, configurable reach and nonblocking overlay');
+ await page.evaluate(()=>window.hudTest.visor({strength:100,spread:100}));
  if(process.argv.includes('--layout-only')){await page.close();await writeFile('artifacts/hud-layout-verification.json',JSON.stringify(report,null,2)+'\n');await browser.close();await server.close();process.exit(0);}
  await page.close();
  // Fresh isolated context: old settings remain intact. Throttle only this software-rendered test browser.
@@ -120,6 +138,22 @@ try{
  await game.setViewportSize({width:844,height:390});await game.evaluate(()=>window.__vireon.teleport(44,46,-.20,-.08));await game.waitForTimeout(1200);await shot('visor-default');
  const before=await game.evaluate(()=>window.__vireon.getState());await game.locator('#hotbar-slots .cell').nth(1).tap();await game.waitForFunction(()=>window.__vireon.getState().hotbar===1);
  const after=await game.evaluate(()=>window.__vireon.getState());assert.equal(after.hotbar,1);assert.equal(after.yaw,before.yaw);assert.equal(after.pitch,before.pitch);check('Smaller hotbar cells select items and do not rotate the camera');
+ await click('#pause-button');await click('#settings-button');await click('#visor-settings-button');
+ assert.deepEqual(await game.locator('.visor-size-row input').evaluateAll(es=>es.map(e=>Number(e.value))),[100,100]);
+ const ticks=await game.evaluate(()=>window.__vireon.getState().activeTicks);await game.waitForTimeout(400);assert.equal(await game.evaluate(()=>window.__vireon.getState().activeTicks),ticks);
+ for(const [width,height]of [[568,320],[667,320],[844,390],[1366,768]]){await game.setViewportSize({width,height});assert.ok(await game.locator('#visor-settings-panel').evaluate(e=>e.scrollHeight<=e.clientHeight+1&&[...e.querySelectorAll('input,button')].filter(c=>c.getClientRects().length).every(c=>{const p=e.getBoundingClientRect(),r=c.getBoundingClientRect();return r.top>=p.top&&r.bottom<=p.bottom&&r.left>=p.left&&r.right<=p.right})));}
+ await game.setViewportSize({width:844,height:390});await shot('visor-settings');check('Separate visor settings fit four screens and pause expedition time');
+ const setVisor=async(key,value)=>game.locator('#visor-'+key).evaluate((e,v)=>{e.value=String(v);e.dispatchEvent(new Event('input',{bubbles:true}))},value);
+ const previous=await game.evaluate(()=>JSON.parse(localStorage.getItem('vireon.settings')));await setVisor('strength',0);await setVisor('spread',135);
+ assert.equal(await game.locator('#visor').evaluate(e=>getComputedStyle(e).getPropertyValue('--visor-strength').trim()),'0');
+ await game.reload();await ready();await click('#title-settings');await click('#visor-settings-button');assert.deepEqual(await game.locator('.visor-size-row input').evaluateAll(es=>es.map(e=>Number(e.value))),[0,135]);
+ await setVisor('strength',120);await click('#visor-settings-back');await click('#hud-settings-button');await click('#hud-reset');
+ assert.deepEqual(await game.evaluate(()=>JSON.parse(localStorage.getItem('vireon.settings')).visor),{strength:120,spread:135});
+ await game.keyboard.press('Escape');assert.equal(await game.locator('#settings').isVisible(),true);await click('#visor-settings-button');await click('#visor-reset');
+ const afterVisor=await game.evaluate(()=>JSON.parse(localStorage.getItem('vireon.settings')));assert.deepEqual(afterVisor.visor,{strength:100,spread:100});
+ for(const key of ['quality','sound','bob','fov','hud'])assert.deepEqual(afterVisor[key],previous[key]);
+ await game.keyboard.press('Escape');assert.equal(await game.locator('#settings').isVisible(),true);await click('#settings-back');await click('#continue');await game.waitForFunction(()=>window.__vireon.getState().running);await click('#pause-button');await click('#settings-button');await click('#visor-settings-button');await click('#visor-preview');assert.equal(await game.evaluate(()=>window.__vireon.getState().running),true);
+ check('Visor preferences persist including 0%; independent resets, Escape navigation and gameplay preview work');
  assert.deepEqual(report.errors,[]);
 }catch(e){report.failure=String(e.stack||e);if(debugPage){report.debug=await debugPage.evaluate(()=>({rects:Object.fromEntries(['vitals','hud-buttons','compass-wrap','compass','hotbar'].map(id=>[id,document.getElementById(id).getBoundingClientRect().toJSON()])),styles:[...document.querySelectorAll('style')].map(e=>e.getAttribute('data-vite-dev-id')),variables:document.documentElement.style.cssText}));console.log(report.debug);}console.error(e);process.exitCode=1;}
 finally{await writeFile('artifacts/hud-verification.json',JSON.stringify(report,null,2)+'\n');await browser?.close();await server.close();}

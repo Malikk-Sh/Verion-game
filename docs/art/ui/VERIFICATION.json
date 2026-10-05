@@ -1207,5 +1207,401 @@
       ]
     },
     "physicalPhoneTested": false
+  },
+  "unifiedMenuAndVignette": {
+    "date": "2026-10-05",
+    "menu": "Approved first variant: one closed curved housing, five fitted bays and four seams",
+    "vignette": {
+      "strength": [
+        0,
+        150
+      ],
+      "spread": [
+        60,
+        140
+      ],
+      "defaults": {
+        "strength": 100,
+        "spread": 100
+      },
+      "storage": "vireon.settings.visor",
+      "separatePanel": true
+    },
+    "unitTests": "45/45",
+    "build": "tsc --noEmit and vite build passed; standalone unchanged",
+    "browser": {
+      "checks": [
+        "Icon-only actions, unnumbered hotbar without caption and centered compass",
+        "Actual HUD CSS at eight viewports, 80/100/150%: no intersections, inside screen, buttons ≥32px",
+        "Simulated landscape safe areas with largest preferences",
+        "Broken → bottle → empty → healthy tool resets status and renders remaining gas",
+        "Mirrored visor frames have equal dimensions and five named controls; resizing does not duplicate artwork",
+        "Native visor artwork keeps translucent glass and distinct segment colors without inherited white strokes",
+        "Segmented oxygen bar renders empty, half-full and full values",
+        "Five fitted menu bays share a closed curved housing without hanging brackets",
+        "Screenshots confirm stronger symmetric upper corners, clear center, configurable reach and nonblocking overlay",
+        "Live vital numbers and low-health warning; curved suit/map/day buttons respond to touch",
+        "Real inventory swaps replace broken tool with tank and healthy tool without stale flags",
+        "Task details open separately and close back to gameplay on short screen",
+        "Approved legacy proportions migrate to 100% defaults",
+        "Dedicated HUD settings fit without scrolling at four viewports",
+        "Eight independent preferences persist after reload without replacing previous graphics/audio settings",
+        "Reset changes HUD sizes only",
+        "Smaller hotbar cells select items and do not rotate the camera",
+        "Separate visor settings fit four screens and pause expedition time",
+        "Visor preferences persist including 0%; independent resets, Escape navigation and gameplay preview work"
+      ],
+      "screenshots": [
+        "artifacts/hud-new-761x390.png",
+        "artifacts/hud-new-844x390.png",
+        "artifacts/hud-new-667x320-quest.png",
+        "artifacts/hud-new-settings.png",
+        "artifacts/hud-new-visor-default.png",
+        "artifacts/hud-new-visor-settings.png"
+      ],
+      "errors": [],
+      "environment": "Chromium / SwiftShader; UI correctness, not phone FPS",
+      "layout": [
+        {
+          "width": 568,
+          "height": 320,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 568,
+          "height": 320,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 568,
+          "height": 320,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 760,
+          "height": 390,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 760,
+          "height": 390,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 760,
+          "height": 390,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 761,
+          "height": 390,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 761,
+          "height": 390,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 761,
+          "height": 390,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 800,
+          "height": 360,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 800,
+          "height": 360,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 800,
+          "height": 360,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 915,
+          "height": 412,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 915,
+          "height": 412,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 915,
+          "height": 412,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 1366,
+          "height": 768,
+          "size": 80,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 1366,
+          "height": 768,
+          "size": 100,
+          "overlap": [],
+          "out": [],
+          "small": []
+        },
+        {
+          "width": 1366,
+          "height": 768,
+          "size": 150,
+          "overlap": [],
+          "out": [],
+          "small": []
+        }
+      ],
+      "wings": {
+        "sameFrame": true,
+        "controls": [
+          {
+            "name": "Костюм",
+            "width": 43.1875
+          },
+          {
+            "name": "Рюкзак",
+            "width": 43.1875
+          },
+          {
+            "name": "Карта",
+            "width": 43.1875
+          },
+          {
+            "name": "Сменить день и ночь",
+            "width": 43.1875
+          },
+          {
+            "name": "Пауза",
+            "width": 43.1875
+          }
+        ],
+        "rails": 2
+      },
+      "art": {
+        "buttonBlur": "none",
+        "glassStroke": "none",
+        "segmentStroke": "none",
+        "food": "rgb(245, 177, 60)",
+        "oxygen": "rgb(67, 227, 238)"
+      },
+      "fills": [
+        "inset(0px 100% 0px 0px)",
+        "inset(0px 50% 0px 0px)",
+        "inset(0px 0% 0px 0px)"
+      ],
+      "vignettePixels": {
+        "off": {
+          "left": [
+            176,
+            176,
+            176
+          ],
+          "right": [
+            176,
+            176,
+            176
+          ],
+          "center": [
+            176,
+            176,
+            176
+          ],
+          "reach": [
+            176,
+            176,
+            176
+          ]
+        },
+        "default": {
+          "left": [
+            13,
+            20,
+            25
+          ],
+          "right": [
+            13,
+            19,
+            24
+          ],
+          "center": [
+            176,
+            176,
+            176
+          ],
+          "reach": [
+            157,
+            158,
+            158
+          ]
+        },
+        "wide": {
+          "left": [
+            1,
+            8,
+            13
+          ],
+          "right": [
+            1,
+            8,
+            13
+          ],
+          "center": [
+            176,
+            176,
+            176
+          ],
+          "reach": [
+            112,
+            117,
+            120
+          ]
+        }
+      }
+    },
+    "finalCapture": {
+      "screenshots": [
+        "artifacts/hud-final-1366x768.png",
+        "artifacts/hud-final-844x390.png",
+        "artifacts/hud-final-667x320.png"
+      ],
+      "errors": [],
+      "layouts": [
+        {
+          "width": 1366,
+          "height": 768,
+          "overlap": [],
+          "centerError": 0,
+          "numbers": 0,
+          "booting": false
+        },
+        {
+          "width": 844,
+          "height": 390,
+          "overlap": [],
+          "centerError": 0,
+          "numbers": 0,
+          "booting": false
+        },
+        {
+          "width": 667,
+          "height": 320,
+          "overlap": [],
+          "centerError": 0,
+          "numbers": 0,
+          "booting": false
+        }
+      ]
+    },
+    "screenshots": [
+      "docs/art/ui/screenshots/hud-844x390.webp",
+      "docs/art/ui/screenshots/hud-667x320.webp",
+      "docs/art/ui/screenshots/hud-1366x768.webp",
+      "docs/art/ui/screenshots/visor-settings-844x390.webp"
+    ],
+    "physicalPhoneTested": false
   }
 }
