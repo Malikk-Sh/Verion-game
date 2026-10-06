@@ -24,14 +24,17 @@ const views:Record<string,{eye:number[];target:number[];label:string;rel?:boolea
 };
 const params=new URLSearchParams(location.search);
 const quality=(params.get('q') as Quality)??'high';world.setQuality(quality);renderer.shadowMap.enabled=quality!=='low';
+let shownNight:boolean|undefined;
 function showView(name:string,night=false){
  document.body.dataset.ready='false';
  const view=views[name]??views.capsule;
  const eye=new THREE.Vector3().fromArray(view.eye),target=new THREE.Vector3().fromArray(view.target);
  if(view.rel){eye.y+=heightAt(eye.x,eye.z);target.y+=heightAt(target.x,target.z);}
- camera.position.copy(eye);camera.lookAt(target);world.setTime(night?900:240,true);
+ camera.position.copy(eye);camera.lookAt(target);
+ // Camera changes do not change the sun: retain baked lighting and the environment map.
+ if(shownNight!==night){world.setTime(night?900:240,true);shownNight=night;}
  document.getElementById('label')!.textContent=view.label;
- world.terrain.update(camera.position,99);world.update(.016,camera,renderer);renderer.render(scene,camera);world.update(.016,camera,renderer);renderer.render(scene,camera);
+ world.terrain.update(camera.position,99);world.update(.016,camera,renderer);world.update(.016,camera,renderer);renderer.render(scene,camera);
  document.body.dataset.ready='true';
  return{name,night,quality,drawCalls:renderer.info.render.calls};
 }

@@ -9,7 +9,7 @@ const server=await createServer({server:{host:'127.0.0.1',port:5173,strictPort:t
 await server.listen();
 let browser, production;
 const startedAt=performance.now();
-const frameDelay=Math.max(0,Math.min(1000,Number(process.env.VIREON_TEST_FRAME_DELAY_MS??120)||0));
+const frameDelay=Math.max(0,Math.min(1000,Number(process.env.VIREON_TEST_FRAME_DELAY_MS??1000)||0));
 const report={checks:[],errors:[],measurements:[],timings:[],reviewViews:[],frameDelayMs:frameDelay,environment:'Headless Chromium; software rendering (SwiftShader) in this verification environment, economy preset for gameplay checks. Not a phone FPS test.'};
 const check=(name)=>{const elapsedMs=Math.round(performance.now()-startedAt);report.checks.push(name);report.timings.push({name,elapsedMs});console.log('PASS:',name,`[${elapsedMs} ms]`);};
 try {
@@ -20,6 +20,7 @@ try {
  const page=await browser.newPage({viewport:{width:844,height:390},hasTouch:true});
  page.setDefaultTimeout(240000);
  // Give software GL idle time between frames so it cannot starve input and DOM checks.
+ // A one-second gap is faster overall than continuous rendering on a CPU-only runner.
  // Only this test page is throttled; production game code and all three quality presets are unchanged.
  await page.addInitScript(delay=>{
   if(!localStorage.getItem('vireon.settings'))localStorage.setItem('vireon.settings',JSON.stringify({quality:'low',sound:true}));
@@ -28,7 +29,7 @@ try {
  page.on('pageerror',e=>report.errors.push(e.message));page.on('console',m=>{if(m.type()==='error')report.errors.push(m.text());});
  const state=()=>page.evaluate(()=>window.__vireon.getState());
  await page.goto('http://127.0.0.1:5173');await page.waitForFunction(()=>document.body.dataset.ready==='true');
- assert.equal(await page.locator('vite-error-overlay').count(),0);await page.waitForTimeout(1500);await page.screenshot({path:'artifacts/b4-welcome.png'});check('Development page loads, WebGL2 initializes, no error overlay');
+ assert.equal(await page.locator('vite-error-overlay').count(),0);await page.waitForTimeout(1500);assert.ok((await state()).drawCalls>0,'Gameplay must perform real WebGL draw calls');await page.screenshot({path:'artifacts/b4-welcome.png'});check('Development page loads, WebGL2 initializes, no error overlay');
  await page.click('#title-settings');assert.equal((await state()).dialog,'settings');assert.equal(await page.locator('#settings').isVisible(),true);await page.screenshot({path:'artifacts/b4-title-settings.png'});await page.click('#settings-back');assert.equal((await state()).dialog,'welcome');check('Settings open from the title screen and return to it');
  await page.click('#start');await page.waitForFunction(()=>window.__vireon.getState().running);assert.equal((await state()).version,'S1');
  await page.waitForFunction(()=>window.__vireon.getState().action==='scan');await page.click('#action');assert.equal((await state()).dialog,'info-panel');assert.ok((await state()).visited.includes('capsule'));await page.click('#close-info');check('Inspection opens a real landmark card and records visit');
@@ -92,7 +93,7 @@ try {
  await page.addInitScript(()=>{Object.defineProperty(document,'fullscreenEnabled',{get:()=>false});});await page.reload();await page.waitForFunction(()=>document.body.dataset.ready==='true');await page.click('#start');await page.waitForFunction(()=>window.__vireon.getState().running);await page.click('#pause-button');await page.click('#settings-button');assert.equal(await page.locator('#fullscreen-toggle').isDisabled(),true);check('Unsupported fullscreen is disabled with an explanation');
  // The live game must stop consuming CPU while the static model review runs.
  await page.close();
- const art=await browser.newPage({viewport:{width:960,height:540}});art.setDefaultTimeout(240000);art.on('pageerror',e=>report.errors.push(e.message));
+ const art=await browser.newPage({viewport:{width:960,height:540}});art.setDefaultTimeout(240000);art.on('pageerror',e=>report.errors.push(e.message));art.on('console',m=>{if(m.type()==='error')report.errors.push(m.text());});
  await art.goto('http://127.0.0.1:5173/tools/scene-review.html?view=capsule');await art.waitForFunction(()=>document.body.dataset.ready==='true');
  // Reuse geometry, textures and compiled shaders across the same thirteen views and night variant.
  for(const view of ['capsule','interior','cave','grass','valley','ice','ore','door','flank','berth','copper','canyon','crater']){
