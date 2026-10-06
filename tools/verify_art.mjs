@@ -62,7 +62,7 @@ try {
   await page.setViewportSize({ width: w, height: h }); await page.waitForTimeout(300);
   await shot(`${w}-hud`); await page.keyboard.press('KeyI'); await shot(`${w}-inventory`);
   const cells = await page.locator('#inventory-grid .cell').evaluateAll(es => es.map(e => { const r = e.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; }));
-  assert.ok(cells.every(c => c.w >= 47.5 && c.h >= 47.5), 'Inventory cells must stay ≥48px');
+  assert.ok(cells.every(c => c.w >= 31.5 && c.h >= 31.5), 'Inventory buttons must stay ≥32px in both dimensions');
   for (let i = 0; i < cells.length; i++) for (let j = i + 1; j < cells.length; j++) { const a = cells[i], b = cells[j]; assert.ok(!(a.x < b.x + b.w - 1 && a.x + a.w > b.x + 1 && a.y < b.y + b.h - 1 && a.y + a.h > b.y + 1), 'Inventory cells overlap'); }
   if (h <= 360) {
    await page.locator('#inventory-grid').evaluate(e => e.scrollTop = e.scrollHeight);

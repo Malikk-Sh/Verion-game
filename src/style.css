@@ -1,7 +1,7 @@
 :root{
  --ink:#061012;--glass:rgba(9,22,25,.56);--glass-strong:rgba(8,19,22,.84);--line:rgba(156,236,224,.26);--line-soft:rgba(156,236,224,.13);
  --text:#e9f5f1;--muted:rgba(215,236,230,.62);--cyan:#7fe6da;--cyan-dim:rgba(127,230,218,.55);--amber:#f2b460;--amber-deep:#c9853a;--warn:#ff8a5c;
- --cut:10px;--mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+ --cut:10px;--button-min-size:32px;--mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
  font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--text);background:var(--ink);font-synthesis:none;-webkit-font-smoothing:antialiased;
 }
 *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;overscroll-behavior:none;background:var(--ink)}body{touch-action:none;user-select:none;-webkit-user-select:none}[hidden]{display:none!important}
@@ -9,7 +9,8 @@
 svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
 .mono{font-family:var(--mono);letter-spacing:.14em;text-transform:uppercase}.tiny{font-size:9px;font-weight:600}
 .chamfer{clip-path:polygon(var(--cut) 0,100% 0,100% calc(100% - var(--cut)),calc(100% - var(--cut)) 100%,0 100%,0 var(--cut))}
-button{font:inherit;color:inherit;cursor:pointer;min-height:32px;min-width:32px;padding:0 16px;border:1px solid var(--line);border-radius:0;background:linear-gradient(160deg,rgba(40,70,72,.55),rgba(10,26,30,.7));
+/* All buttons share a 32×32 CSS px floor; larger layout sizes remain allowed. */
+button{font:inherit;color:inherit;cursor:pointer;min-height:var(--button-min-size);min-width:var(--button-min-size);padding:0 16px;border:1px solid var(--line);border-radius:0;background:linear-gradient(160deg,rgba(40,70,72,.55),rgba(10,26,30,.7));
  clip-path:polygon(var(--cut) 0,100% 0,100% calc(100% - var(--cut)),calc(100% - var(--cut)) 100%,0 100%,0 var(--cut));
  backdrop-filter:blur(10px) saturate(1.2);-webkit-backdrop-filter:blur(10px) saturate(1.2);touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:background .18s,border-color .18s,color .18s,transform .08s}
 button:hover{border-color:rgba(156,236,224,.5);background:linear-gradient(160deg,rgba(55,95,96,.6),rgba(14,34,38,.75))}
@@ -245,7 +246,7 @@ input[type=range]::-moz-range-track{height:3px;background:var(--line)}input[type
 .suit-minis{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
 .mini{aspect-ratio:1;display:grid;place-items:center;padding:3px;background:rgba(16,58,64,.6);box-shadow:inset 0 0 0 1px var(--glow-soft)}.mini .art{width:100%;height:100%}.mini.off{opacity:.55}
 .tanks{display:grid;grid-template-columns:1fr 1fr;gap:10px;flex:1;min-height:0}
-.tank-card{display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:6px;padding:10px;text-align:left;min-height:0;height:auto;border:0;background:rgba(6,28,33,.7);box-shadow:inset 0 0 0 1px var(--glow-soft);clip-path:none;backdrop-filter:none}
+.tank-card{display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:6px;padding:10px;text-align:left;min-height:var(--button-min-size);height:auto;border:0;background:rgba(6,28,33,.7);box-shadow:inset 0 0 0 1px var(--glow-soft);clip-path:none;backdrop-filter:none}
 .tank-card.selected{box-shadow:inset 0 0 0 2px var(--aqua),inset 0 0 16px rgba(67,227,238,.25)}
 .tank-art{flex:1;min-height:40px;width:100%}
 .tank-bar{display:block;height:7px;background:linear-gradient(90deg,var(--aqua) calc(var(--r)*100%),rgba(0,0,0,.5) 0)}

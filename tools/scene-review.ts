@@ -22,8 +22,22 @@ const views:Record<string,{eye:number[];target:number[];label:string;rel?:boolea
  canyon:{eye:[95,2,-84],target:[125,0,-106],label:'СУХОЕ РУСЛО / B4',rel:true},
  crater:{eye:[236,6,226],target:[272,-6,262],label:'КРАТЕР / B4',rel:true},
 };
-const params=new URLSearchParams(location.search),view=views[params.get('view')??'capsule']??views.capsule;
-if(view.rel){view.eye[1]+=heightAt(view.eye[0],view.eye[2]);view.target[1]+=heightAt(view.target[0],view.target[2]);}
-camera.position.fromArray(view.eye);camera.lookAt(new THREE.Vector3().fromArray(view.target));world.setTime(params.has('night')?900:240,true);world.setQuality((params.get('q') as Quality)??'high');
-document.getElementById('label')!.textContent=view.label;
-world.terrain.update(camera.position,99);world.update(.016,camera,renderer);renderer.render(scene,camera);world.update(.016,camera,renderer);renderer.render(scene,camera);document.body.dataset.ready='true';
+const params=new URLSearchParams(location.search);
+const quality=(params.get('q') as Quality)??'high';world.setQuality(quality);renderer.shadowMap.enabled=quality!=='low';
+let shownNight:boolean|undefined;
+function showView(name:string,night=false){
+ document.body.dataset.ready='false';
+ const view=views[name]??views.capsule;
+ const eye=new THREE.Vector3().fromArray(view.eye),target=new THREE.Vector3().fromArray(view.target);
+ if(view.rel){eye.y+=heightAt(eye.x,eye.z);target.y+=heightAt(target.x,target.z);}
+ camera.position.copy(eye);camera.lookAt(target);
+ // Camera changes do not change the sun: retain baked lighting and the environment map.
+ if(shownNight!==night){world.setTime(night?900:240,true);shownNight=night;}
+ document.getElementById('label')!.textContent=view.label;
+ world.terrain.update(camera.position,99);world.update(.016,camera,renderer);world.update(.016,camera,renderer);renderer.render(scene,camera);
+ document.body.dataset.ready='true';
+ return{name,night,quality,drawCalls:renderer.info.render.calls};
+}
+// This isolated development tool reuses the real world; it is absent from the production bundle.
+Object.assign(window,{__vireonReview:{show:showView}});
+showView(params.get('view')??'capsule',params.has('night'));
