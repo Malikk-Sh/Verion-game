@@ -29,6 +29,13 @@ kbd{font-family:var(--mono);font-size:9px;padding:2px 5px;border:1px solid curre
  background:url('./assets/ui/visor-overlay.webp') center / 100% 100% no-repeat;
  opacity:clamp(0,calc(.8 * var(--visor-strength)),1)}
 body[data-started=false] #visor{opacity:0}#visor{transition:opacity .3s}
+/* A restrained sci-fi emergency layer: it frames the playfield without covering the world. */
+#survival-alert{position:absolute;inset:0;z-index:3;display:flex;align-items:flex-start;justify-content:center;padding-top:calc(var(--st) + 82px);pointer-events:none;opacity:0;transform:translateY(-8px);transition:opacity .25s,transform .25s;color:#ff8d83;font:700 10px/1 var(--mono);letter-spacing:.18em;text-shadow:0 0 10px rgba(255,62,74,.75)}
+#survival-alert .alert-mark{display:grid;place-items:center;width:17px;height:17px;margin-right:8px;border:1px solid currentColor;transform:rotate(45deg);font:700 12px/1 system-ui;box-shadow:0 0 12px rgba(255,62,74,.55)}
+#survival-alert .alert-mark::first-letter{transform:rotate(-45deg)}
+body[data-hazard=critical] #survival-alert{opacity:1;transform:none;animation:hazard-pulse 1.2s ease-in-out infinite}
+body[data-hazard=critical] #visor::after{filter:saturate(1.35) hue-rotate(330deg);opacity:.8}
+@keyframes hazard-pulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.45);text-shadow:0 0 18px rgba(255,62,74,.95)}}
 
 #hud{pointer-events:none;position:absolute;inset:0;z-index:2;text-shadow:0 0 2px rgba(0,0,0,.7),0 1px 8px rgba(0,0,0,.55);transition:opacity .4s}
 #hud button,#joystick{pointer-events:auto}

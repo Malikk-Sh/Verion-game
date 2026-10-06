@@ -15,17 +15,20 @@ export const HOTBAR_SIZE = 6;
 export type ItemStack = NonNullable<Slot>;
 export type Drop = { id: string; x: number; z: number; items: ItemStack[] };
 export type Suit = Record<SuitPart, Slot>;
+export type Survival = { suffocationMs: number; recoveryMs: number; hungerMs: number; sinceDamageMs: number; foodCooldownMs: number; emergencyMs: number };
+export const freshSurvival = (): Survival => ({ suffocationMs: 0, recoveryMs: 0, hungerMs: 0, sinceDamageMs: 0, foodCooldownMs: 0, emergencyMs: 0 });
 export type GameState = {
  meta: { worldId: string; name: string; seed: number; planetId: 'verdana'; generatorVersion: number; contentVersion: string; stateVersion: number; createdAt: number; activeTicks: number };
  player: {
   x: number; y: number; z: number; yaw: number; pitch: number;
   /** Shown on the HUD; not simulated before the «Выживание» stage. */
   vitals: { health: number; satiety: number };
+  survival: Survival;
   suit: Suit; bottles: [Slot, Slot]; inventory: Slot[];
   /** Selected cell of the first inventory row (0…5). */
   hotbar: number;
  };
- world: { nodes: Record<string, number>; drops: Drop[]; nextDropId: number; dayOffsetTicks: number };
+ world: { capsuleMilliGU: number; nodes: Record<string, number>; drops: Drop[]; nextDropId: number; dayOffsetTicks: number };
  progress: { visited: string[]; discovered: string[]; selected: string };
 };
 export const SPAWN_POSE = { x: 40, z: 42, yaw: .38, pitch: -.035 };
@@ -36,8 +39,8 @@ export function newGame(worldId: string, seed: number, createdAt: number, y: num
  inventory[1] = { itemId: 'pulp', count: 4 };
  return {
   meta: { worldId, name, seed: seed >>> 0, planetId: 'verdana', generatorVersion: GENERATOR_VERSION, contentVersion: CONTENT_VERSION, stateVersion: STATE_VERSION, createdAt, activeTicks: 0 },
-  player: { x: SPAWN_POSE.x, y, z: SPAWN_POSE.z, yaw: SPAWN_POSE.yaw, pitch: SPAWN_POSE.pitch, vitals: { health: 100, satiety: 100 }, suit: basicSuit(), bottles: [{ itemId: 'bottle_1', count: 1, milliGU: TANKS.bottle_1.capacity }, null], inventory, hotbar: 0 },
-  world: { nodes: Object.fromEntries(NODES.map(n => [n.id, n.amount])), drops: [], nextDropId: 1, dayOffsetTicks: START_OFFSET_TICKS },
+  player: { x: SPAWN_POSE.x, y, z: SPAWN_POSE.z, yaw: SPAWN_POSE.yaw, pitch: SPAWN_POSE.pitch, vitals: { health: 100, satiety: 100 }, survival: freshSurvival(), suit: basicSuit(), bottles: [{ itemId: 'bottle_1', count: 1, milliGU: TANKS.bottle_1.capacity }, null], inventory, hotbar: 0 },
+  world: { capsuleMilliGU: 2400000, nodes: Object.fromEntries(NODES.map(n => [n.id, n.amount])), drops: [], nextDropId: 1, dayOffsetTicks: START_OFFSET_TICKS },
   progress: { visited: [], discovered: [], selected: 'iron' },
  };
 }
@@ -81,13 +84,23 @@ function bottleSlot(v: unknown, p: string): Slot { const s = slot(v, p); if (s &
 export function migrateRaw(raw: unknown): unknown {
  if (!isObj(raw) || !isObj(raw.meta)) return raw;
  const version = raw.meta.contentVersion;
- if (version === CONTENT_VERSION) return raw;
+ if (version === CONTENT_VERSION) {
+  if (raw.meta.stateVersion !== 2) return raw;
+  const r = structuredClone(raw);
+  const player = obj(r.player, 'player'), world = obj(r.world, 'world');
+  // S1 saves created before survival was wired have no new fields; never reset an
+  // already-played survival state when it is loaded again.
+  if (!('survival' in player)) player.survival = freshSurvival();
+  if (!('capsuleMilliGU' in world)) world.capsuleMilliGU = 2400000;
+  (r.meta as Obj).stateVersion = STATE_VERSION;
+  return r;
+ }
  if (!(LEGACY_CONTENT_VERSIONS as readonly unknown[]).includes(version)) throw new InvalidState('meta.contentVersion', 'неподдерживаемая версия контента');
  const r = structuredClone(raw) as Obj, m = r.meta as Obj, pl = obj(r.player, 'player'), w = obj(r.world, 'world');
  if (pl.suit !== 'suit') throw new InvalidState('player.suit', 'неизвестный костюм старого формата');
  pl.suit = basicSuit();
  pl.vitals = { health: 100, satiety: 100 };
- pl.hotbar = 0;
+ pl.hotbar = 0; pl.survival = freshSurvival(); w.capsuleMilliGU = 2400000;
  w.dayOffsetTicks = START_OFFSET_TICKS;
  m.contentVersion = CONTENT_VERSION; m.stateVersion = STATE_VERSION;
  return r;
@@ -104,6 +117,8 @@ export function sanitizeState(input: unknown): GameState {
  const bottles = arr(pl.bottles, 'player.bottles', 2);
  if (bottles.length !== 2) throw new InvalidState('player.bottles', 'нужно 2 слота');
  const suitRaw = obj(pl.suit, 'player.suit'), vit = obj(pl.vitals, 'player.vitals');
+ const sv = obj(pl.survival, 'player.survival');
+ const survival = Object.fromEntries(Object.keys(freshSurvival()).map(k => [k, int(sv[k], 'player.survival.' + k, 0, 86400000)])) as Survival;
  const nodesRaw = obj(w.nodes, 'world.nodes'), nodes: Record<string, number> = {};
  for (const n of NODES) nodes[n.id] = int(nodesRaw[n.id], `world.nodes.${n.id}`, 0, n.amount);
  for (const k of Object.keys(nodesRaw)) if (!NODE_BY_ID.has(k)) throw new InvalidState('world.nodes', `неизвестный узел ${k}`);
@@ -120,10 +135,10 @@ export function sanitizeState(input: unknown): GameState {
   meta: { worldId: str(m.worldId, 'meta.worldId', 48, ID), name: str(m.name, 'meta.name', 48), seed: int(m.seed, 'meta.seed', 0, 0xffffffff), planetId: 'verdana', generatorVersion: GENERATOR_VERSION, contentVersion: CONTENT_VERSION, stateVersion: STATE_VERSION, createdAt: int(m.createdAt, 'meta.createdAt', 0, 8.64e15), activeTicks: int(m.activeTicks, 'meta.activeTicks', 0, Number.MAX_SAFE_INTEGER) },
   player: { x: num(pl.x, 'player.x', -200, 360), y: num(pl.y, 'player.y', -100, 200), z: num(pl.z, 'player.z', -200, 360), yaw: num(pl.yaw, 'player.yaw', -1e6, 1e6), pitch: num(pl.pitch, 'player.pitch', -2, 2),
    vitals: { health: num(vit.health, 'player.vitals.health', 0, 100), satiety: num(vit.satiety, 'player.vitals.satiety', 0, 100) },
-   suit: Object.fromEntries(SUIT_PARTS.map(p => [p, suitSlot(suitRaw[p], p)])) as Suit,
+   survival, suit: Object.fromEntries(SUIT_PARTS.map(p => [p, suitSlot(suitRaw[p], p)])) as Suit,
    bottles: [bottleSlot(bottles[0], 'player.bottles[0]'), bottleSlot(bottles[1], 'player.bottles[1]')], inventory: inv.map((s, i) => slot(s, `player.inventory[${i}]`)),
    hotbar: int(pl.hotbar, 'player.hotbar', 0, HOTBAR_SIZE - 1) },
-  world: { nodes, drops, nextDropId, dayOffsetTicks: int(w.dayOffsetTicks, 'world.dayOffsetTicks', 0, CYCLE_TICKS - 1) },
+  world: { capsuleMilliGU: int(w.capsuleMilliGU, 'world.capsuleMilliGU', 0, 2400000), nodes, drops, nextDropId, dayOffsetTicks: int(w.dayOffsetTicks, 'world.dayOffsetTicks', 0, CYCLE_TICKS - 1) },
   progress: { visited: ids(pr.visited, 'progress.visited'), discovered: ids(pr.discovered, 'progress.discovered'), selected: str(pr.selected, 'progress.selected', 32, ID) },
  };
 }

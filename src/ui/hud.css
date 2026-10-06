@@ -11,7 +11,9 @@
 .menu-seam{fill:none;stroke:rgba(103,232,238,.3);stroke-width:.7;vector-effect:non-scaling-stroke}
 #vitals .gauge{width:33.333333%;height:100%;border-radius:0;background:none;display:block;--c:#9deaf0}
 #vitals .gauge[data-kind=satiety]{--c:#f5b13c}#vitals .gauge[data-kind=oxygen]{--c:#43e3ee}
-#vitals .gauge[data-low=true]{--c:#ff6269}
+#vitals .gauge[data-low=true]{--c:#ff6269;animation:vital-alarm 1.15s ease-in-out infinite}
+#vitals .gauge[data-kind=oxygen][data-low=true]{filter:drop-shadow(0 0 7px rgba(255,76,96,.72))}
+@keyframes vital-alarm{0%,100%{opacity:1}50%{opacity:.58}}
 .vital-track,.vital-fill{position:absolute;inset:0;pointer-events:none}
 .vital-track svg,.vital-fill svg{width:100%;height:100%;display:block}
 .vital-track path{fill:rgba(160,204,207,.22);stroke:none}.vital-fill path{fill:var(--c);stroke:none}

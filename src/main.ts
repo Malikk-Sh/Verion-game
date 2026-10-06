@@ -12,11 +12,12 @@ import { SimClock } from './game/clock';
 import { ITEMS, MATERIALS, TOOLS } from './game/defs';
 import { phaseSeconds, isDay, offsetFor, MORNING_S, EVENING_S } from './game/daycycle';
 import { selectHotbar, oxygenGU, oxygenCapacityGU, wornParts } from './game/backpack';
+import { survivalTick, eatPulp, oxygenCapacityGUWithCapsule } from './game/survival';
 import { createPanels, cellContent, cellAria } from './ui/panels';
 import { createViewModel } from './viewmodel';
 import { NODES, NODE_BY_ID } from './game/resources';
 import { newGame, cloneState, SPAWN_POSE, HOTBAR_SIZE, type GameState } from './game/state';
-import { mineTick, pickUp, toolSlot, itemName, REACH, ticksFor, type Mining } from './game/mining';
+import { mineTick, pickUp, dropItems, toolSlot, itemName, REACH, ticksFor, type Mining } from './game/mining';
 import { SaveStore, SaveError, type SlotRecord } from './persist/store';
 import { Saver, type SaverStatus } from './persist/saver';
 import { buildExport, exportText, exportFileName, MAX_FILE_BYTES } from './persist/file';
@@ -50,6 +51,7 @@ function boot(){
  let started=false,running=false,selected='iron',nearest:Landmark|undefined,last=performance.now(),lastUI=0;
  // ---------- S1 game state: one clock, finite deposits, inventory, saves ----------
  const clock=new SimClock(),mining:Mining={nodeId:null,ticks:0};
+ let lastSurvivalEvent='none';
  const token=(globalThis.crypto?.randomUUID?.()??Math.random().toString(36).slice(2)+Date.now().toString(36));
  let game:GameState|null=null,store:SaveStore|null=null,saver:Saver|null=null,storeError='',slotId:string|null=null;
  let holdMine=false,aimNode:string|null=null,aimReason='',mineRatio=0,strikeClock=0,nearDrop:string|null=null,slots:SlotRecord[]=[],actionKind='none',hudKey='';
@@ -134,6 +136,7 @@ function boot(){
   if(!running||!game)return;
   if(actionKind==='pickup'&&nearDrop){const moved=pickUp(game,nearDrop);audio.tone(moved?'item':'warn');toast(moved?'Поднято':'Рюкзак полон',moved?`${moved} предм.`:'Освободите ячейку');syncDrops();hudKey='';updateHotbar();}
   else if(actionKind==='scan')inspect();
+  else if(actionKind==='eat' && game && eatPulp(game)==='ate'){ audio.tone('item'); toast('Питание','Пульпа использована · +8 сытости'); updateVitals(); updateHotbar(); }
  }
  actionBtn.addEventListener('pointerdown',e=>{e.preventDefault();if(!running)return;if(actionKind==='mine'){holdMine=true;capture(actionBtn,e);}else doAction();});
  for(const type of ['pointerup','pointercancel','lostpointercapture'])actionBtn.addEventListener(type,()=>{holdMine=false;});
@@ -367,8 +370,10 @@ function boot(){
  /** Aim label under the reticle and the context action button (mine / pick up / scan / none). */
  function updateAimUI(){
   const box=el('aim'),n=aimNode&&game?NODE_BY_ID.get(aimNode):undefined;
-  box.hidden=!n||!running;document.body.dataset.aim=String(!!n);
+  box.hidden=!running;document.body.dataset.aim=String(!!n);
   let kind='none',label='Действие',iconId='i-hand',blocked='';
+  const selected=game?.player.inventory[game.player.hotbar];
+  if(game && selected?.itemId==='pulp' && !n && !nearDrop && game.player.vitals.satiety<100){kind='eat';label='Есть';iconId='i-food';}
   if(n&&game){
    const left=game.world.nodes[n.id],ti=toolSlot(game),sel=game.player.inventory[game.player.hotbar];
    const secs=ti>=0?(ticksFor(n.material,TOOLS[game.player.inventory[ti]!.itemId].timeMul)/20):0;
@@ -466,10 +471,15 @@ function boot(){
   return ['Исследуйте долину',`Следуйте метке на компасе и сканируйте места: ${visited.size} из ${LANDMARKS.length}.`];
  }
  function updateVitals(){
-  if(!game)return;const g=game,o2=oxygenGU(g),cap=oxygenCapacityGU(g)||1;
+  if(!game)return;const g=game,o2=oxygenGU(g)+g.world.capsuleMilliGU/1000,cap=oxygenCapacityGUWithCapsule(g)||1;
   const set=(id:string,v:number,ratio:number)=>{const e=el(id);e.dataset.low=String(ratio<=.2);e.style.setProperty('--v',String(Math.max(0,Math.min(1,ratio))));const b=e.querySelector('b')!;const t=String(Math.round(v));if(b.textContent!==t)b.textContent=t;};
-  set('g-health',g.player.vitals.health,g.player.vitals.health/100);set('g-satiety',g.player.vitals.satiety,g.player.vitals.satiety/100);set('g-oxygen',o2,o2/cap);
+  const o2Ratio=o2/cap;
+  set('g-health',g.player.vitals.health,g.player.vitals.health/100);set('g-satiety',g.player.vitals.satiety,g.player.vitals.satiety/100);set('g-oxygen',o2,o2Ratio);
   el('g-oxygen').setAttribute('aria-label',`Кислород ${Math.round(o2)} GU`);el('g-health').setAttribute('aria-label',`Здоровье ${Math.round(g.player.vitals.health)}`);el('g-satiety').setAttribute('aria-label',`Сытость ${Math.round(g.player.vitals.satiety)}`);
+  const alert=el('survival-alert');
+  const critical=o2Ratio<=.2||g.player.vitals.health<=20;
+  alert.setAttribute('aria-hidden',String(!critical));document.body.dataset.hazard=critical?'critical':'safe';
+  el('survival-alert-text').textContent=o2Ratio<=.2?'КИСЛОРОД КРИТИЧЕСКИ НИЗКИЙ':g.player.vitals.health<=20?'ЗДОРОВЬЕ КРИТИЧЕСКИ НИЗКО':'СИСТЕМЫ ЖИЗНЕОБЕСПЕЧЕНИЯ';
  }
  function updateVisor(){el('visor').hidden=!game?.player.suit.helmet;}
  function updateUI(){
@@ -502,7 +512,7 @@ function boot(){
   const steps=clock.advance(actualFrameMs);
   for(let i=0;i<steps;i++){const px=actor.x,pz=actor.z;actor.step(FIXED_DT,input);input.jump=false;
    const moved=Math.hypot(actor.x-px,actor.z-pz);if(actor.grounded&&moved>0){stride+=moved;bob+=moved*(input.run?2.4:2.9);if(stride>(input.run?.82:.68)){stride=0;audio.step(input.run,insideCapsule());}}
-   if(game){game.player.x=actor.x;game.player.z=actor.z;const ev=mineTick(game,mining,running?aimNode:null,running&&holdMine);
+   if(game){game.player.x=actor.x;game.player.z=actor.z;const survival=survivalTick(game,FIXED_DT,insideCapsule()); if(survival!==lastSurvivalEvent){lastSurvivalEvent=survival;if(survival==='warning')toast('ВНИМАНИЕ','Проверьте кислород');if(survival==='damage')audio.tone('warn');} if(survival==='death'){ const lost=game.player.inventory.splice(0).filter((s): s is NonNullable<typeof s>=>!!s); if(lost.length)dropItems(game,game.player.x,game.player.z,lost); game.player.inventory=Array.from({length:24},()=>null); game.player.vitals.health=100; game.player.vitals.satiety=40; game.player.survival.suffocationMs=0; actor.reset(); game.player.x=actor.x; game.player.z=actor.z; toast('АВАРИЙНЫЙ ПРОТОКОЛ','Груз оставлен на месте аварии'); updateHotbar(); } const ev=mineTick(game,mining,running?aimNode:null,running&&holdMine);
     aimReason=ev.kind==='blocked'?ev.reason:'';mineRatio=ev.kind==='progress'?ev.ratio:0;
     if(ev.kind==='progress'){strikeClock-=FIXED_DT;if(strikeClock<=0){strikeClock=.45;audio.strike(NODE_BY_ID.get(ev.nodeId)!.material==='ice');}}else strikeClock=0;
     if(ev.kind==='block')onMined(ev);}
