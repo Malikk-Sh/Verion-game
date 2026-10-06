@@ -12,6 +12,7 @@
     "preview": "vite preview --host 0.0.0.0",
     "test": "node --import tsx --test tests/*.test.ts",
     "verify:browser": "node tools/verify_browser.mjs",
+    "verify:survival": "node tools/verify_survival.mjs",
     "verify:s1": "node tools/verify_s1.mjs",
     "verify:art": "node tools/verify_art.mjs",
     "shots": "node tools/shot.mjs",

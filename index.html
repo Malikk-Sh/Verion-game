@@ -45,7 +45,7 @@
 <div id="visor" aria-hidden="true" hidden></div>
 <div id="survival-alert" aria-live="assertive" aria-hidden="true"><span class="alert-mark">!</span><span id="survival-alert-text">КИСЛОРОД КРИТИЧЕСКИ НИЗКИЙ</span></div>
 <div id="hud">
- <div id="vitals" title="Здоровье и сытость отображаются; их расход появится на этапе «Выживание»">
+ <div id="vitals" title="Кислород, здоровье и сытость расходуются только в активное игровое время">
   <div class="gauge" id="g-health" data-kind="health" role="img" aria-label="Здоровье"><span class="vital-readout"><svg class="g-icon"><use href="#i-heart"/></svg><b>100</b></span></div>
   <div class="gauge" id="g-satiety" data-kind="satiety" role="img" aria-label="Сытость"><span class="vital-readout"><svg class="g-icon"><use href="#i-food"/></svg><b>100</b></span></div>
   <div class="gauge" id="g-oxygen" data-kind="oxygen" role="img" aria-label="Кислород"><span class="vital-readout"><svg class="g-icon"><use href="#i-o2"/></svg><b>240</b><small>GU</small></span></div>
@@ -82,6 +82,12 @@
   <div class="title-foot mono tiny"><span class="build-tag">S1.1</span> Этап «Основа»: добыча конечных ресурсов, рюкзак с быстрым доступом, костюм из четырёх частей, смена дня и ночи, сохранение в браузере и экспорт/импорт файла. Кислород, крафт и строительство — следующий этап.</div>
  </section>
  <section id="paused" class="panel pause-panel" hidden><div class="mono tiny kicker">VIREON / МЕНЮ ЭКСПЕДИЦИИ</div><h2 id="pause-title">Пауза</h2><div class="menu-grid"><button id="resume" class="primary">Продолжить <span aria-hidden="true">→</span></button><button id="save-now" class="secondary"><svg><use href="#i-save"/></svg><span>Сохранить</span></button><button id="saves-button" class="secondary"><svg><use href="#i-download"/></svg><span>Сохранения</span></button><button id="settings-button" class="secondary"><svg><use href="#i-gear"/></svg><span>Настройки</span></button><button id="reset" class="secondary"><svg><use href="#i-home"/></svg><span>К капсуле</span></button></div><p id="pause-save-info" class="help mono"></p><p class="help">Мир сохраняется сам каждые 30 активных секунд, при паузе и сворачивании. «К капсуле» — служебный возврат, не телепортация будущей игры.</p></section>
+ <section id="death-panel" class="panel pause-panel" hidden aria-label="Возрождение">
+  <div class="mono tiny kicker">VIREON / АВАРИЙНЫЙ ПРОТОКОЛ</div><h2>Экспедиция прервана</h2>
+  <p>Груз остался на месте аварии. Костюм и установленные баллоны сохранены.</p>
+  <button id="respawn-capsule" class="primary">Возродиться в капсуле <span aria-hidden="true">→</span></button>
+  <p class="help">50 здоровья, 40 сытости. Если капсула пуста — 90 секунд личного аварийного дыхания. Запасы газа не пополняются. Время остановлено до возрождения.</p>
+ </section>
  <section id="objective-panel" class="panel" hidden aria-label="Текущая задача"><div class="panel-heading"><h2>Задача</h2><button id="close-objective" class="icon-button" aria-label="Закрыть задачу">×</button></div><p id="objective-detail"></p><button id="objective-back" class="primary">Продолжить</button></section>
  <section id="settings" class="panel settings-panel" hidden><div class="panel-heading"><div><div class="mono tiny kicker">VIREON / НАСТРОЙКИ</div><h2>Настройки</h2></div><button id="settings-back" class="icon-button" aria-label="Закрыть настройки">×</button></div>
   <div class="settings-grid">

@@ -24,10 +24,10 @@ export class Character {
   }
   this.x=x;this.z=z;
  }
- step(dt:number,input:Input){
+ step(dt:number,input:Input,speedMultiplier=1){
   this.previous={x:this.x,y:this.y,z:this.z};
   const length=Math.hypot(input.forward,input.right),scale=length>1?1/length:1;
-  const speed=input.run?5:3.5,f=input.forward*scale,r=input.right*scale;
+  const speed=(input.run?5:3.5)*speedMultiplier,f=input.forward*scale,r=input.right*scale;
   const dx=(Math.sin(this.yaw)*f-Math.cos(this.yaw)*r)*speed*dt;
   const dz=(Math.cos(this.yaw)*f+Math.sin(this.yaw)*r)*speed*dt;
   // Substeps avoid tunnelling even when moving diagonally past a narrow jamb.

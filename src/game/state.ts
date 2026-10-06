@@ -15,13 +15,13 @@ export const HOTBAR_SIZE = 6;
 export type ItemStack = NonNullable<Slot>;
 export type Drop = { id: string; x: number; z: number; items: ItemStack[] };
 export type Suit = Record<SuitPart, Slot>;
-export type Survival = { suffocationMs: number; recoveryMs: number; hungerMs: number; sinceDamageMs: number; foodCooldownMs: number; emergencyMs: number };
-export const freshSurvival = (): Survival => ({ suffocationMs: 0, recoveryMs: 0, hungerMs: 0, sinceDamageMs: 0, foodCooldownMs: 0, emergencyMs: 0 });
+export type Survival = { suffocationMs: number; recoveryMs: number; hungerMs: number; starvationMs: number; sinceDamageMs: number; foodCooldownMs: number; emergencyMs: number };
+export const freshSurvival = (): Survival => ({ suffocationMs: 0, recoveryMs: 0, hungerMs: 0, starvationMs: 0, sinceDamageMs: 0, foodCooldownMs: 0, emergencyMs: 0 });
 export type GameState = {
  meta: { worldId: string; name: string; seed: number; planetId: 'verdana'; generatorVersion: number; contentVersion: string; stateVersion: number; createdAt: number; activeTicks: number };
  player: {
   x: number; y: number; z: number; yaw: number; pitch: number;
-  /** Shown on the HUD; not simulated before the «Выживание» stage. */
+  /** Simulated in active time; zero health is a persistent death awaiting respawn. */
   vitals: { health: number; satiety: number };
   survival: Survival;
   suit: Suit; bottles: [Slot, Slot]; inventory: Slot[];
@@ -91,6 +91,7 @@ export function migrateRaw(raw: unknown): unknown {
   // S1 saves created before survival was wired have no new fields; never reset an
   // already-played survival state when it is loaded again.
   if (!('survival' in player)) player.survival = freshSurvival();
+  else if (isObj(player.survival) && !('starvationMs' in player.survival)) player.survival.starvationMs = 0;
   if (!('capsuleMilliGU' in world)) world.capsuleMilliGU = 2400000;
   (r.meta as Obj).stateVersion = STATE_VERSION;
   return r;
