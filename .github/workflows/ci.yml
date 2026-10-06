@@ -23,8 +23,15 @@ jobs:
       - run: npm run build
       - run: npm test
   browser:
+    name: browser (${{ matrix.suite }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [gameplay, production, models]
+    env:
+      VIREON_VERIFY_SUITE: ${{ matrix.suite }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -33,12 +40,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - run: npx playwright install --with-deps --only-shell chromium
+        if: matrix.suite != 'models'
+      - run: node tools/prepare_ci_browser.mjs
       - run: npm run verify:browser
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: browser-artifacts
-          path: artifacts/
+          name: browser-artifacts-${{ matrix.suite }}
+          path: artifacts/${{ matrix.suite }}/
           if-no-files-found: ignore
-
