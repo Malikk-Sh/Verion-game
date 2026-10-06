@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { newGame } from '../src/game/state.ts';
+import { newGame, sanitizeState } from '../src/game/state.ts';
 import { oxygenGU } from '../src/game/backpack.ts';
 import { eatPulp, survivalTick } from '../src/game/survival.ts';
 
@@ -34,6 +34,19 @@ test('empty air warns first, then damages and eventually kills', () => {
   assert.equal(s.player.vitals.health, 0);
 });
 
+test('survival fields migrate for old saves and existing survival progress is preserved', () => {
+  const old = newGame('old-survival', 1, 1, .5) as unknown as Record<string, any>;
+  delete old.player.survival;
+  delete old.world.capsuleMilliGU;
+  const migrated = sanitizeState(old);
+  assert.equal(migrated.player.survival.suffocationMs, 0);
+  assert.equal(migrated.world.capsuleMilliGU, 2400000);
+  migrated.player.survival.hungerMs = 12000;
+  migrated.world.capsuleMilliGU = 123456;
+  const reopened = sanitizeState(migrated);
+  assert.equal(reopened.player.survival.hungerMs, 12000);
+  assert.equal(reopened.world.capsuleMilliGU, 123456);
+});
 test('pulp restores hunger and health, respects cooldown, and is never free', () => {
   const s = newGame('survival', 1, 1, .5);
   s.player.vitals.satiety = 40; s.player.vitals.health = 80;

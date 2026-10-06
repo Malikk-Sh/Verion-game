@@ -12,7 +12,7 @@ import { SimClock } from './game/clock';
 import { ITEMS, MATERIALS, TOOLS } from './game/defs';
 import { phaseSeconds, isDay, offsetFor, MORNING_S, EVENING_S } from './game/daycycle';
 import { selectHotbar, oxygenGU, oxygenCapacityGU, wornParts } from './game/backpack';
-import { survivalTick, eatPulp, oxygenCapacityGUWithCapsule } from './game/survival';
+import { survivalTick, eatPulp } from './game/survival';
 import { createPanels, cellContent, cellAria } from './ui/panels';
 import { createViewModel } from './viewmodel';
 import { NODES, NODE_BY_ID } from './game/resources';
@@ -471,15 +471,18 @@ function boot(){
   return ['Исследуйте долину',`Следуйте метке на компасе и сканируйте места: ${visited.size} из ${LANDMARKS.length}.`];
  }
  function updateVitals(){
-  if(!game)return;const g=game,o2=oxygenGU(g)+g.world.capsuleMilliGU/1000,cap=oxygenCapacityGUWithCapsule(g)||1;
-  const set=(id:string,v:number,ratio:number)=>{const e=el(id);e.dataset.low=String(ratio<=.2);e.style.setProperty('--v',String(Math.max(0,Math.min(1,ratio))));const b=e.querySelector('b')!;const t=String(Math.round(v));if(b.textContent!==t)b.textContent=t;};
-  const o2Ratio=o2/cap;
-  set('g-health',g.player.vitals.health,g.player.vitals.health/100);set('g-satiety',g.player.vitals.satiety,g.player.vitals.satiety/100);set('g-oxygen',o2,o2Ratio);
+  if(!game)return;const g=game,inCapsule=insideCapsule(actor.x,actor.z);
+  const carried=oxygenGU(g),carriedCapacity=oxygenCapacityGU(g);
+  const o2=inCapsule?carried+g.world.capsuleMilliGU/1000:carried;
+  const cap=inCapsule?carriedCapacity+2400:carriedCapacity;
+  const ratio=cap>0?o2/cap:0;
+  const set=(id:string,v:number,fill:number)=>{const e=el(id);e.dataset.low=String(fill<=.2);e.style.setProperty('--v',String(Math.max(0,Math.min(1,fill))));const b=e.querySelector('b')!;const t=String(Math.round(v));if(b.textContent!==t)b.textContent=t;};
+  set('g-health',g.player.vitals.health,g.player.vitals.health/100);set('g-satiety',g.player.vitals.satiety,g.player.vitals.satiety/100);set('g-oxygen',o2,ratio);
   el('g-oxygen').setAttribute('aria-label',`Кислород ${Math.round(o2)} GU`);el('g-health').setAttribute('aria-label',`Здоровье ${Math.round(g.player.vitals.health)}`);el('g-satiety').setAttribute('aria-label',`Сытость ${Math.round(g.player.vitals.satiety)}`);
   const alert=el('survival-alert');
-  const critical=o2Ratio<=.2||g.player.vitals.health<=20;
+  const critical=ratio<=.2||g.player.vitals.health<=20;
   alert.setAttribute('aria-hidden',String(!critical));document.body.dataset.hazard=critical?'critical':'safe';
-  el('survival-alert-text').textContent=o2Ratio<=.2?'КИСЛОРОД КРИТИЧЕСКИ НИЗКИЙ':g.player.vitals.health<=20?'ЗДОРОВЬЕ КРИТИЧЕСКИ НИЗКО':'СИСТЕМЫ ЖИЗНЕОБЕСПЕЧЕНИЯ';
+  el('survival-alert-text').textContent=ratio<=.2?'КИСЛОРОД КРИТИЧЕСКИ НИЗКИЙ':g.player.vitals.health<=20?'ЗДОРОВЬЕ КРИТИЧЕСКИ НИЗКО':'СИСТЕМЫ ЖИЗНЕОБЕСПЕЧЕНИЯ';
  }
  function updateVisor(){el('visor').hidden=!game?.player.suit.helmet;}
  function updateUI(){
@@ -512,7 +515,7 @@ function boot(){
   const steps=clock.advance(actualFrameMs);
   for(let i=0;i<steps;i++){const px=actor.x,pz=actor.z;actor.step(FIXED_DT,input);input.jump=false;
    const moved=Math.hypot(actor.x-px,actor.z-pz);if(actor.grounded&&moved>0){stride+=moved;bob+=moved*(input.run?2.4:2.9);if(stride>(input.run?.82:.68)){stride=0;audio.step(input.run,insideCapsule());}}
-   if(game){game.player.x=actor.x;game.player.z=actor.z;const survival=survivalTick(game,FIXED_DT,insideCapsule()); if(survival!==lastSurvivalEvent){lastSurvivalEvent=survival;if(survival==='warning')toast('ВНИМАНИЕ','Проверьте кислород');if(survival==='damage')audio.tone('warn');} if(survival==='death'){ const lost=game.player.inventory.splice(0).filter((s): s is NonNullable<typeof s>=>!!s); if(lost.length)dropItems(game,game.player.x,game.player.z,lost); game.player.inventory=Array.from({length:24},()=>null); game.player.vitals.health=100; game.player.vitals.satiety=40; game.player.survival.suffocationMs=0; actor.reset(); game.player.x=actor.x; game.player.z=actor.z; toast('АВАРИЙНЫЙ ПРОТОКОЛ','Груз оставлен на месте аварии'); updateHotbar(); } const ev=mineTick(game,mining,running?aimNode:null,running&&holdMine);
+   if(game){game.player.x=actor.x;game.player.z=actor.z;const survival=survivalTick(game,FIXED_DT,insideCapsule()); if(survival!==lastSurvivalEvent){lastSurvivalEvent=survival;if(survival==='warning')toast('ВНИМАНИЕ','Проверьте кислород');if(survival==='damage')audio.tone('warn');} if(survival==='death'){ const lost=game.player.inventory.splice(0).filter((s): s is NonNullable<typeof s>=>!!s); if(lost.length)dropItems(game,game.player.x,game.player.z,lost); game.player.inventory=Array.from({length:24},()=>null); game.player.vitals.health=100; game.player.vitals.satiety=40; game.player.survival.suffocationMs=0; actor.reset(); game.player.x=actor.x; game.player.z=actor.z; toast('АВАРИЙНЫЙ ПРОТОКОЛ','Груз оставлен на месте аварии');syncDrops();updateHotbar(); } const ev=mineTick(game,mining,running?aimNode:null,running&&holdMine);
     aimReason=ev.kind==='blocked'?ev.reason:'';mineRatio=ev.kind==='progress'?ev.ratio:0;
     if(ev.kind==='progress'){strikeClock-=FIXED_DT;if(strikeClock<=0){strikeClock=.45;audio.strike(NODE_BY_ID.get(ev.nodeId)!.material==='ice');}}else strikeClock=0;
     if(ev.kind==='block')onMined(ev);}
