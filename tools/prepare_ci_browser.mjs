@@ -9,7 +9,7 @@ function install(...args) {
  if(result.status!==0)throw new Error(`Playwright ${args.join(' ')} failed (${result.status}): ${result.stderr}`);
 }
 async function smoke() {
- const browser=await chromium.launch({headless:true,executablePath:process.env.VIREON_CHROMIUM_PATH,args:['--no-sandbox','--disable-dev-shm-usage','--enable-unsafe-swiftshader']});
+ const browser=await chromium.launch({headless:true,executablePath:process.env.VIREON_CHROMIUM_PATH,args:['--no-sandbox','--disable-dev-shm-usage','--enable-unsafe-swiftshader','--use-gl=angle','--use-angle=swiftshader']});
  await browser.close();
 }
 try {
