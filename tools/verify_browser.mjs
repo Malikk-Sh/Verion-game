@@ -8,17 +8,23 @@ await mkdir('artifacts',{recursive:true});
 const server=await createServer({server:{host:'127.0.0.1',port:5173,strictPort:true}});
 await server.listen();
 let browser, production;
-const report={checks:[],errors:[],measurements:[],environment:'Headless Chromium; software rendering (SwiftShader) in this verification environment, economy preset for gameplay checks. Not a phone FPS test.'};
-const check=(name)=>{report.checks.push(name);console.log('PASS:',name);};
+const startedAt=performance.now();
+const frameDelay=Math.max(0,Math.min(1000,Number(process.env.VIREON_TEST_FRAME_DELAY_MS??120)||0));
+const report={checks:[],errors:[],measurements:[],timings:[],reviewViews:[],frameDelayMs:frameDelay,environment:'Headless Chromium; software rendering (SwiftShader) in this verification environment, economy preset for gameplay checks. Not a phone FPS test.'};
+const check=(name)=>{const elapsedMs=Math.round(performance.now()-startedAt);report.checks.push(name);report.timings.push({name,elapsedMs});console.log('PASS:',name,`[${elapsedMs} ms]`);};
 try {
  let launch={headless:true,args:['--no-sandbox','--disable-dev-shm-usage','--enable-unsafe-swiftshader']};
  if(process.env.VIREON_CHROMIUM_PATH)launch.executablePath=process.env.VIREON_CHROMIUM_PATH;
  if(process.env.VIREON_CHROMIUM_MODULE){const c=(await import(process.env.VIREON_CHROMIUM_MODULE)).default;launch={...launch,executablePath:await c.executablePath(),args:[...c.args.filter(x=>!['--disable-web-security','--allow-running-insecure-content'].includes(x)),'--enable-unsafe-swiftshader']};}
  browser=await playwright.launch(launch);
- const page=await browser.newPage({viewport:{width:1280,height:720},hasTouch:true});
+ const page=await browser.newPage({viewport:{width:844,height:390},hasTouch:true});
  page.setDefaultTimeout(240000);
- // Software GL in CI renders <1 FPS; the economy preset keeps checks practical. Presets are cycled explicitly below.
- await page.addInitScript(()=>{if(!localStorage.getItem('vireon.settings'))localStorage.setItem('vireon.settings',JSON.stringify({quality:'low',sound:true}));});
+ // Give software GL idle time between frames so it cannot starve input and DOM checks.
+ // Only this test page is throttled; production game code and all three quality presets are unchanged.
+ await page.addInitScript(delay=>{
+  if(!localStorage.getItem('vireon.settings'))localStorage.setItem('vireon.settings',JSON.stringify({quality:'low',sound:true}));
+  if(delay){const raf=window.requestAnimationFrame.bind(window);window.requestAnimationFrame=fn=>raf(t=>setTimeout(()=>fn(t),delay));}
+ },frameDelay);
  page.on('pageerror',e=>report.errors.push(e.message));page.on('console',m=>{if(m.type()==='error')report.errors.push(m.text());});
  const state=()=>page.evaluate(()=>window.__vireon.getState());
  await page.goto('http://127.0.0.1:5173');await page.waitForFunction(()=>document.body.dataset.ready==='true');
@@ -29,7 +35,7 @@ try {
  assert.equal((await state()).grassCount,244);check('Scene contains 244 tufts, versus 1218 in B1');
  const before=await state();await page.keyboard.down('KeyW');await page.waitForFunction(z=>window.__vireon.getState().position.z>z+5,before.position.z,{timeout:240000});await page.keyboard.up('KeyW');
  await page.screenshot({path:'artifacts/b4-day.png'});check('Keyboard movement exits capsule into valley');
- await page.mouse.move(740,280);await page.mouse.down();await page.mouse.move(790,270,{steps:4});await page.mouse.up();assert.ok(Math.abs((await state()).yaw-before.yaw)>.1);check('Drag-to-look changes heading');
+ await page.mouse.move(548,195);await page.mouse.down();await page.mouse.move(598,185,{steps:4});await page.mouse.up();assert.ok(Math.abs((await state()).yaw-before.yaw)>.1);check('Drag-to-look changes heading');
  await page.click('#day');assert.equal((await state()).night,true);await page.screenshot({path:'artifacts/b4-night.png'});report.measurements.push(await state());check('Day/night switch changes scene state');
  await page.click('#pause-button');const t=(await state()).activeTime;
  await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));assert.equal((await state()).activeTime,t);check('Pause freezes active simulation time');
@@ -84,9 +90,17 @@ try {
  // Rejected and unavailable fullscreen are explicit UI states, never false success.
  await page.click('#pause-button');await page.click('#settings-button');await page.evaluate(()=>{document.documentElement.requestFullscreen=()=>Promise.reject(new Error('test denial'));});await page.click('#fullscreen-toggle');await page.waitForFunction(()=>document.getElementById('fullscreen-status').textContent.includes('не разрешил'));assert.equal((await state()).fullscreen,false);check('Fullscreen denial leaves scene usable and displays a clear message');
  await page.addInitScript(()=>{Object.defineProperty(document,'fullscreenEnabled',{get:()=>false});});await page.reload();await page.waitForFunction(()=>document.body.dataset.ready==='true');await page.click('#start');await page.waitForFunction(()=>window.__vireon.getState().running);await page.click('#pause-button');await page.click('#settings-button');assert.equal(await page.locator('#fullscreen-toggle').isDisabled(),true);check('Unsupported fullscreen is disabled with an explanation');
- const art=await browser.newPage({viewport:{width:1280,height:720}});art.setDefaultTimeout(240000);art.on('pageerror',e=>report.errors.push(e.message));
- for(const view of ['capsule','interior','cave','grass','valley','ice','ore','door','flank','berth','copper','canyon','crater']){await art.goto('http://127.0.0.1:5173/tools/scene-review.html?view='+view);await art.waitForFunction(()=>document.body.dataset.ready==='true');await art.screenshot({path:'artifacts/b4-model-'+view+'.png'});}
- await art.goto('http://127.0.0.1:5173/tools/scene-review.html?view=capsule&night');await art.waitForFunction(()=>document.body.dataset.ready==='true');await art.screenshot({path:'artifacts/b4-model-night.png'});await art.close();check('All thirteen close-up model views and night variant render');
+ // The live game must stop consuming CPU while the static model review runs.
+ await page.close();
+ const art=await browser.newPage({viewport:{width:960,height:540}});art.setDefaultTimeout(240000);art.on('pageerror',e=>report.errors.push(e.message));
+ await art.goto('http://127.0.0.1:5173/tools/scene-review.html?view=capsule');await art.waitForFunction(()=>document.body.dataset.ready==='true');
+ // Reuse geometry, textures and compiled shaders across the same thirteen views and night variant.
+ for(const view of ['capsule','interior','cave','grass','valley','ice','ore','door','flank','berth','copper','canyon','crater']){
+  const rendered=await art.evaluate(view=>window.__vireonReview.show(view,false),view);assert.ok(rendered.drawCalls>0,`${view}: real WebGL draw calls required`);report.reviewViews.push(rendered);
+  await art.screenshot({path:'artifacts/b4-model-'+view+'.png'});
+ }
+ const nightRendered=await art.evaluate(()=>window.__vireonReview.show('capsule',true));assert.ok(nightRendered.drawCalls>0);report.reviewViews.push(nightRendered);await art.screenshot({path:'artifacts/b4-model-night.png'});await art.close();check('All thirteen close-up model views and night variant render');
  assert.deepEqual(report.errors,[]);check('No browser console errors or uncaught exceptions');
+ report.durationMs=Math.round(performance.now()-startedAt);
  await writeFile('artifacts/browser-verification.json',JSON.stringify(report,null,2)+'\n');
 } finally {await browser?.close();if(production)await new Promise((resolve,reject)=>production.httpServer.close(e=>e?reject(e):resolve()));await server.close();}
