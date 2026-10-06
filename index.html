@@ -79,7 +79,7 @@
    <div class="title-actions"><button id="continue" class="primary" hidden>Продолжить <span aria-hidden="true">→</span></button><button id="start" class="primary">Новая экспедиция <span aria-hidden="true">→</span></button><button id="title-saves" class="secondary" aria-label="Сохранения"><svg><use href="#i-save"/></svg><span>Сохранения</span></button><button id="title-settings" class="secondary" aria-label="Настройки"><svg><use href="#i-gear"/></svg><span>Настройки</span></button></div>
    <p id="title-continue-info" class="help mono" hidden></p><p class="help">Телефон: джойстик и свайп, основная кнопка справа — действие (удерживайте «Добыть»). Компьютер: WASD, обзор мышью, Space — прыжок, F — действие, 1–6 — быстрый доступ, I — рюкзак, C — костюм, N — день/ночь.<br>Лучше всего — в горизонтальном режиме, со звуком.</p>
   </div>
-  <div class="title-foot mono tiny"><span class="build-tag">S1.1</span> Этап «Основа»: добыча конечных ресурсов, рюкзак с быстрым доступом, костюм из четырёх частей, смена дня и ночи, сохранение в браузере и экспорт/импорт файла. Кислород, крафт и строительство — следующий этап.</div>
+  <div class="title-foot mono tiny"><span class="build-tag">S2.2</span> Выживание, ручной крафт, плавка, кислородная линия и герметичный купол. Мастерская: B или инвентарь. Сохранение в браузере и экспорт/импорт файла.</div>
  </section>
  <section id="paused" class="panel pause-panel" hidden><div class="mono tiny kicker">VIREON / МЕНЮ ЭКСПЕДИЦИИ</div><h2 id="pause-title">Пауза</h2><div class="menu-grid"><button id="resume" class="primary">Продолжить <span aria-hidden="true">→</span></button><button id="save-now" class="secondary"><svg><use href="#i-save"/></svg><span>Сохранить</span></button><button id="saves-button" class="secondary"><svg><use href="#i-download"/></svg><span>Сохранения</span></button><button id="settings-button" class="secondary"><svg><use href="#i-gear"/></svg><span>Настройки</span></button><button id="reset" class="secondary"><svg><use href="#i-home"/></svg><span>К капсуле</span></button></div><p id="pause-save-info" class="help mono"></p><p class="help">Мир сохраняется сам каждые 30 активных секунд, при паузе и сворачивании. «К капсуле» — служебный возврат, не телепортация будущей игры.</p></section>
  <section id="death-panel" class="panel pause-panel" hidden aria-label="Возрождение">
@@ -106,7 +106,7 @@
  <section id="visor-settings-panel" class="panel" hidden aria-label="Эффект визора"><div class="hud-settings-head"><h2>Эффект визора</h2><button id="visor-settings-back" class="secondary">← Настройки</button></div><div id="visor-settings-grid" class="visor-settings-grid"></div><div class="hud-settings-actions"><button id="visor-reset" class="secondary">Сбросить эффект</button><button id="visor-preview" class="secondary" hidden>Проверить в игре</button></div><p class="help">100% — стандартный эффект. Сила 0% отключает эффект. Визор виден только в надетом шлеме. Настройки сохраняются автоматически.</p></section>
  <section id="map-panel" class="panel map-panel" hidden><div class="panel-heading"><div><div class="mono tiny kicker">ВЕРДАНА / НАВИГАЦИЯ</div><h2>Долина прибытия</h2></div><button id="close-map" class="icon-button" aria-label="Закрыть карту">×</button></div><div class="map-layout"><canvas id="map" width="480" height="480" aria-label="Карта участка и положения игрока"></canvas><div><p class="help">Выберите ориентир — указатель появится на компасе и в мире.</p><div id="landmark-list"></div></div></div></section>
  <section id="inventory-panel" class="panel ui-panel inv-panel" hidden aria-label="Инвентарь">
-  <div class="ui-head"><h2>Инвентарь</h2><button id="close-inventory" class="ui-close" aria-label="Закрыть инвентарь"><svg><use href="#i-close"/></svg></button></div>
+  <div class="ui-head"><h2>Инвентарь</h2><button id="craft-button" class="ui-btn">Крафт / стройка</button><button id="close-inventory" class="ui-close" aria-label="Закрыть инвентарь"><svg><use href="#i-close"/></svg></button></div>
   <div class="inv-body">
    <div class="inv-gear"><h3>Снаряжение</h3>
     <div class="suit-card"><span class="card-label">Костюм</span><div class="suit-card-row"><div id="suit-thumb" class="suit-thumb"></div><div class="suit-card-side"><div id="suit-minis" class="suit-minis"></div><button id="open-suit" class="ui-btn">Открыть <svg><use href="#i-next"/></svg></button></div></div></div>
@@ -117,6 +117,11 @@
     <p id="pack-hint" class="pack-hint" aria-live="polite"></p></div>
    <div id="inv-detail" class="inv-detail"></div>
   </div>
+ </section>
+ <section id="production-panel" class="panel ui-panel production-panel" hidden aria-label="Крафт и строительство">
+  <div class="ui-head"><h2>Мастерская</h2><button id="close-production" class="ui-close" aria-label="Закрыть мастерскую">×</button></div>
+  <div class="production-tabs"><button id="production-recipes" class="ui-btn">Рецепты</button><button id="production-build" class="ui-btn">Строительство</button><button id="production-links" class="ui-btn">Соединения</button></div>
+  <p id="production-message" class="production-message" aria-live="polite"></p><div id="production-content" class="production-content"></div>
  </section>
  <section id="suit-panel" class="panel ui-panel suit-panel" hidden aria-label="Костюм">
   <div class="ui-head"><button id="suit-back" class="ui-btn back"><svg><use href="#i-back"/></svg><span>Инвентарь</span></button><h2>Костюм</h2><button id="close-suit" class="ui-close" aria-label="Закрыть костюм"><svg><use href="#i-close"/></svg></button></div>

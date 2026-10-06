@@ -32,7 +32,7 @@ export function splitSlot(inv: Slot[], i: number): Result {
  const half = Math.floor(s.count / 2); s.count -= half; inv[to] = { itemId: s.itemId, count: half };
  return { ok: true, index: to };
 }
-const ORDER = { tool: 0, tank: 1, suit: 2, food: 3, resource: 4 } as const;
+const ORDER = { tool: 0, tank: 1, suit: 2, food: 3, resource: 4, building: 5 } as const;
 /** Sorts cells 7…24 only: merges equal stacks, then orders by category and name. The first row is untouched. */
 export function sortRest(inv: Slot[]) {
  const rest = inv.slice(HOTBAR_SIZE).filter((s): s is NonNullable<Slot> => !!s);

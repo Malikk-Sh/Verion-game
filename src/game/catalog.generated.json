@@ -1,0 +1,420 @@
+{
+  "version": "1.1.0",
+  "items": {
+    "grass": {
+      "name": "Съедобная трава",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "verdana"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "fiber": {
+      "name": "Растительные волокна",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "niva",
+          "pyra"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "sand": {
+      "name": "Песок",
+      "kind": "item",
+      "stack": 64,
+      "source": {
+        "worlds": [
+          "verdana",
+          "niva",
+          "pyra"
+        ],
+        "method": "See WORLD and SYSTEMS; source does not imply a free spawn"
+      }
+    },
+    "iron": {
+      "name": "Железный слиток",
+      "kind": "item",
+      "stack": 64
+    },
+    "copper": {
+      "name": "Медный слиток",
+      "kind": "item",
+      "stack": 64
+    },
+    "glass": {
+      "name": "Стекло",
+      "kind": "item",
+      "stack": 64
+    },
+    "wire": {
+      "name": "Медный провод",
+      "kind": "item",
+      "stack": 64
+    },
+    "circuit": {
+      "name": "Базовая электроника",
+      "kind": "item",
+      "stack": 64
+    },
+    "workbench": {
+      "name": "Верстак",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "kiln": {
+      "name": "Плавильная печь",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "biogenerator": {
+      "name": "Биогенератор",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "electrolyzer": {
+      "name": "Генератор кислорода",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "refill": {
+      "name": "Заправочная станция",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "distributor": {
+      "name": "Распределитель с климатическим блоком",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "dome": {
+      "name": "Стартовый купол со шлюзом",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "cable": {
+      "name": "Электрокабель",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "gas_pipe": {
+      "name": "Газовая труба",
+      "kind": "placeable",
+      "stack": 16
+    }
+  },
+  "recipes": [
+    {
+      "id": "grass_parts",
+      "station": "hand",
+      "inputs": {
+        "grass": 1
+      },
+      "outputs": {
+        "fiber": 2,
+        "pulp": 1
+      },
+      "seconds": 1,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "smelt_iron_raw",
+      "station": "kiln",
+      "inputs": {
+        "iron_raw": 1,
+        "fiber": 2
+      },
+      "outputs": {
+        "iron": 1
+      },
+      "seconds": 6,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": "Печь сжигает волокна; снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
+    },
+    {
+      "id": "smelt_copper_raw",
+      "station": "kiln",
+      "inputs": {
+        "copper_raw": 1,
+        "fiber": 2
+      },
+      "outputs": {
+        "copper": 1
+      },
+      "seconds": 6,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": "Печь сжигает волокна; снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
+    },
+    {
+      "id": "glass",
+      "station": "kiln",
+      "inputs": {
+        "sand": 2,
+        "fiber": 2
+      },
+      "outputs": {
+        "glass": 1
+      },
+      "seconds": 6,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_wire",
+      "station": "workbench",
+      "inputs": {
+        "copper": 1
+      },
+      "outputs": {
+        "wire": 4
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_circuit",
+      "station": "workbench",
+      "inputs": {
+        "iron": 1,
+        "copper": 2,
+        "glass": 1
+      },
+      "outputs": {
+        "circuit": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_workbench",
+      "station": "hand",
+      "inputs": {
+        "stone": 8,
+        "fiber": 4
+      },
+      "outputs": {
+        "workbench": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_kiln",
+      "station": "hand",
+      "inputs": {
+        "stone": 12,
+        "fiber": 4
+      },
+      "outputs": {
+        "kiln": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_tool_stone",
+      "station": "hand",
+      "inputs": {
+        "stone": 4,
+        "fiber": 2
+      },
+      "outputs": {
+        "tool_stone": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_biogenerator",
+      "station": "workbench",
+      "inputs": {
+        "iron": 6,
+        "copper": 2,
+        "stone": 4
+      },
+      "outputs": {
+        "biogenerator": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_electrolyzer",
+      "station": "workbench",
+      "inputs": {
+        "iron": 6,
+        "copper": 4,
+        "glass": 2
+      },
+      "outputs": {
+        "electrolyzer": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_refill",
+      "station": "workbench",
+      "inputs": {
+        "iron": 2,
+        "copper": 1
+      },
+      "outputs": {
+        "refill": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_bottle_1",
+      "station": "workbench",
+      "inputs": {
+        "iron": 2,
+        "copper": 1
+      },
+      "outputs": {
+        "bottle_1": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_distributor",
+      "station": "workbench",
+      "inputs": {
+        "iron": 4,
+        "copper": 2,
+        "circuit": 1
+      },
+      "outputs": {
+        "distributor": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_dome",
+      "station": "workbench",
+      "inputs": {
+        "iron": 8,
+        "glass": 12,
+        "fiber": 8
+      },
+      "outputs": {
+        "dome": 1
+      },
+      "seconds": 20,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_cable",
+      "station": "workbench",
+      "inputs": {
+        "wire": 1,
+        "fiber": 1
+      },
+      "outputs": {
+        "cable": 4
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "craft_gas_pipe",
+      "station": "workbench",
+      "inputs": {
+        "iron": 1,
+        "copper": 1
+      },
+      "outputs": {
+        "gas_pipe": 4
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": ""
+    },
+    {
+      "id": "electrolysis",
+      "station": "electrolyzer",
+      "inputs": {
+        "water": 1
+      },
+      "outputs": {
+        "oxygen": 240,
+        "hydrogen": 480
+      },
+      "seconds": 10,
+      "EU_per_second": 12,
+      "tech": "power",
+      "scope": "core",
+      "note": "H₂ автоматически сбрасывается до установки модуля сбора; воду и газы учитывать разными игровыми единицами."
+    },
+    {
+      "id": "melt_in_generator",
+      "station": "electrolyzer",
+      "inputs": {
+        "ice": 1
+      },
+      "outputs": {
+        "water": 1
+      },
+      "seconds": 2,
+      "EU_per_second": 6,
+      "tech": "power",
+      "scope": "core",
+      "note": ""
+    }
+  ]
+}

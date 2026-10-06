@@ -36,6 +36,7 @@ test('empty air warns first, then damages and eventually kills', () => {
 
 test('survival fields migrate for old saves and existing survival progress is preserved', () => {
   const old = newGame('old-survival', 1, 1, .5) as unknown as Record<string, any>;
+  old.meta.stateVersion = 2;
   delete old.player.survival;
   delete old.world.capsuleMilliGU;
   const migrated = sanitizeState(old);
@@ -179,6 +180,7 @@ test('HUD uses nominal capacity and only breathable sources, including personal 
 
 test('old survival saves get the new starvation timer without resetting existing timers or gas', () => {
   const old = newGame('old-timer', 1, 1, .5) as any;
+  old.meta.stateVersion = 2;
   delete old.player.survival.starvationMs;
   old.player.survival.emergencyMs = 17000; old.player.survival.suffocationMs = 4100;
   old.world.capsuleMilliGU = 123;

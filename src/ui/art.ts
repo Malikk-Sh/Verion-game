@@ -36,6 +36,19 @@ const P: Record<string, string> = {
  suit_legs: '<path d="M14 8h20l2 31h-8l-4-22-4 22h-8Z" fill="#ecebe6" stroke="#5d6466" stroke-width="1.2"/><path d="M14 12h20" stroke="#2b3234" stroke-width="3"/><path d="M14 26h6M28 26h6" stroke="#e8742a" stroke-width="3.2"/>',
  suit_boots: '<path d="M10 14h9v16l5 4v6H8Z" fill="#ecebe6" stroke="#5d6466" stroke-width="1.2"/><path d="M27 14h9v16l5 4v6H25Z" fill="#ecebe6" stroke="#5d6466" stroke-width="1.2"/><path d="M8 37h16M25 37h16" stroke="#2b3234" stroke-width="3"/><path d="M10 20h9M27 20h9" stroke="#e8742a" stroke-width="2.6"/>',
 };
+// Native vector fallbacks for the newly playable production items.
+P.grass='<path d="M24 41 10 9l12 20 4-23 3 23L40 13 27 41Z" fill="#a5b867" stroke="#617b45"/><path d="M24 41V22" stroke="#dbe5a4"/>';
+P.fiber='<path d="m10 39 8-29 9-3 10 6-10 30Z" fill="#cbbb8a"/><path d="m16 35 8-21m-2 25 7-23m-1 20 5-15" stroke="#f1dfab" stroke-width="2"/>';
+P.sand='<path d="m6 37 12-13 10-7 14 20Z" fill="#d3bb82"/><path d="m18 24 4 13m6-20 5 20" stroke="#e9d49f" stroke-width="2"/>';
+for(const [id,color] of [['iron','#bac1bd'],['copper','#d39159'],['glass','#9bd4d8']] as const)P[id]=`<path d="m8 32 5-16 25-3 3 15-9 10H14Z" fill="${color}" stroke="#567174"/><path d="m13 16 8 15 20-3M21 31l-7 7" fill="none" stroke="#e4eeea"/>`;
+P.wire='<path d="M10 31C4 9 38 3 39 23c2 16-28 24-27 6 0-15 23-17 23-6 0 7-14 13-14 5" fill="none" stroke="#d89b66" stroke-width="3"/>';
+P.circuit='<path d="M8 9h32v31H8Z" fill="#356b59" stroke="#83a89a"/><path d="M17 17h14v14H17ZM11 13h8m14 0h5M11 35h8m11 0h8" fill="none" stroke="#dec886" stroke-width="2"/>';
+P.workbench='<path d="M6 15h36v7H6Z" fill="#d5d8ce"/><path d="M11 22v19m26-19v19m-26-8h26" stroke="#6f8988" stroke-width="5"/>';
+P.kiln='<path d="M10 10h28v31H10Z" fill="#a2aca2"/><path d="M16 20h16v15H16Z" fill="#203a3d"/><path d="m19 32 5-9 5 9" fill="#e97632"/>';
+for(const [id,color] of [['biogenerator','#e97632'],['electrolyzer','#55aebb'],['refill','#80cfd3'],['distributor','#a6c67b']] as const)P[id]=`<path d="M10 12h28v28H10Z" fill="#d5d8ce" stroke="#617778"/><path d="M15 19h18v13H15Z" fill="#203a3d"/><path d="M16 36h16" stroke="${color}" stroke-width="4"/><circle cx="24" cy="25" r="4" fill="${color}"/>`;
+P.dome='<path d="M7 38V22L15 9h18l8 13v16Z" fill="#609fa4" stroke="#d5d8ce" stroke-width="2"/><path d="M15 9v29m18-29v29M7 22h34M20 38V27h8v11" fill="none" stroke="#c9ddd4" stroke-width="2"/>';
+P.cable='<path d="M8 12c30-11 30 12 16 12-22 0-21 19 16 12" fill="none" stroke="#e97632" stroke-width="4"/>';
+P.gas_pipe='<path d="M10 8v16h28v17" fill="none" stroke="#55aebb" stroke-width="6"/><path d="M6 12h8m20 24h8M18 20v8" stroke="#d5d8ce" stroke-width="3"/>';
 const PART_ITEM: Record<SuitPart, string> = { helmet: 'suit_helmet', chest: 'suit_chest', legs: 'suit_legs', boots: 'suit_boots' };
 /** Registered item sprite; unknown future items retain a vector fallback. */
 export function itemArt(id: string, cls = 'art'): HTMLElement {

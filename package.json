@@ -8,15 +8,16 @@
   },
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "tsc --noEmit && vite build",
+    "build": "node tools/build_runtime_catalog.mjs && tsc --noEmit && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "node --import tsx --test tests/*.test.ts",
+    "test": "node tools/build_runtime_catalog.mjs && node --import tsx --test tests/*.test.ts",
     "verify:browser": "node tools/verify_browser.mjs",
     "verify:survival": "node tools/verify_survival.mjs",
     "verify:s1": "node tools/verify_s1.mjs",
     "verify:art": "node tools/verify_art.mjs",
     "shots": "node tools/shot.mjs",
-    "verify:hud": "node tools/verify_hud.mjs"
+    "verify:hud": "node tools/verify_hud.mjs",
+    "verify:production": "node tools/verify_production.mjs"
   },
   "dependencies": {
     "three": "0.180.0"

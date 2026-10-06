@@ -29,8 +29,8 @@ export function mineTick(state: GameState, mining: Mining, aimNodeId: string | n
  if (!node) { mining.nodeId = null; mining.ticks = 0; return { kind: 'idle' }; }
  if ((state.world.nodes[node.id] ?? 0) <= 0) { mining.ticks = 0; return { kind: 'blocked', nodeId: node.id, reason: 'Запас исчерпан' }; }
  const inv = state.player.inventory, ti = toolSlot(state);
- if (ti < 0) { mining.ticks = 0; const sel = inv[state.player.hotbar]; return { kind: 'blocked', nodeId: node.id, reason: sel && TOOLS[sel.itemId] ? 'Инструмент сломан' : inv.some(s => s && TOOLS[s.itemId]) ? 'Выберите мультитул в быстром доступе' : 'Нужен инструмент' }; }
- const tool = inv[ti]!, def = TOOLS[tool.itemId];
+ if (ti < 0 && node.material !== 'grass') { mining.ticks = 0; const sel = inv[state.player.hotbar]; return { kind: 'blocked', nodeId: node.id, reason: sel && TOOLS[sel.itemId] ? 'Инструмент сломан' : inv.some(s => s && TOOLS[s.itemId]) ? 'Выберите мультитул в быстром доступе' : 'Нужен инструмент' }; }
+ const tool = ti >= 0 && node.material !== 'grass' ? inv[ti]! : null, def = tool ? TOOLS[tool.itemId] : { tier: 0, timeMul: 1 };
  if (def.tier < MATERIALS[node.material].tier) { mining.ticks = 0; return { kind: 'blocked', nodeId: node.id, reason: 'Нужен инструмент выше уровнем' }; }
  const need = ticksFor(node.material, def.timeMul);
  mining.ticks++;
@@ -38,10 +38,10 @@ export function mineTick(state: GameState, mining: Mining, aimNodeId: string | n
  // Complete: one logical transaction.
  mining.ticks = 0;
  state.world.nodes[node.id]--;
- tool.durability = (tool.durability ?? 0) - 1;
+ if (tool) tool.durability = (tool.durability ?? 0) - 1;
  const ground = addItems(inv, node.itemId, 1);
  if (ground) dropItems(state, state.player.x, state.player.z, [{ itemId: node.itemId, count: ground }]);
- return { kind: 'block', nodeId: node.id, itemId: node.itemId, toInventory: 1 - ground, toGround: ground, left: state.world.nodes[node.id], toolBroke: tool.durability === 0 };
+ return { kind: 'block', nodeId: node.id, itemId: node.itemId, toInventory: 1 - ground, toGround: ground, left: state.world.nodes[node.id], toolBroke: tool?.durability === 0 };
 }
 /** Adds items to the nearest pile within 2 m (≤64 entries) or creates a new one. Stateful items keep their state and never merge. */
 export function dropItems(state: GameState, x: number, z: number, items: ItemStack[]) {

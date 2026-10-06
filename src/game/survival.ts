@@ -1,3 +1,4 @@
+import { breathingDome, DOME_CAPACITY } from './production';
 import { TANKS } from './defs';
 import { emptyInventory, removeItems, type Slot } from './inventory';
 import { oxygenGU, oxygenCapacityGU, wornParts } from './backpack';
@@ -36,6 +37,8 @@ export function survivalTick(state: GameState, dt: number, insideCapsule: boolea
     const used = Math.min(state.world.capsuleMilliGU, missing);
     state.world.capsuleMilliGU -= used; missing -= used;
   }
+  const room = breathingDome(state);
+  if (room && missing > 0) { const used = Math.min(room.zone.q, missing); room.zone.q -= used; missing -= used; }
   if (wornParts(state) === 4) {
     for (const b of state.player.bottles) if (b && missing > 0) {
       const used = Math.min(b.milliGU ?? 0, missing);
@@ -109,6 +112,8 @@ export function respawnAtCapsule(state: GameState, y: number) {
 export function accessibleOxygen(state: GameState, insideCapsule: boolean) {
   const emergency = state.player.survival.emergencyMs;
   if (emergency > 0) return { amount: emergency / 1000, capacity: EMERGENCY_MS / 1000, unit: 'с', emergency: true };
+  const room = breathingDome(state);
+  if (room) return { amount: room.zone.q / 1000, capacity: DOME_CAPACITY / 1000, unit: 'GU', emergency: false };
   const sealed = wornParts(state) === 4;
   return {
     amount: (sealed ? oxygenGU(state) : 0) + (insideCapsule ? state.world.capsuleMilliGU / 1000 : 0),
@@ -117,3 +122,11 @@ export function accessibleOxygen(state: GameState, insideCapsule: boolean) {
   };
 }
 export const tankCapacity = (slot: NonNullable<Slot>) => TANKS[slot.itemId].capacity / 1000;
+
+/** Built-in capsule manual port also fills empty installed tanks, without power. */
+export function refillFromCapsule(state: GameState, dt: number): number {
+ if(state.player.vitals.health<=0)return 0;
+ let budget=Math.min(state.world.capsuleMilliGU,Math.max(0,Math.round(dt*20000))),moved=0;
+ for(const b of state.player.bottles)if(b){const n=Math.min(budget,TANKS[b.itemId].capacity-(b.milliGU??0));b.milliGU=(b.milliGU??0)+n;state.world.capsuleMilliGU-=n;budget-=n;moved+=n;}
+ return moved;
+}
