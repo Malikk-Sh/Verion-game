@@ -6,11 +6,11 @@ import { join } from 'node:path';
 import { chromium as playwright } from 'playwright';
 import { createServer, preview } from 'vite';
 const suite=process.env.VIREON_VERIFY_SUITE??'all';
-assert.ok(['all','gameplay','production','models'].includes(suite),`Unknown browser suite: ${suite}`);
+assert.ok(['all','gameplay','menus','production','models'].includes(suite),`Unknown browser suite: ${suite}`);
 const includes=name=>suite==='all'||suite===name;
 const artifactDir=suite==='all'?'artifacts':join('artifacts',suite),artifact=name=>join(artifactDir,name);
 await mkdir(artifactDir,{recursive:true});
-const devPort={all:5173,gameplay:5173,production:5175,models:5176}[suite],productionPort=suite==='all'?5174:5178;
+const devPort={all:5173,gameplay:5173,production:5175,models:5176,menus:5179}[suite],productionPort=suite==='all'?5174:5178;
 const devUrl=`http://127.0.0.1:${devPort}`,productionUrl=`http://127.0.0.1:${productionPort}`;
 const server=await createServer({server:{host:'127.0.0.1',port:devPort,strictPort:true}});
 await server.listen();
@@ -39,6 +39,35 @@ try {
  };
  let page;
  const state=()=>page.evaluate(()=>window.__vireon.getState());
+ const checkButtonTargets=async(label)=>{
+  // Opening panels start at scale(.98); measure their final geometry, not an animation frame.
+  await page.evaluate(async()=>{await Promise.all([...document.querySelectorAll('.panel:not([hidden])')].flatMap(panel=>panel.getAnimations()).map(animation=>animation.finished.catch(()=>{})));});
+  const targets=await page.evaluate(()=>[...document.querySelectorAll('button')].filter(b=>b.getClientRects().length).map(b=>{const r=b.getBoundingClientRect();return{name:b.id||b.getAttribute('aria-label')||b.className,width:r.width,height:r.height};}));
+  assert.ok(targets.length>0,`${label}: buttons must be visible`);
+  assert.deepEqual(targets.filter(b=>b.width<31.5||b.height<31.5),[],`${label}: buttons must be ≥32px in both dimensions`);
+  check(`${label}: all visible buttons are at least 32 CSS pixels wide and tall`);
+ };
+ const verifyMenuSettings=async()=>{
+ await page.click('#settings-button');assert.equal((await state()).dialog,'settings');
+ await page.click('#fullscreen-toggle');await page.waitForFunction(()=>!!document.fullscreenElement);assert.equal((await state()).fullscreen,true);assert.match(await page.locator('#fullscreen-toggle').innerText(),/Выйти/);
+ await page.click('#fullscreen-toggle');await page.waitForFunction(()=>!document.fullscreenElement);assert.equal((await state()).fullscreen,false);check('Fullscreen enters and exits from a real menu click, button tracks browser state');
+ const q0=(await state()).quality;await page.click('#quality-toggle');const q1=(await state()).quality;assert.notEqual(q0,q1);assert.match(await page.locator('#quality-label').innerText(),/Графика/);await page.click('#quality-toggle');await page.click('#quality-toggle');assert.equal((await state()).quality,q0);check('Graphics quality cycles through three presets and returns');
+ await page.click('#sound-toggle');assert.equal((await state()).sound,false);await page.click('#sound-toggle');assert.equal((await state()).sound,true);check('Sound toggle switches procedural ambience');
+ const bob0=(await state()).bob;await page.click('#bob-toggle');assert.equal((await state()).bob,!bob0);await page.click('#bob-toggle');assert.equal((await state()).bob,bob0);check('Camera bob toggle switches and restores');
+ await page.locator('#fov-range').fill('85');assert.equal((await state()).fov,85);assert.match(await page.locator('#fov-value').innerText(),/85/);await page.locator('#fov-range').fill('70');assert.equal((await state()).fov,70);check('Field of view slider updates the setting');
+ await page.screenshot({path:artifact('b4-menu.png')});await page.click('#settings-back');assert.equal((await state()).dialog,'paused');await page.click('#resume');
+ };
+ const verifyCompactPanels=async()=>{
+ await page.click('#pause-button');await checkButtonTargets('667×320 pause');
+ await page.click('#settings-button');await checkButtonTargets('667×320 settings');
+ const smallRanges=await page.evaluate(()=>[...document.querySelectorAll('#settings .range-row')].filter(e=>e.getClientRects().length&&e.getBoundingClientRect().height<47).map(e=>e.className));assert.deepEqual(smallRanges,[],'Settings range rows retain their 48px height');
+ await page.screenshot({path:artifact('b4-compact-settings.png')});
+ await page.click('#hud-settings-button');await checkButtonTargets('667×320 HUD settings');await page.click('#hud-settings-back');
+ await page.click('#visor-settings-button');await checkButtonTargets('667×320 visor settings');await page.click('#visor-settings-back');
+ await page.click('#settings-back');await page.click('#saves-button');await checkButtonTargets('667×320 saves');await page.click('#close-saves');await page.click('#resume');
+ await page.click('#inventory-button');await checkButtonTargets('667×320 inventory');await page.click('#close-inventory');
+ await page.click('#suit-button');await checkButtonTargets('667×320 suit');await page.click('#close-suit');
+ };
  if(includes('gameplay')){
  page=await openGamePage();
  await page.goto(devUrl);await page.waitForFunction(()=>document.body.dataset.ready==='true');
@@ -53,14 +82,7 @@ try {
  await page.click('#day');assert.equal((await state()).night,true);await page.screenshot({path:artifact('b4-night.png')});report.measurements.push(await state());check('Day/night switch changes scene state');
  await page.click('#pause-button');const t=(await state()).activeTime;
  await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));assert.equal((await state()).activeTime,t);check('Pause freezes active simulation time');
- await page.click('#settings-button');assert.equal((await state()).dialog,'settings');
- await page.click('#fullscreen-toggle');await page.waitForFunction(()=>!!document.fullscreenElement);assert.equal((await state()).fullscreen,true);assert.match(await page.locator('#fullscreen-toggle').innerText(),/Выйти/);
- await page.click('#fullscreen-toggle');await page.waitForFunction(()=>!document.fullscreenElement);assert.equal((await state()).fullscreen,false);check('Fullscreen enters and exits from a real menu click, button tracks browser state');
- const q0=(await state()).quality;await page.click('#quality-toggle');const q1=(await state()).quality;assert.notEqual(q0,q1);assert.match(await page.locator('#quality-label').innerText(),/Графика/);await page.click('#quality-toggle');await page.click('#quality-toggle');assert.equal((await state()).quality,q0);check('Graphics quality cycles through three presets and returns');
- await page.click('#sound-toggle');assert.equal((await state()).sound,false);await page.click('#sound-toggle');assert.equal((await state()).sound,true);check('Sound toggle switches procedural ambience');
- const bob0=(await state()).bob;await page.click('#bob-toggle');assert.equal((await state()).bob,!bob0);await page.click('#bob-toggle');assert.equal((await state()).bob,bob0);check('Camera bob toggle switches and restores');
- await page.locator('#fov-range').fill('85');assert.equal((await state()).fov,85);assert.match(await page.locator('#fov-value').innerText(),/85/);await page.locator('#fov-range').fill('70');assert.equal((await state()).fov,70);check('Field of view slider updates the setting');
- await page.screenshot({path:artifact('b4-menu.png')});await page.click('#settings-back');assert.equal((await state()).dialog,'paused');await page.click('#resume');
+ if(includes('menus'))await verifyMenuSettings();else await page.click('#resume');
  await page.click('#map-button');const pos=(await state()).position;await page.screenshot({path:artifact('b4-map.png')});await page.getByRole('button',{name:'Вход в пещеру'}).click();assert.equal((await state()).selected,'cave');assert.deepEqual((await state()).position,pos);check('Map selects target without teleporting');
  await page.setViewportSize({width:844,height:390});
  const cd=await page.context().newCDPSession(page),rect=await page.locator('#joystick').boundingBox();
@@ -75,28 +97,18 @@ try {
  await cd.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[a]});await cd.send('Input.dispatchTouchEvent',{type:'touchCancel',touchPoints:[]});assert.equal((await state()).input.joyY,0);check('Touch cancellation clears joystick');
  await page.click('#day');await page.screenshot({path:artifact('b4-mobile.png')});report.measurements.push(await state());
  // Accepted minimum for every button is 32×32 CSS px (6 October).
- const checkButtonTargets=async(label)=>{
-  // Opening panels start at scale(.98); measure their final geometry, not an animation frame.
-  await page.evaluate(async()=>{await Promise.all([...document.querySelectorAll('.panel:not([hidden])')].flatMap(panel=>panel.getAnimations()).map(animation=>animation.finished.catch(()=>{})));});
-  const targets=await page.evaluate(()=>[...document.querySelectorAll('button')].filter(b=>b.getClientRects().length).map(b=>{const r=b.getBoundingClientRect();return{name:b.id||b.getAttribute('aria-label')||b.className,width:r.width,height:r.height};}));
-  assert.ok(targets.length>0,`${label}: buttons must be visible`);
-  assert.deepEqual(targets.filter(b=>b.width<31.5||b.height<31.5),[],`${label}: buttons must be ≥32px in both dimensions`);
-  check(`${label}: all visible buttons are at least 32 CSS pixels wide and tall`);
- };
  await checkButtonTargets('844×390 gameplay');
  await page.setViewportSize({width:390,height:844});await page.waitForFunction(()=>!document.getElementById('portrait').hidden);assert.equal((await state()).running,false);await page.screenshot({path:artifact('b4-portrait.png')});
  await page.setViewportSize({width:844,height:390});await page.waitForFunction(()=>document.getElementById('portrait').hidden);assert.equal((await state()).running,false);await page.click('#resume');check('Portrait pauses; landscape return requires explicit resume');
  await page.setViewportSize({width:667,height:320});await page.screenshot({path:artifact('b4-compact.png')});await checkButtonTargets('667×320 gameplay');
  const overlap=await page.evaluate(()=>{const rs=['hotbar','joystick','actions'].map(id=>document.getElementById(id).getBoundingClientRect());return [[0,1],[0,2],[1,2]].some(([i,j])=>rs[i].left<rs[j].right&&rs[i].right>rs[j].left&&rs[i].top<rs[j].bottom&&rs[i].bottom>rs[j].top);});assert.equal(overlap,false);check('Compact 667×320 landscape keeps hotbar clear of movement controls');
- await page.click('#pause-button');await checkButtonTargets('667×320 pause');
- await page.click('#settings-button');await checkButtonTargets('667×320 settings');
- const smallRanges=await page.evaluate(()=>[...document.querySelectorAll('#settings .range-row')].filter(e=>e.getClientRects().length&&e.getBoundingClientRect().height<47).map(e=>e.className));assert.deepEqual(smallRanges,[],'Settings range rows retain their 48px height');
- await page.screenshot({path:artifact('b4-compact-settings.png')});
- await page.click('#hud-settings-button');await checkButtonTargets('667×320 HUD settings');await page.click('#hud-settings-back');
- await page.click('#visor-settings-button');await checkButtonTargets('667×320 visor settings');await page.click('#visor-settings-back');
- await page.click('#settings-back');await page.click('#saves-button');await checkButtonTargets('667×320 saves');await page.click('#close-saves');await page.click('#resume');
- await page.click('#inventory-button');await checkButtonTargets('667×320 inventory');await page.click('#close-inventory');
- await page.click('#suit-button');await checkButtonTargets('667×320 suit');await page.click('#close-suit');
+ if(includes('menus'))await verifyCompactPanels();
+ }
+ if(suite==='menus'){
+ page=await openGamePage();await page.goto(devUrl);await page.waitForFunction(()=>document.body.dataset.ready==='true');
+ await page.waitForFunction(()=>window.__vireon.getState().drawCalls>0);
+ await page.click('#start');await page.waitForFunction(()=>window.__vireon.getState().running);await page.click('#pause-button');
+ await verifyMenuSettings();await page.setViewportSize({width:667,height:320});await verifyCompactPanels();
  }
  if(includes('production')){
  page??=await openGamePage();

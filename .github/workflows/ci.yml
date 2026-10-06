@@ -29,7 +29,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [gameplay, production, models]
+        suite: [gameplay, menus, production, models]
     env:
       VIREON_VERIFY_SUITE: ${{ matrix.suite }}
     steps:
