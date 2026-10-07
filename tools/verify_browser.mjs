@@ -59,8 +59,9 @@ try {
  await page.waitForFunction(p=>Math.hypot(window.__vireon.getState().position.x-p.x,window.__vireon.getState().position.z-p.z)>.4,start.position,{timeout:240000});
  assert.ok(Math.abs((await state()).yaw-start.yaw)>.1);
  await cd.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+ await page.waitForFunction(()=>window.__vireon.getState().input.joyY===0&&window.__vireon.getState().input.lookPointer===null,{},{timeout:15000});
  assert.equal((await state()).input.joyY,0);assert.equal((await state()).input.lookPointer,null);check('Two simultaneous real touch contacts move and look independently, then release');
- await cd.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[a]});await cd.send('Input.dispatchTouchEvent',{type:'touchCancel',touchPoints:[]});assert.equal((await state()).input.joyY,0);check('Touch cancellation clears joystick');
+ await cd.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[a]});await page.waitForFunction(()=>window.__vireon.getState().input.joyY!==0,{},{timeout:15000});await cd.send('Input.dispatchTouchEvent',{type:'touchCancel',touchPoints:[]});await page.waitForFunction(()=>window.__vireon.getState().input.joyY===0&&window.__vireon.getState().input.joyPointer===null,{},{timeout:15000});assert.equal((await state()).input.joyY,0);check('Touch cancellation clears joystick');
  await page.click('#day');await page.screenshot({path:'artifacts/b4-mobile.png'});report.measurements.push(await state());
  // Accepted minimum for every button is 32×32 CSS px (6 October).
  const checkButtonTargets=async(label)=>{
