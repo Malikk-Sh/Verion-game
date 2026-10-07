@@ -36,11 +36,12 @@ export function createCraftingView(){
    assembly.append(h('b',name(Object.keys(r.outputs)[0]),'craft-section-title'));
    const row=h('div','','craft-assembly-row'),inputs=h('div','','craft-inputs '+(b?'bench-inputs':'pocket-inputs'));
    const required=Object.entries(r.inputs),slots=b?4:2;
+   const missingTypes=b?required.filter(([item])=>!b.input.some(s=>s?.itemId===item)):[];let ghostIndex=0;
    // Physical workbench buffer replaces the old duplicated stock/material sections.
    for(let i=0;i<slots;i++){
     const s=b?.input[i],item=b?s?.itemId:required[i]?.[0],need=item?r.inputs[item]:undefined,owned=item?(b?s!.count:countItem(g.player.inventory,item)):0;
     const cell=itemCell(item,item?owned+(need?' / '+need:''):'',need&&owned<need?'missing':'');
-    if(!item&&b&&required[i]){const [ghost,n]=required[i];cell.append(itemArt(ghost));cell.classList.add('ghost');cell.title=name(ghost)+' · нужно '+n;cell.append(h('span','0 / '+n,'craft-count'));}
+    if(!item&&b&&missingTypes[ghostIndex]){const [ghost,n]=missingTypes[ghostIndex++];cell.append(itemArt(ghost));cell.classList.add('ghost');cell.title=name(ghost)+' · нужно '+n;cell.append(h('span','0 / '+n,'craft-count'));}
     inputs.append(cell);
    }
    const result=h('div','','craft-result');for(const [out,n] of Object.entries(r.outputs))result.append(itemCell(out,String(n)));row.append(inputs,h('span','→','craft-arrow'),result);assembly.append(row);
