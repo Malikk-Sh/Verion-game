@@ -92,6 +92,7 @@ export function migrateRaw(raw: unknown): unknown {
   if (raw.meta.stateVersion !== 2 && raw.meta.stateVersion !== 3) return raw;
   const r = structuredClone(raw);
   const player = obj(r.player, 'player'), world = obj(r.world, 'world');
+  if(raw.meta.stateVersion===2){
   // S1 saves created before survival was wired have no new fields; never reset an
   // already-played survival state when it is loaded again.
   if (!('survival' in player)) player.survival = freshSurvival();
@@ -100,6 +101,8 @@ export function migrateRaw(raw: unknown): unknown {
   const existingNodes = obj(world.nodes, 'world.nodes');
   for (const n of NODES) if (!(n.id in existingNodes) && ['sand-a','grass-a','grass-b'].includes(n.id)) existingNodes[n.id] = n.amount;
   if (!('capsuleMilliGU' in world)) world.capsuleMilliGU = 2400000;
+  }
+  // v3 already required survival, capsule and base fields; never refill a corrupt v3 save.
   const base=validateBase(world.base,true);
   base.handQueue=[];for(const b of base.buildings)if(b.kind==='workbench')b.queue=[];
   world.base=base;

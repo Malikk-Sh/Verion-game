@@ -50,7 +50,8 @@ export function createCraftingView(){
    if(auto){const amount=h('div','','craft-quantity');amount.append(button('−',()=>{quantity=Math.max(1,quantity-1);redraw();},'',quantity<=1),h('span',String(quantity)),button('+',()=>{quantity=Math.min(5,quantity+1);redraw();},'',quantity>=5));actions.append(amount);}
    const label=!applicable?'Нужна станция':auto?'В очередь':job?'Идёт сборка':'Создать';
    actions.append(button(label,()=>notify(auto?queueJob(g,r.id,id,quantity):startJob(g,r.id,id,!!b),auto?'Добавлено в очередь':'Работа начата'),'craft-primary',!near||!applicable||(!auto&&!!job)));
-   assembly.append(actions,h('small',r.seconds+' с'+(b&&auto?' · '+energyRate(b,r)+' EU/с':'')+(id==='hand'?' · 2 типа материалов':b?' · 4 входных слота':''),'craft-hint'));
+   const rate=b&&applicable?energyRate(b,r):r.EU_per_second;
+   assembly.append(actions,h('small',r.seconds+' с'+(rate?' · '+rate+' EU/с':'')+(!applicable?' · Требуется: '+(r.station==='hand'?'карманный крафт':name(r.station)):id==='hand'?' · 2 типа материалов':b?' · 4 входных слота':''),'craft-hint'));
   }
   center.append(assembly);
   const backpack=h('section','','craft-backpack');backpack.append(h('b','Рюкзак '+g.player.inventory.filter(Boolean).length+' / 24','craft-section-title'));
