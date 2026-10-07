@@ -7,6 +7,7 @@ import { heightAt } from '../world';
 import type { GameState } from '../game/state';
 import { itemArt } from './art';
 import './production.css';
+import './crafting-layout.css';
 type Host = { game(): GameState|null; show(): void; close(): void; changed():void; refill(id:string|null):void; tone(ok:boolean):void };
 const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
 const h=<K extends keyof HTMLElementTagNameMap>(tag:K,text='',cls='')=>{const e=document.createElement(tag);e.textContent=text;e.className=cls;return e;};
@@ -23,11 +24,12 @@ export function createProductionPanel(host:Host){
  function draw(){const focus=document.activeElement as HTMLInputElement|null,keepSearch=focus?.id==='craft-search',cursor=keepSearch?[focus.selectionStart,focus.selectionEnd]:null;const g=host.game();if(!g)return;el('production-message').textContent=message;
   for(const t of ['recipes','build','links'])el('production-'+t).setAttribute('aria-pressed',String(tab===t));
   const content=el('production-content');content.replaceChildren();
+  el('production-panel').classList.remove('craft-upgrade-panel');
   el('production-panel').classList.toggle('crafting-panel',tab==='recipes'&&(station==='hand'||machine(g,station)?.kind==='workbench'));
   el('production-panel').querySelector('h2')!.textContent=tab==='build'?'Строительство':tab==='links'?'Соединения':station==='hand'?'Крафт · В кармане':machine(g,station)?.kind==='workbench'?'Крафт · Верстак '+(machine(g,station)!.level===2?'II':'I'):'Мастерская';
   if(tab==='recipes'){
    content.append(choices(g));if(station==='capsule'){const status=h('p','Ручной порт · '+Math.round(g.world.capsuleMilliGU/1000)+'/2400 GU · 20 GU/с');status.id='production-status';content.append(status);for(const [id,label] of [['capsule-out','Капсула → баллоны'],['capsule-in','Баллоны → капсула']]){const fill=btn(label+' · удерживать',()=>{});fill.onpointerdown=e=>{e.preventDefault();fill.setPointerCapture(e.pointerId);host.refill(id);};for(const type of ['pointerup','pointercancel','lostpointercapture'])fill.addEventListener(type,()=>host.refill(null));fill.onkeydown=e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();host.refill(id);}};fill.onkeyup=()=>host.refill(null);content.append(fill);}return;}const b=machine(g,station),s=b?.kind??'hand',job=b?.job??(station==='hand'?g.world.base.hand:null);
-   if(s==='hand'||s==='workbench'){const view=crafting.draw(g,station,say,host.changed,draw);content.append(view);if(view.dataset.mode==='upgrade')el('production-panel').querySelector('h2')!.textContent='Улучшение · Верстак';if(keepSearch&&view.dataset.mode!=='upgrade'){const search=el<HTMLInputElement>('craft-search');search.focus({preventScroll:true});search.setSelectionRange(cursor![0]??0,cursor![1]??0);}lastStatus='';return;}
+   if(s==='hand'||s==='workbench'){const view=crafting.draw(g,station,say,host.changed,draw);content.append(view);el('production-panel').classList.toggle('craft-upgrade-panel',view.dataset.mode==='upgrade');if(view.dataset.mode==='upgrade')el('production-panel').querySelector('h2')!.textContent='Улучшение · Верстак';if(keepSearch&&view.dataset.mode!=='upgrade'){const search=el<HTMLInputElement>('craft-search');search.focus({preventScroll:true});search.setSelectionRange(cursor![0]??0,cursor![1]??0);}lastStatus='';return;}
    const status=h('p','','production-status');status.id='production-status';content.append(status);
    if(b){const actions=h('div','','production-actions');actions.append(btn('Вернуть входы',()=>say(collectInput(g,station)>0?'':'Вход пуст или рюкзак полон','Входы возвращены')));actions.append(btn('Забрать выход',()=>say(collectOutput(g,station)>0?'':'Нет готового выхода или рюкзак полон','Перенесено в рюкзак')));
     if(b.kind==='biogenerator')actions.append(btn('Загрузить 1 волокно',()=>say(loadFuel(g,station),'Топливо загружено')));

@@ -33,8 +33,28 @@ export function createBuildings(scene: THREE.Scene) {
  const root=new THREE.Group();scene.add(root);
  const hull=new THREE.MeshStandardMaterial({color:0xd5d8ce,roughness:.78}),dark=new THREE.MeshStandardMaterial({color:0x203a3d,roughness:.85}),orange=new THREE.MeshStandardMaterial({color:0xe97632,roughness:.7}),blue=new THREE.MeshStandardMaterial({color:0x55aebb,roughness:.55});
  const glass=new THREE.MeshStandardMaterial({color:0x83c6ce,transparent:true,opacity:.22,roughness:.2,depthWrite:false,side:THREE.DoubleSide});
+ const wood=new THREE.MeshStandardMaterial({color:0xc1a383,roughness:.92}),steel=new THREE.MeshStandardMaterial({color:0x747b7f,roughness:.68,metalness:.25});
  const geometry=new THREE.BoxGeometry(1,1,1);let key='';
  const cube=(parent:THREE.Group,mat:THREE.Material,x:number,y:number,z:number,w:number,h:number,d:number)=>{const m=new THREE.Mesh(geometry,mat);m.position.set(x,y,z);m.scale.set(w,h,d);m.castShadow=m.receiveShadow=true;parent.add(m);};
+ function workbench(group:THREE.Group,level:number){
+  const batches=new Map<THREE.Material,THREE.Matrix4[]>();
+  const part=(mat:THREE.Material,x:number,y:number,z:number,w:number,h:number,d:number)=>{const matrix=new THREE.Matrix4().makeScale(w,h,d);matrix.setPosition(x,y,z);if(!batches.has(mat))batches.set(mat,[]);batches.get(mat)!.push(matrix);};
+  // Open legs, a lower shelf, an orange rim and a small vise match the item portraits.
+  for(const x of [-.39,.39])for(const z of [-.27,.27]){part(steel,x,.42,z,.085,.8,.085);part(dark,x,-.025,z,.13,.22,.13);}
+  part(steel,0,.24,0,.85,.055,.64);part(wood,0,.28,0,.77,.04,.56);
+  part(steel,0,.82,-.30,.85,.07,.06);part(steel,-.39,.8,0,.06,.07,.62);part(steel,.39,.8,0,.06,.07,.62);
+  part(hull,0,.90,0,.98,.09,.78);part(wood,0,.955,0,.92,.025,.72);part(orange,0,.89,.395,.90,.035,.02);
+  part(steel,-.25,.99,.02,.20,.035,.23);part(dark,-.25,1.025,.02,.10,.05,.16);
+  part(steel,-.31,1.05,.02,.045,.08,.17);part(steel,-.19,1.05,.02,.045,.08,.17);part(steel,-.25,1.035,.15,.035,.035,.18);
+  if(level===2){
+   for(const x of [-.36,.36])part(steel,x,1.18,-.25,.09,.50,.09);
+   part(hull,0,1.435,-.25,.88,.12,.17);part(steel,0,1.385,-.23,.72,.035,.075);
+   part(orange,.20,1.35,-.22,.22,.18,.20);part(dark,.20,1.26,-.18,.085,.10,.085);
+   part(blue,-.27,1.438,-.15,.09,.035,.012);part(dark,.34,.65,-.22,.18,.24,.20);
+   part(orange,.34,.65,-.105,.12,.10,.015);part(steel,.11,.988,.03,.36,.04,.34);
+  }
+  for(const [mat,matrices] of batches){const mesh=new THREE.InstancedMesh(geometry,mat,matrices.length);matrices.forEach((matrix,i)=>mesh.setMatrixAt(i,matrix));mesh.instanceMatrix.needsUpdate=true;mesh.castShadow=mesh.receiveShadow=true;group.add(mesh);}
+ }
  function sync(g:GameState){const next=JSON.stringify([g.world.base.buildings.map(b=>[b.id,b.kind,b.level,b.x,b.y,b.z,b.zone.shell]),g.world.base.links]);if(next===key)return;key=next;root.traverse(o=>{if(o instanceof THREE.InstancedMesh)o.dispose();});root.clear();for(let i=boxes.length-1;i>=0;i--)if(boxes[i].id.startsWith('build-'))boxes.splice(i,1);
   for(const b of g.world.base.buildings){const group=new THREE.Group();group.name=b.id;group.position.set(b.x,b.y,b.z);root.add(group);
    if(b.kind==='dome'){
@@ -46,10 +66,11 @@ export function createBuildings(scene: THREE.Scene) {
     for(const [mat,matrices] of [[glass,wallMatrices],[hull,panelMatrices]] as const){const mesh=new THREE.InstancedMesh(geometry,mat,matrices.length);matrices.forEach((matrix,i)=>mesh.setMatrixAt(i,matrix));mesh.castShadow=mesh.receiveShadow=true;group.add(mesh);}
     for(const x of [-2.425,2.425])for(const z of [-2.425,2.425])cube(group,hull,x,1.85,z,.15,4,.15);
     cube(group,orange,0,2.6,2.3,1.2,.2,.6);cube(group,dark,0,1.15,2.06,1,2.3,.06);
+   }else if(b.kind==='workbench'){
+    workbench(group,b.level);const h=b.level===2?1.5:1.1;boxes.push(box(b.id,b.x,b.y+h/2,b.z,.98,h,.78));
    }else{
-    const h=b.kind==='workbench'?.9:b.kind==='kiln'?1.3:1.4;
+    const h=b.kind==='kiln'?1.3:1.4;
     cube(group,dark,0,h/2,0,.9,h,.9);cube(group,hull,0,h*.65,0,.94,h*.38,.94);cube(group,b.kind==='electrolyzer'||b.kind==='refill'?blue:orange,0,h*.5,.48,.6,.16,.06);
-    if(b.kind==='workbench'){cube(group,hull,0,.94,0,1.1,.12,1.1);if(b.level===2){cube(group,dark,-.35,1.2,0,.18,.5,.8);cube(group,blue,0,1.4,0,1,.12,.2);cube(group,orange,.32,1.1,.32,.25,.2,.25);}}
     if(b.kind==='biogenerator'||b.kind==='kiln')cube(group,orange,.24,h+.2,0,.18,.45,.18);
     boxes.push(box(b.id,b.x,b.y+h/2,b.z,.92,h,.92));
    }
