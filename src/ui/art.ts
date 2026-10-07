@@ -24,6 +24,7 @@ export const ITEM_ART: Partial<Record<string, string>> = {
 export const FIGURE_ART: { parts: Record<SuitPart, string> } = { parts: { helmet, chest, legs, boots: figureBoots } };
 
 const P: Record<string, string> = {
+ wrench: '<path d="M16 43 32 23c-9-2-9-12-3-17l1 9 7 3 7-7c3 8-2 16-10 15L22 46Z" fill="#a9c3ce" stroke="#394d58" stroke-width="2"/><circle cx="20" cy="40" r="2" fill="#20313b"/>',
  tool_stone: '<path d="M13 41 31 19" stroke="#0d1214" stroke-width="7" stroke-linecap="round"/><path d="M13 41 31 19" stroke="#46525a" stroke-width="4.4" stroke-linecap="round"/><path d="m17 36.4 2.4 2M22.5 29.8l2.4 2" stroke="#e8742a" stroke-width="5.5"/><path d="M24 10l11-3 8 7-3 9-9 1-6-5Z" fill="#b3ada2" stroke="#6f6a62" stroke-width="1.2"/><path d="M30 14l6 5" stroke="#e8742a" stroke-width="3"/>',
  bottle_1: '<rect x="14" y="12" width="20" height="30" rx="9" fill="#ecebe6" stroke="#5d6466" stroke-width="1.2"/><rect x="20" y="6" width="8" height="7" rx="2" fill="#2b3234"/><path d="M14 20h20M14 34h20" stroke="#e8742a" stroke-width="3.5"/><path d="m21 25 3 4 3-4" stroke="#e8742a" stroke-width="2" fill="none"/>',
  pulp: '<path d="M12 12h24l3 28H9Z" fill="#efefea" stroke="#9aa0a0" stroke-width="1.2"/><path d="M12 12l2-4h20l2 4" fill="#d9d9d3"/><path d="M12 18h24" stroke="#e8742a" stroke-width="3"/><path d="m19 24 5 8 5-8" stroke="#e8742a" stroke-width="2.6" fill="none"/>',

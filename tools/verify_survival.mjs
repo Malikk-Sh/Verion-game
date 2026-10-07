@@ -46,7 +46,7 @@ try {
  report.webgl = await page.evaluate(() => { const gl = document.getElementById('world').getContext('webgl2'), ext = gl.getExtension('WEBGL_debug_renderer_info'); return ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER); });
  assert.match(report.webgl, /SwiftShader/i);
  await click('#start'); await page.waitForFunction(() => window.__vireon.getState().running);
- assert.equal((await state()).version, 'S2.2'); check('S2.2 starts with real WebGL rendering and a saved starting kit');
+ assert.equal((await state()).version, 'S2.3'); check('S2.2 starts with real WebGL rendering and a saved starting kit');
 
  await configure(() => { const s = window.__vireon.snapshot(); s.player.vitals = { health: 80, satiety: 50 }; s.player.hotbar = 1; window.__vireon.setState(s); });
  await page.waitForFunction(() => window.__vireon.getState().action === 'eat');

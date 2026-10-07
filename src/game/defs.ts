@@ -33,9 +33,9 @@ export const ITEMS: Record<string, ItemDef> = {
 /** Early production items use the canonical design catalog directly. */
 export const BUILDABLE = ['workbench', 'kiln', 'biogenerator', 'electrolyzer', 'refill', 'distributor', 'dome'] as const;
 export type BuildingKind = typeof BUILDABLE[number];
-for (const id of ['grass', 'fiber', 'sand', 'iron', 'copper', 'glass', 'wire', 'circuit', ...BUILDABLE, 'cable', 'gas_pipe']) {
+for (const id of ['wrench','grass', 'fiber', 'sand', 'iron', 'copper', 'glass', 'wire', 'circuit', ...BUILDABLE, 'cable', 'gas_pipe']) {
  const d = catalog.items[id as keyof typeof catalog.items];
- ITEMS[id] = def({ id, name: d.name, short: d.name, stack: d.stack, kind: d.kind as ItemDef['kind'], category: d.kind === 'placeable' ? 'building' : 'resource', description: d.kind === 'placeable' ? 'Размещение и соединение — в панели строительства. Новый корпус не содержит топлива, воды или кислорода.' : 'Материал для ранних рецептов производства.' });
+ ITEMS[id] = def({ id, name: d.name, short: d.name, stack: d.stack, kind: d.kind as ItemDef['kind'], category: id === 'wrench' ? 'tool' : d.kind === 'placeable' ? 'building' : 'resource', description: id === 'wrench' ? 'Многоразовый ключ: выберите в быстром доступе и взаимодействуйте с верстаком для улучшения.' : d.kind === 'placeable' ? 'Размещение и соединение — в панели строительства. Новый корпус не содержит топлива, воды или кислорода.' : 'Материал для ранних рецептов производства.' });
 }
 /** Basic suit set worn at start (SYSTEMS §1). */
 export const BASIC_SUIT: Record<SuitPart, string> = { helmet: 'suit_helmet', chest: 'suit_chest', legs: 'suit_legs', boots: 'suit_boots' };

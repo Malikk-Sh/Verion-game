@@ -37,6 +37,7 @@ jobs:
       - run: npm run verify:browser
       - run: npm run verify:survival
       - run: npm run verify:production
+      - run: npm run verify:crafting
       - uses: actions/upload-artifact@v4
         if: always()
         with:

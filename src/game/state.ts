@@ -1,3 +1,4 @@
+import { electricPort } from './production';
 import { heightAt } from '../world';
 import { freshBase, RECIPE_BY_ID, domeFaces, type BaseState, type Job, type Building, type Link } from './production';
 import { BASIC_SUIT, BUILDABLE, CONTENT_VERSION, GENERATOR_VERSION, ITEMS, LEGACY_CONTENT_VERSIONS, SUIT_PARTS, TANKS, TOOLS, type SuitPart } from './defs';
@@ -13,7 +14,7 @@ import { CYCLE_TICKS, START_OFFSET_TICKS } from './daycycle';
  * the first inventory row — not a separate container), display-only vitals and the day-phase
  * offset. Version 1/2 saves (including content 1.0.0) are migrated by sanitizeState() without loss.
  */
-export const STATE_VERSION = 3;
+export const STATE_VERSION = 4;
 export const HOTBAR_SIZE = 6;
 export type ItemStack = NonNullable<Slot>;
 export type Drop = { id: string; x: number; z: number; items: ItemStack[] };
@@ -80,15 +81,15 @@ function suitSlot(v: unknown, part: SuitPart): Slot {
 function bottleSlot(v: unknown, p: string): Slot { const s = slot(v, p); if (s && !Object.hasOwn(TANKS, s.itemId)) throw new InvalidState(p, 'в слоте баллона не баллон'); return s; }
 
 /**
- * v1/v2 → v3 (content 1.0.0 → 1.1.0). The old single `suit: 'suit'` becomes the four basic parts;
- * inventory, tool durability and tank gas are copied untouched; new fields get start values.
+ * v1/v2/v3 → v4 (content 1.0.0 → 1.1.0). The old single `suit: 'suit'` becomes the four basic parts;
+ * inventory, tool durability and tank gas are copied untouched; new fields get start values. v3 manual queues retire with all paid stock/WIP intact.
  * Works on a copy; the original object is never modified.
  */
 export function migrateRaw(raw: unknown): unknown {
  if (!isObj(raw) || !isObj(raw.meta)) return raw;
  const version = raw.meta.contentVersion;
  if (version === CONTENT_VERSION) {
-  if (raw.meta.stateVersion !== 2) return raw;
+  if (raw.meta.stateVersion !== 2 && raw.meta.stateVersion !== 3) return raw;
   const r = structuredClone(raw);
   const player = obj(r.player, 'player'), world = obj(r.world, 'world');
   // S1 saves created before survival was wired have no new fields; never reset an
@@ -99,6 +100,9 @@ export function migrateRaw(raw: unknown): unknown {
   const existingNodes = obj(world.nodes, 'world.nodes');
   for (const n of NODES) if (!(n.id in existingNodes) && ['sand-a','grass-a','grass-b'].includes(n.id)) existingNodes[n.id] = n.amount;
   if (!('capsuleMilliGU' in world)) world.capsuleMilliGU = 2400000;
+  const base=validateBase(world.base,true);
+  base.handQueue=[];for(const b of base.buildings)if(b.kind==='workbench')b.queue=[];
+  world.base=base;
   (r.meta as Obj).stateVersion = STATE_VERSION;
   return r;
  }
@@ -153,7 +157,7 @@ export function sanitizeState(input: unknown): GameState {
 }
 
 /** Production imports are validated as strictly as the player containers. */
-function validateBase(value: unknown): BaseState {
+function validateBase(value: unknown, legacy = false): BaseState {
  const raw=obj(value,'world.base'), seen=new Set<string>(), generationIds:number[]=[];
  const register=(v:unknown,p:string,prefix:string)=>{const id=str(v,p,32,ID);if(!new RegExp('^'+prefix+'-[1-9][0-9]*$').test(id)||seen.has(id))throw new InvalidState(p,'неверный или повторный ID');seen.add(id);generationIds.push(Number(id.split('-')[1]));return id;};
  const container=(v:unknown,p:string)=>{const a=arr(v,p,4);if(a.length!==4)throw new InvalidState(p,'нужно 4 слота');return a.map((s,i)=>slot(s,p+'.'+i));};
@@ -172,17 +176,21 @@ function validateBase(value: unknown): BaseState {
   const shell=arr(z.shell,'zone.shell',domeFaces().length);if(shell.length!==domeFaces().length)throw new InvalidState('zone.shell','неполная оболочка');
   const input=container(o.input,'building.input'),output=container(o.output,'building.output');
   if(kind==='biogenerator'&&input.some(s=>s&&s.itemId!=='fiber'))throw new InvalidState('building.input','генератор принимает только волокна');
-  const b:Building={id:register(o.id,'building.id','build'),kind:kind as Building['kind'],x:int(o.x,'building.x',-195,355),y:num(o.y,'building.y',-100,200),z:int(o.z,'building.z',-195,355),input,output,job:job(o.job,kind),queue:queue(o.queue,kind),enabled:o.enabled,lowPriority:o.lowPriority,energy:int(o.energy,'building.energy',0,400000),fuel:int(o.fuel,'building.fuel',0,200000),water:int(o.water,'building.water',0,20000),oxygen:int(o.oxygen,'building.oxygen',0,480000),zone:{q:int(z.q,'zone.q',0,960000),temperature:num(z.temperature,'zone.temperature',-150,150),purity:num(z.purity,'zone.purity',0,1),lossRemainder:int(z.lossRemainder,'zone.lossRemainder',0,999),breachMs:int(z.breachMs,'zone.breachMs',0,1000),shell:shell.map(v=>int(v,'zone.shell.HP',0,180))}};
+  const level=legacy?1:int(o.level,'building.level',1,2) as 1|2;
+  if(level===2&&kind!=='workbench')throw new InvalidState('building.level','нет такого улучшения');
+  const b:Building={level,id:register(o.id,'building.id','build'),kind:kind as Building['kind'],x:int(o.x,'building.x',-195,355),y:num(o.y,'building.y',-100,200),z:int(o.z,'building.z',-195,355),input,output,job:job(o.job,kind),queue:queue(o.queue,kind),enabled:o.enabled,lowPriority:o.lowPriority,energy:int(o.energy,'building.energy',0,400000),fuel:int(o.fuel,'building.fuel',0,200000),water:int(o.water,'building.water',0,20000),oxygen:int(o.oxygen,'building.oxygen',0,480000),zone:{q:int(z.q,'zone.q',0,960000),temperature:num(z.temperature,'zone.temperature',-150,150),purity:num(z.purity,'zone.purity',0,1),lossRemainder:int(z.lossRemainder,'zone.lossRemainder',0,999),breachMs:int(z.breachMs,'zone.breachMs',0,1000),shell:shell.map(v=>int(v,'zone.shell.HP',0,180))}};
+  if(!legacy&&kind==='workbench'&&(level===1?b.queue.length>0:b.queue.length+(b.job?1:0)>5))throw new InvalidState('building.queue','очередь недоступна/переполнена');
   if(kind!=='biogenerator'&&(b.energy||b.fuel))throw new InvalidState('building','энергия/топливо не у генератора');if(kind!=='electrolyzer'&&b.water)throw new InvalidState('building.water','вода не у электролиза');if(!['electrolyzer','refill','distributor'].includes(kind)&&b.oxygen)throw new InvalidState('building.oxygen','нет газового буфера');if(kind!=='dome'&&b.zone.q)throw new InvalidState('zone.q','газ не у купола');return b;
  });
  const links=arr(raw.links,'base.links',128).map(v=>{const o=obj(v,'link'),kind=o.kind;if(kind!=='cable'&&kind!=='gas_pipe')throw new InvalidState('link.kind','неизвестная сеть');const from=str(o.from,'link.from',32,ID),to=str(o.to,'link.to',32,ID),a=buildings.find(b=>b.id===from),b=to==='capsule'?{x:40,y:heightAt(40,40)+.14,z:40,kind:'capsule'}:buildings.find(b=>b.id===to);
   if(!a||!b||from===to||Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z)>4.001)throw new InvalidState('link','неверные порты/длина');
   if(kind==='gas_pipe'&&(a.kind!=='electrolyzer'||!['capsule','refill','distributor'].includes(b.kind)))throw new InvalidState('link','неверное направление O₂');
-  if(kind==='cable'&&['capsule','dome','kiln','workbench'].some(k=>a.kind===k||b.kind===k))throw new InvalidState('link','нет электрического порта');
+  if(kind==='cable'&&(!electricPort(a)||!electricPort(b)))throw new InvalidState('link','нет электрического порта');
   return {id:register(o.id,'link.id','link'),kind:kind as Link['kind'],from,to};
  });
  const pairs=new Set<string>();for(const l of links){const k=l.kind+':'+(l.kind==='cable'?[l.from,l.to].sort():[l.from,l.to]).join(':');if(pairs.has(k))throw new InvalidState('links','повтор сегмента');pairs.add(k);}
  const nextId=int(raw.nextId,'base.nextId',1,Number.MAX_SAFE_INTEGER);if(generationIds.some(n=>n>=nextId))throw new InvalidState('base.nextId','счётчик не больше существующих ID');
  let passage:BaseState['passage']=null;if(raw.passage!==null){const o=obj(raw.passage,'base.passage'),domeId=str(o.domeId,'passage.domeId',32,ID);if(!buildings.some(b=>b.id===domeId&&b.kind==='dome')||(o.direction!=='in'&&o.direction!=='out'))throw new InvalidState('passage','неверный шлюз');passage={domeId,direction:o.direction,remainingMs:int(o.remainingMs,'passage.remainingMs',0,6000)};}
- return {buildings,links,nextId,hand:job(raw.hand,'hand'),handQueue:queue(raw.handQueue,'hand'),passage};
+ const handQueue=queue(raw.handQueue,'hand');if(!legacy&&handQueue.length)throw new InvalidState('handQueue','ручная очередь недоступна');
+ return {buildings,links,nextId,hand:job(raw.hand,'hand'),handQueue,passage};
 }

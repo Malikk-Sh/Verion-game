@@ -21,7 +21,8 @@ function stoneMultitool(): THREE.Object3D {
  const strap = new THREE.Mesh(new THREE.BoxGeometry(.03, .1, .095), orange); strap.position.set(0, .25, 0); g.add(strap);
  return g;
 }
-export const HAND_MODELS: Record<string, Builder> = { tool_stone: stoneMultitool };
+function wrench():THREE.Group{const g=new THREE.Group(),metal=new THREE.MeshStandardMaterial({color:0xaac0c7,metalness:.7,roughness:.35});const part=(x:number,y:number,w:number,h:number)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,.035),metal);m.position.set(x,y,0);g.add(m);};part(0,0,.065,.48);part(-.055,.26,.045,.14);part(.055,.26,.045,.14);part(0,.20,.14,.055);g.rotation.z=-.15;return g;}
+export const HAND_MODELS: Record<string, Builder> = { tool_stone: stoneMultitool, wrench };
 
 export function createViewModel() {
  const scene = new THREE.Scene();

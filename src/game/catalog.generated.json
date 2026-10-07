@@ -1,6 +1,25 @@
 {
   "version": "1.1.0",
+  "upgrades": {
+    "workbench": {
+      "fromLevel": 1,
+      "toLevel": 2,
+      "tool": "wrench",
+      "inputs": {
+        "iron": 6,
+        "wire": 4,
+        "circuit": 1
+      },
+      "EU_per_second": 4,
+      "queueCapacity": 5
+    }
+  },
   "items": {
+    "wrench": {
+      "name": "Гаечный ключ",
+      "kind": "equipment",
+      "stack": 1
+    },
     "grass": {
       "name": "Съедобная трава",
       "kind": "item",
@@ -172,6 +191,22 @@
       "tech": "start",
       "scope": "core",
       "note": ""
+    },
+    {
+      "id": "craft_wrench",
+      "station": "workbench",
+      "inputs": {
+        "iron": 4,
+        "copper": 1
+      },
+      "outputs": {
+        "wrench": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": "Многоразовый инструмент улучшения построек; не расходуется при улучшении."
     },
     {
       "id": "craft_wire",

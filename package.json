@@ -17,7 +17,8 @@
     "verify:art": "node tools/verify_art.mjs",
     "shots": "node tools/shot.mjs",
     "verify:hud": "node tools/verify_hud.mjs",
-    "verify:production": "node tools/verify_production.mjs"
+    "verify:production": "node tools/verify_production.mjs",
+    "verify:crafting": "node tools/verify_crafting.mjs"
   },
   "dependencies": {
     "three": "0.180.0"

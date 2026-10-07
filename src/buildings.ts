@@ -35,7 +35,7 @@ export function createBuildings(scene: THREE.Scene) {
  const glass=new THREE.MeshStandardMaterial({color:0x83c6ce,transparent:true,opacity:.22,roughness:.2,depthWrite:false,side:THREE.DoubleSide});
  const geometry=new THREE.BoxGeometry(1,1,1);let key='';
  const cube=(parent:THREE.Group,mat:THREE.Material,x:number,y:number,z:number,w:number,h:number,d:number)=>{const m=new THREE.Mesh(geometry,mat);m.position.set(x,y,z);m.scale.set(w,h,d);m.castShadow=m.receiveShadow=true;parent.add(m);};
- function sync(g:GameState){const next=JSON.stringify([g.world.base.buildings.map(b=>[b.id,b.kind,b.x,b.y,b.z,b.zone.shell]),g.world.base.links]);if(next===key)return;key=next;root.traverse(o=>{if(o instanceof THREE.InstancedMesh)o.dispose();});root.clear();for(let i=boxes.length-1;i>=0;i--)if(boxes[i].id.startsWith('build-'))boxes.splice(i,1);
+ function sync(g:GameState){const next=JSON.stringify([g.world.base.buildings.map(b=>[b.id,b.kind,b.level,b.x,b.y,b.z,b.zone.shell]),g.world.base.links]);if(next===key)return;key=next;root.traverse(o=>{if(o instanceof THREE.InstancedMesh)o.dispose();});root.clear();for(let i=boxes.length-1;i>=0;i--)if(boxes[i].id.startsWith('build-'))boxes.splice(i,1);
   for(const b of g.world.base.buildings){const group=new THREE.Group();group.name=b.id;group.position.set(b.x,b.y,b.z);root.add(group);
    if(b.kind==='dome'){
     const faces=domeFaces(),wallMatrices:THREE.Matrix4[]=[],panelMatrices:THREE.Matrix4[]=[];
@@ -49,7 +49,7 @@ export function createBuildings(scene: THREE.Scene) {
    }else{
     const h=b.kind==='workbench'?.9:b.kind==='kiln'?1.3:1.4;
     cube(group,dark,0,h/2,0,.9,h,.9);cube(group,hull,0,h*.65,0,.94,h*.38,.94);cube(group,b.kind==='electrolyzer'||b.kind==='refill'?blue:orange,0,h*.5,.48,.6,.16,.06);
-    if(b.kind==='workbench')cube(group,hull,0,.94,0,1.1,.12,1.1);
+    if(b.kind==='workbench'){cube(group,hull,0,.94,0,1.1,.12,1.1);if(b.level===2){cube(group,dark,-.35,1.2,0,.18,.5,.8);cube(group,blue,0,1.4,0,1,.12,.2);cube(group,orange,.32,1.1,.32,.25,.2,.25);}}
     if(b.kind==='biogenerator'||b.kind==='kiln')cube(group,orange,.24,h+.2,0,.18,.45,.18);
     boxes.push(box(b.id,b.x,b.y+h/2,b.z,.92,h,.92));
    }
