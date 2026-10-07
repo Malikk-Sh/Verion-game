@@ -120,6 +120,13 @@ export function queueJob(g: GameState, recipeId: string, id = 'hand', count = 5)
  queue.push(...Array(count).fill(recipeId));return '';
 }
 export function clearQueue(g:GameState,id='hand'){if(id==='hand')g.world.base.handQueue=[];else{const b=machine(g,id);if(b)b.queue=[];}}
+/** Remove one waiting job; its preloaded stock stays in the normal input buffer. */
+export function removeQueuedJob(g:GameState,id:string,index:number):string {
+ const b=machine(g,id);
+ if(!b||!hasQueue(b)||!Number.isInteger(index)||index<0||index>=b.queue.length)return 'Нет такой партии';
+ if(!nearby(g,b)||g.player.vitals.health<=0)return 'Подойдите к станции';
+ b.queue.splice(index,1);return '';
+}
 export function collectInput(g:GameState,id:string):number{const b=machine(g,id);if(!b||!nearby(g,b))return 0;let n=0;for(let i=0;i<b.input.length;i++){const s=b.input[i];if(s){const left=addItems(g.player.inventory,s.itemId,s.count);n+=s.count-left;s.count=left;if(!left)b.input[i]=null;}}return n;}
 export function cancelJob(g: GameState, id = 'hand'): string {
  const b = id === 'hand' ? undefined : machine(g,id), job=id==='hand'?g.world.base.hand:b?.job;

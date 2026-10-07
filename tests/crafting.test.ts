@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {newGame,sanitizeState} from '../src/game/state';
 import {addItems,countItem} from '../src/game/inventory';
-import {makeBuilding,queueJob,startJob,productionTick,upgradeBuilding,loadRecipeInputs,collectInput,collectOutput,connect,cancelJob,WORKBENCH_UPGRADE} from '../src/game/production';
+import {makeBuilding,queueJob,startJob,productionTick,upgradeBuilding,loadRecipeInputs,collectInput,collectOutput,connect,cancelJob,removeQueuedJob,WORKBENCH_UPGRADE} from '../src/game/production';
 const fresh=()=>newGame('w-crafting',123,1,0);
 const stock=(g:ReturnType<typeof fresh>,items:Record<string,number>)=>{for(const [id,n] of Object.entries(items))assert.equal(addItems(g.player.inventory,id,n),0);};
 const tick=(g:ReturnType<typeof fresh>,ms:number)=>{for(let i=0;i<ms;i+=50)productionTick(g,50);};
@@ -33,6 +33,12 @@ test('Workbench II queue counts active batch; uses finite 4 EU/s, stalls without
 });
 test('Queue reuses buffered deficits but cannot pledge the same inputs to two batches',()=>{
  const {g,b}=setup();equip(g);stock(g,{...WORKBENCH_UPGRADE.inputs,copper:3});upgradeBuilding(g,b.id);loadRecipeInputs(g,'craft_wire',b.id);assert.equal(queueJob(g,'craft_wire',b.id,1),'');assert.equal(countItem(g.player.inventory,'copper'),2);assert.equal(queueJob(g,'craft_wire',b.id,2),'');assert.equal(countItem(b.input,'copper'),3);assert.equal(countItem(g.player.inventory,'copper'),0);
+});
+test('Removing one waiting batch retains paid stock and active work; invalid or distant removal changes nothing',()=>{
+ const {g,b}=setup();equip(g);stock(g,{...WORKBENCH_UPGRADE.inputs,copper:3});upgradeBuilding(g,b.id);queueJob(g,'craft_wire',b.id,3);tick(g,50);
+ const active=structuredClone(b.job),input=structuredClone(b.input),inventory=structuredClone(g.player.inventory);assert.equal(removeQueuedJob(g,b.id,1),'');assert.equal(b.queue.length,1);assert.deepEqual(b.job,active);assert.deepEqual(b.input,input);assert.deepEqual(g.player.inventory,inventory);assert.deepEqual(sanitizeState(g),g);
+ for(const index of [-1,1,.5,NaN]){const before=structuredClone(g);assert.match(removeQueuedJob(g,b.id,index),/Нет такой партии/);assert.deepEqual(g,before);}
+ g.player.x=80;const before=structuredClone(g);assert.match(removeQueuedJob(g,b.id,0),/Подойдите/);assert.deepEqual(g,before);g.player.x=42;assert.equal(removeQueuedJob(g,b.id,0),'');assert.equal(collectInput(g,b.id),2);assert.equal(countItem(g.player.inventory,'copper'),2);cancelJob(g,b.id);assert.equal(countItem(g.player.inventory,'copper'),3);
 });
 test('Version 3 migration retires manual queues without losing WIP, stock or outputs; current corruption fails',()=>{
  const {g,b}=setup();stock(g,{copper:2});startJob(g,'craft_wire',b.id);tick(g,2000);b.input[0]={itemId:'copper',count:3};b.output[0]={itemId:'wire',count:4};const old:any=structuredClone(g);old.meta.stateVersion=3;delete old.world.base.buildings[0].level;old.world.base.buildings[0].queue=['craft_wire','craft_wire'];old.world.base.handQueue=['grass_parts'];const migrated=sanitizeState(old);assert.equal(migrated.meta.stateVersion,4);const result=migrated.world.base.buildings[0];assert.equal(result.level,1);assert.deepEqual(result.job,b.job);assert.deepEqual(result.input,b.input);assert.deepEqual(result.output,b.output);assert.deepEqual(result.queue,[]);assert.deepEqual(migrated.world.base.handQueue,[]);assert.equal(old.world.base.buildings[0].queue.length,2);

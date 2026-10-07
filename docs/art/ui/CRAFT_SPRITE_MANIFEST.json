@@ -1,0 +1,539 @@
+{
+  "generated_at": "2026-10-07",
+  "generation_mode": "built-in image_gen.imagegen",
+  "transparent_background": true,
+  "style": "approved soft low-poly / matte facets / upper-left light",
+  "conversion": "RGBA PNG resized uniformly to 512x512 with Lanczos; WebP quality 90 method 6; no repaint",
+  "assets": [
+    {
+      "id": "wrench",
+      "prompt": "Use case: stylized-concept. Asset type: one isolated inventory sprite for the Vireon survival game. The reference image is STYLE ONLY, not an edit target. Match its soft low-poly 3D style, large matte polygon faces, softly beveled edges, simple readable silhouette, soft light from upper left. Center one object occupying about 80% of the square canvas, three-quarter view. Truly transparent background. No floor, no cast shadow outside the object, no frame, no text, no numbers, no logo, no watermark. No photorealism, tiny screws, rust, complex noise or metallic glare.\nSubject: A reusable steel open-ended wrench, graphite grip accents, pale silver head, diagonal lower-left handle to upper-right open jaw. Clearly recognizable as a wrench at 40 pixels.",
+      "references": [
+        "src/assets/items/stone.webp"
+      ],
+      "source_filename": "exec-14d348b4-f562-4016-9104-86b6ae280911.png",
+      "source_dimensions": [
+        1254,
+        1254
+      ],
+      "source_sha256": "13c322cd4d227da3fbf2d435589387817f589946fad9046fbcc4f2391d75d817",
+      "game_path": "src/assets/items/wrench.webp",
+      "game_dimensions": [
+        512,
+        512
+      ],
+      "game_bytes": 23018,
+      "game_sha256": "e4e1fbf726f155f5c0844bcba69d29c679dbd9e81ba966f8df82bb9d81108cf9",
+      "alpha_range": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "fiber",
+      "prompt": "Use case: stylized-concept. Asset type: one isolated inventory sprite for the Vireon survival game. The reference image is STYLE ONLY, not an edit target. Match its soft low-poly 3D style, large matte polygon faces, softly beveled edges, simple readable silhouette, soft light from upper left. Center one object occupying about 80% of the square canvas, three-quarter view. Truly transparent background. No floor, no cast shadow outside the object, no frame, no text, no numbers, no logo, no watermark. No photorealism, tiny screws, rust, complex noise or metallic glare.\nSubject: A neatly looped short bundle of tan plant-fiber cord, tied with a simple band; natural warm straw color, chunky visible strands.",
+      "references": [
+        "src/assets/items/stone.webp"
+      ],
+      "source_filename": "exec-4e2b0ca2-9b17-423f-9175-94fa065d73bf.png",
+      "source_dimensions": [
+        1254,
+        1254
+      ],
+      "source_sha256": "ccf684387b093f1974d9e645b3733c927b15e52e4739009d19f0260844b0b121",
+      "game_path": "src/assets/items/fiber.webp",
+      "game_dimensions": [
+        512,
+        512
+      ],
+      "game_bytes": 31778,
+      "game_sha256": "0ebabf2c5f5de66a14ef78ede9077cf488690594b7eec19c691741eec15ffc7f",
+      "alpha_range": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "iron",
+      "prompt": "Use case: stylized-concept. Asset type: one isolated inventory sprite for the Vireon survival game. The reference image is STYLE ONLY, not an edit target. Match its soft low-poly 3D style, large matte polygon faces, softly beveled edges, simple readable silhouette, soft light from upper left. Center one object occupying about 80% of the square canvas, three-quarter view. Truly transparent background. No floor, no cast shadow outside the object, no frame, no text, no numbers, no logo, no watermark. No photorealism, tiny screws, rust, complex noise or metallic glare.\nSubject: One solid pale silver iron ingot, a chunky trapezoidal rectangular bar with softly beveled corners, no markings.",
+      "references": [
+        "src/assets/items/stone.webp"
+      ],
+      "source_filename": "exec-26967726-8a03-4bb5-9af3-9448cda47f3a.png",
+      "source_dimensions": [
+        1254,
+        1254
+      ],
+      "source_sha256": "1571db3a6e079dde1f90076805865cc8326fa5fa4de5403abdaaa9a302c576f7",
+      "game_path": "src/assets/items/iron.webp",
+      "game_dimensions": [
+        512,
+        512
+      ],
+      "game_bytes": 20790,
+      "game_sha256": "42048dc30cbcb02a76b8881a94c0cae719314876998ff1ad647f62bebde0161f",
+      "alpha_range": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "copper",
+      "prompt": "Use case: stylized-concept. Asset type: one isolated inventory sprite for the Vireon survival game. The reference image is STYLE ONLY, not an edit target. Match its soft low-poly 3D style, large matte polygon faces, softly beveled edges, simple readable silhouette, soft light from upper left. Center one object occupying about 80% of the square canvas, three-quarter view. Truly transparent background. No floor, no cast shadow outside the object, no frame, no text, no numbers, no logo, no watermark. No photorealism, tiny screws, rust, complex noise or metallic glare.\nSubject: One solid warm terracotta copper ingot, a chunky trapezoidal rectangular bar with softly beveled corners, no markings.",
+      "references": [
+        "src/assets/items/stone.webp"
+      ],
+      "source_filename": "exec-633b3d56-7322-4374-89f9-d372a4a711d4.png",
+      "source_dimensions": [
+        1254,
+        1254
+      ],
+      "source_sha256": "b7f654658caa428eae1e508d4dfa22d2edd09df81897f811ec285781c503c063",
+      "game_path": "src/assets/items/copper.webp",
+      "game_dimensions": [
+        512,
+        512
+      ],
+      "game_bytes": 22222,
+      "game_sha256": "51c6bc34511e33107cc0277a224258613594e38412742f08148e93605030cf79",
+      "alpha_range": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "grass",
+      "prompt": "Use case: stylized-concept. Asset type: one isolated inventory sprite for the Vireon survival game. Reference is STYLE ONLY, not an edit target. Match soft low-poly 3D, large matte polygon faces and beveled edges, simple chunky silhouette, soft light from upper left. Center one object occupying about 80% of square canvas, three-quarter view. Truly transparent background. No floor, cast shadow outside object, frame, text, numbers, logos, watermark, photorealism, tiny screws, rust, complex noise or metallic glare.\nSubject: A small harvested handful of 6 broad alien grass blades, muted sage green and straw tips, chunky pointed leaves, visible tied short stems. No flowers.",
+      "references": [
+        "src/assets/items/stone.webp"
+      ],
+      "source_filename": "exec-172a57ec-1732-48b6-acd6-5b258b102661.png",
+      "source_dimensions": [
+        1254,
+        1254
+      ],
+      "source_sha256": "6c9bc4c6d23c125835b27e57346fbc3b768be59b31cb058dd68a85200fdbdc7b",
+      "game_path": "src/assets/items/grass.webp",
+      "game_dimensions": [
+        512,
+        512
+      ],
+      "game_bytes": 33914,
+      "game_sha256": "bebab6593841356b472d72f30a420edffbc033de405140735d33e21c7394beb8",
+      "alpha_range": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "sand",
+      "prompt": "Use case: stylized-concept. Asset type: one isolated inventory sprite for the Vireon survival game. Reference is STYLE ONLY, not an edit target. Match soft low-poly 3D, large matte polygon faces and beveled edges, simple chunky silhouette, soft light from upper left. Center one object occupying about 80% of square canvas, three-quarter view. Truly transparent background. No floor, cast shadow outside object, frame, text, numbers, logos, watermark, photorealism, tiny screws, rust, complex noise or metallic glare.\nSubject: A small compact mound of warm ochre sand with broad low-poly dunes and a few larger grains; distinguish from rock.",
+      "references": [
+        "src/assets/items/stone.webp"
+      ],
+      "source_filename": "exec-765ca593-a1a7-41fd-b82e-3ff2b2e9dc75.png",
+      "source_dimensions": [
+        1254,
+        1254
+      ],
+      "source_sha256": "822d801e36d589def4c1246828a6621522308b60d57f7ac923dbc1144df5d156",
+      "game_path": "src/assets/items/sand.webp",
+      "game_dimensions": [
+        512,
+        512
+      ],
+      "game_bytes": 21424,
+      "game_sha256": "e758b61fc4ad9b589e266a20726817ae3ee9d6e88c3b475f61c94bcd0501b527",
+      "alpha_range": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "glass",
+      "prompt": "Use case: stylized-concept. Asset type: one isolated inventory sprite for the Vireon survival game. Reference is STYLE ONLY, not an edit target. Match soft low-poly 3D, large matte polygon faces and beveled edges, simple chunky silhouette, soft light from upper left. Center one object occupying about 80% of square canvas, three-quarter view. Truly transparent background. No floor, cast shadow outside object, frame, text, numbers, logos, watermark, photorealism, tiny screws, rust, complex noise or metallic glare.\nSubject: One thick rectangular translucent pale cyan glass pane, at a diagonal three-quarter angle, broad bevels, bright upper-left edge and subtle blue face, clear empty center.",
+      "references": [
+        "src/assets/items/stone.webp"
+      ],
+      "source_filename": "exec-9a6f0070-6651-4b7a-8eba-13a0975e78c9.png",
+      "source_dimensions": [
+        1254,
+        1254
+      ],
+      "source_sha256": "f0208c099f5a4f44a428cb0a684b649148bcbe2df640a7b03be67ddd39c9a3d7",
+      "game_path": "src/assets/items/glass.webp",
+      "game_dimensions": [
+        512,
+        512
+      ],
+      "game_bytes": 39504,
+      "game_sha256": "29c22a4abfa61192c01d5c9d9089b419e5566ec50b5b6e141eed243e6e4b0d41",
+      "alpha_range": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "wire",
+      "prompt": "Use case: stylized-concept. Asset type: one isolated inventory sprite for the Vireon survival game. Reference is STYLE ONLY, not an edit target. Match soft low-poly 3D, large matte polygon faces and beveled edges, simple chunky silhouette, soft light from upper left. Center one object occupying about 80% of square canvas, three-quarter view. Truly transparent background. No floor, cast shadow outside object, frame, text, numbers, logos, watermark, photorealism, tiny screws, rust, complex noise or metallic glare.\nSubject: A tight flat spool of bare copper wire, several thick terracotta loops, a short visible free end, chunky and easily readable. No black insulation.",
+      "references": [
+        "src/assets/items/stone.webp"
+      ],
+      "source_filename": "exec-ca2c80b9-220c-4c81-9fc0-5571d8669f80.png",
+      "source_dimensions": [
+        1254,
+        1254
+      ],
+      "source_sha256": "f01c8e255007a23bdc17425b7094f912e5fcab374ee3446b326024287e9537a3",
+      "game_path": "src/assets/items/wire.webp",
+      "game_dimensions": [
+        512,
+        512
+      ],
+      "game_bytes": 36314,
+      "game_sha256": "e3c0f9739dcbf9b00c4e76dcd489e98f4995c5361c4f4f915afdc373198866bc",
+      "alpha_range": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "circuit",
+      "prompt": "Use case: stylized-concept. Asset type: one isolated inventory sprite for the Vireon survival game. Reference is STYLE ONLY, not an edit target. Match soft low-poly 3D, large matte polygon faces and beveled edges, simple chunky silhouette, soft light from upper left. Center one object occupying about 80% of square canvas, three-quarter view. Truly transparent background. No floor, cast shadow outside object, frame, text, numbers, logos, watermark, photorealism, tiny screws, rust, complex noise or metallic glare.\nSubject: A small square green circuit board, one large dark central chip, four gold contact strips, simplified chunky components; no writing or micro-detail.",
+      "references": [
+        "src/assets/items/stone.webp"
+      ],
+      "source_filename": "exec-2ff37c8d-57cd-4bb7-bb4e-5e2dd6791a64.png",
+      "source_dimensions": [
+        1254,
+        1254
+      ],
+      "source_sha256": "5a9256839d1732feb0fa821737e214ba79081c4893138654ff274c2a21691e16",
+      "game_path": "src/assets/items/circuit.webp",
+      "game_dimensions": [
+        512,
+        512
+      ],
+      "game_bytes": 31050,
+      "game_sha256": "fce5552bc2f7262f2569bce44e728fb918c94b0481dc2883adcead3ac10128d1",
+      "alpha_range": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "cable",
+      "prompt": "Use case: stylized-concept. Asset type: one isolated inventory sprite for the Vireon survival game. Reference is STYLE ONLY, not an edit target. Match soft low-poly 3D, large matte polygon faces and beveled edges, simple chunky silhouette, soft light from upper left. Center one object occupying about 80% of square canvas, three-quarter view. Truly transparent background. No floor, cast shadow outside object, frame, text, numbers, logos, watermark, photorealism, tiny screws, rust, complex noise or metallic glare.\nSubject: A compact coil of thick black insulated electrical cable with orange bands and two chunky ivory connectors; distinct from bare copper wire.",
+      "references": [
+        "src/assets/items/stone.webp"
+      ],
+      "source_filename": "exec-0ae80ca7-f450-47a8-aaa8-9fc8aaf476b5.png",
+      "source_dimensions": [
+        1254,
+        1254
+      ],
+      "source_sha256": "45bf563afb2ebb9eb49701187d1084e81855068dbcd43ad712ab9e1905aa77b8",
+      "game_path": "src/assets/items/cable.webp",
+      "game_dimensions": [
+        512,
+        512
+      ],
+      "game_bytes": 30636,
+      "game_sha256": "1577474686a975d0e4f7bad3e833ccdee4568fe91c8cf27dc3063f94f3655a8b",
+      "alpha_range": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "gas_pipe",
+      "prompt": "Use case: stylized-concept. Asset type: one isolated inventory sprite for the Vireon survival game. Reference is STYLE ONLY, not an edit target. Match soft low-poly 3D, large matte polygon faces and beveled edges, simple chunky silhouette, soft light from upper left. Center one object occupying about 80% of square canvas, three-quarter view. Truly transparent background. No floor, cast shadow outside object, frame, text, numbers, logos, watermark, photorealism, tiny screws, rust, complex noise or metallic glare.\nSubject: A short rigid L-shaped metallic gas pipe with two thick cyan coupling rings and pale ivory connectors; distinct from a cable.",
+      "references": [
+        "src/assets/items/stone.webp"
+      ],
+      "source_filename": "exec-9973cf28-6e67-4f04-b18f-7b8d1eeff9b2.png",
+      "source_dimensions": [
+        1254,
+        1254
+      ],
+      "source_sha256": "fee8f5fc6cf89dcf87e674c24ea082c3ec04c1f0dea13b5b704b3600884a6a19",
+      "game_path": "src/assets/items/gas_pipe.webp",
+      "game_dimensions": [
+        512,
+        512
+      ],
+      "game_bytes": 28568,
+      "game_sha256": "2bd0bf216b0744f648bf6d4dda0b98ef2ce86ca41268657698391094112aaf0e",
+      "alpha_range": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "workbench",
+      "prompt": "Use case: stylized-concept. Asset type: one isolated inventory sprite for the Vireon survival game. Reference is STYLE ONLY, not an edit target. Match soft low-poly 3D, large matte polygon faces and beveled edges, simple chunky silhouette, soft light from upper left. Center one object occupying about 80% of square canvas, three-quarter view. Truly transparent background. No floor, cast shadow outside object, frame, text, numbers, logos, watermark, photorealism, tiny screws, rust, complex noise or metallic glare.\nSubject: A compact industrial manual workbench: ivory tabletop on a graphite open metal frame, orange strip on front, lower shelf, small vise. No motor or gantry. Entire object visible.",
+      "references": [
+        "src/assets/items/stone.webp"
+      ],
+      "source_filename": "exec-5f2c7389-ab9e-4911-947c-755bc13414ff.png",
+      "source_dimensions": [
+        1254,
+        1254
+      ],
+      "source_sha256": "81021ff62ad7f1e6db88ca7cf4944ca8bc829249039d1eccb390236d39e02a1a",
+      "game_path": "src/assets/items/workbench.webp",
+      "game_dimensions": [
+        512,
+        512
+      ],
+      "game_bytes": 34320,
+      "game_sha256": "34dd4605e4818d2e42ffb92be45001c4916d50b47c82fc148ab5767f547672b6",
+      "alpha_range": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "kiln",
+      "prompt": "Use case: stylized-concept. Asset type: one isolated inventory sprite for the Vireon survival game. Reference is STYLE ONLY, not an edit target. Match soft low-poly 3D, large matte polygon faces and beveled edges, simple chunky silhouette, soft light from upper left. Center one object occupying about 80% of square canvas, three-quarter view. Truly transparent background. No floor, cast shadow outside object, frame, text, numbers, logos, watermark, photorealism, tiny screws, rust, complex noise or metallic glare.\nSubject: A compact industrial electric furnace box, graphite square body, ivory top housing, a chunky amber glowing fire chamber in front, orange edges. Entire object visible.",
+      "references": [
+        "src/assets/items/stone.webp"
+      ],
+      "source_filename": "exec-c922e73a-81e7-45e1-98cd-9fb944e0f112.png",
+      "source_dimensions": [
+        1254,
+        1254
+      ],
+      "source_sha256": "9dad17fd2e35f635d90a1caf2331e52a4c1ef608dcc61e0a9de4e5fa2b1e969a",
+      "game_path": "src/assets/items/kiln.webp",
+      "game_dimensions": [
+        512,
+        512
+      ],
+      "game_bytes": 37900,
+      "game_sha256": "cd0edd99a86f23528b5ba6889d3fe36f9211a9e9463500bbb43cbb795cde41e4",
+      "alpha_range": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "biogenerator",
+      "prompt": "Use case: stylized-concept. Asset type: one isolated inventory sprite for the Vireon survival game. Reference is STYLE ONLY, not an edit target. Match soft low-poly 3D, large matte polygon faces and beveled edges, simple chunky silhouette, soft light from upper left. Center one object occupying about 80% of square canvas, three-quarter view. Truly transparent background. No floor, cast shadow outside object, frame, text, numbers, logos, watermark, photorealism, tiny screws, rust, complex noise or metallic glare.\nSubject: A compact biomass electricity generator: chunky graphite rectangular base, ivory top housing with one large orange fuel hatch, a large simplified rotor at one end, orange accent stripe. Entire object visible.",
+      "references": [
+        "src/assets/items/stone.webp"
+      ],
+      "source_filename": "exec-ffbe8b26-4c86-4f73-9c83-e3403df265e4.png",
+      "source_dimensions": [
+        1254,
+        1254
+      ],
+      "source_sha256": "2ecc6cebe636e13727a4442d3923c527b1df33c32594f1985ee6ca472181eac2",
+      "game_path": "src/assets/items/biogenerator.webp",
+      "game_dimensions": [
+        512,
+        512
+      ],
+      "game_bytes": 36332,
+      "game_sha256": "349dabf7f8c80ca692c08ee984eab2cb56de60517383a270ddf6a0a4f0af1959",
+      "alpha_range": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "electrolyzer",
+      "prompt": "Use case: stylized-concept. Asset type: one isolated inventory sprite for the Vireon survival game. Reference is STYLE ONLY, not an edit target. Match soft low-poly 3D, large matte polygon faces and beveled edges, simple chunky silhouette, soft light from upper left. Center one object occupying about 80% of square canvas, three-quarter view. Truly transparent background. No floor, cast shadow outside object, frame, text, numbers, logos, watermark, photorealism, tiny screws, rust, complex noise or metallic glare.\nSubject: A compact industrial water electrolyzer, two upright squat tanks beside one central bright blue chamber, an ivory support frame, graphite base and orange accents. Entire object visible.",
+      "references": [
+        "src/assets/items/stone.webp"
+      ],
+      "source_filename": "exec-c576fd3c-b892-45a7-bcf3-20e6e97f7a3f.png",
+      "source_dimensions": [
+        1254,
+        1254
+      ],
+      "source_sha256": "cf97d77d538aead2ae3ade477e07f59a3e9faf5ec9441d1274bcb7207e5e952e",
+      "game_path": "src/assets/items/electrolyzer.webp",
+      "game_dimensions": [
+        512,
+        512
+      ],
+      "game_bytes": 44312,
+      "game_sha256": "420a13f2a7a7e1e00575359ccd69cca9c5b91f123e7067158180f85d9465a7fe",
+      "alpha_range": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "refill",
+      "prompt": "Use case: stylized-concept. Asset type: one isolated inventory sprite for the Vireon survival game. Reference is STYLE ONLY, not an edit target. Match soft low-poly 3D, large matte polygon faces and beveled edges, simple chunky silhouette, soft light from upper left. Center one object occupying about 80% of square canvas, three-quarter view. Truly transparent background. No floor, cast shadow outside object, frame, text, numbers, logos, watermark, photorealism, tiny screws, rust, complex noise or metallic glare.\nSubject: A compact oxygen bottle refill station: one upright tall ivory tank with cyan blue window, thick looped dark hose and blue coupling, sturdy graphite base with orange accent. Entire object visible.",
+      "references": [
+        "src/assets/items/stone.webp"
+      ],
+      "source_filename": "exec-f8aa3093-c318-43ef-9440-d9ba772d1a77.png",
+      "source_dimensions": [
+        1254,
+        1254
+      ],
+      "source_sha256": "0474bd3959a947fa62e4b1716397826903fd487fbc1865fccb8b14747c0d278e",
+      "game_path": "src/assets/items/refill.webp",
+      "game_dimensions": [
+        512,
+        512
+      ],
+      "game_bytes": 28964,
+      "game_sha256": "2ed0404d2c70c08a08dd0bd0d2f79c223d0fae2874cdcb1ce3237563c46a921c",
+      "alpha_range": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "distributor",
+      "prompt": "Use case: stylized-concept. Asset type: one isolated inventory sprite for the Vireon survival game. Reference is STYLE ONLY, not an edit target. Match soft low-poly 3D, large matte polygon faces and beveled edges, simple chunky silhouette, soft light from upper left. Center one object occupying about 80% of square canvas, three-quarter view. Truly transparent background. No floor, cast shadow outside object, frame, text, numbers, logos, watermark, photorealism, tiny screws, rust, complex noise or metallic glare.\nSubject: A compact air distributor unit: ivory square casing with a large round graphite fan grille on its front, broad cyan duct coupling and orange accent stripe, solid graphite feet. Entire object visible.",
+      "references": [
+        "src/assets/items/stone.webp"
+      ],
+      "source_filename": "exec-9df6a2d3-663e-49c1-b478-2798849f13d3.png",
+      "source_dimensions": [
+        1254,
+        1254
+      ],
+      "source_sha256": "8bd8df25d72bfacf91c5a2e0ed559c3d622dc884b85a83dd3f3fe78370a2245a",
+      "game_path": "src/assets/items/distributor.webp",
+      "game_dimensions": [
+        512,
+        512
+      ],
+      "game_bytes": 38160,
+      "game_sha256": "dfb4acd0bb187a7b031ef047487f1745687f8698ab55567c53cd2facf3f61480",
+      "alpha_range": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "dome",
+      "prompt": "Use case: stylized-concept. Asset type: one isolated inventory sprite for the Vireon survival game. Reference is STYLE ONLY, not an edit target. Match soft low-poly 3D, large matte polygon faces and beveled edges, simple chunky silhouette, soft light from upper left. Center one object occupying about 80% of square canvas, three-quarter view. Truly transparent background. No floor, cast shadow outside object, frame, text, numbers, logos, watermark, photorealism, tiny screws, rust, complex noise or metallic glare.\nSubject: A compact hemispherical geodesic habitat dome of pale blue glass, thick ivory triangular struts, graphite circular foundation, one small orange and ivory rectangular airlock entrance. Entire object visible.",
+      "references": [
+        "src/assets/items/stone.webp"
+      ],
+      "source_filename": "exec-ed86183f-b15c-4ee0-b06b-08a708adf959.png",
+      "source_dimensions": [
+        1254,
+        1254
+      ],
+      "source_sha256": "d1f3efbd9b3405544974f41ef5d51b7b90fe7ccf358b0822e894b8da1a92ee7b",
+      "game_path": "src/assets/items/dome.webp",
+      "game_dimensions": [
+        512,
+        512
+      ],
+      "game_bytes": 40118,
+      "game_sha256": "6cabf2ede1af06dcc63aebe225aba5ced3d8ce157f0510b0d696b7f450193720",
+      "alpha_range": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "workbench_2",
+      "prompt": "Use case: stylized-concept. Asset type: one isolated inventory sprite for the Vireon survival game. Reference is STYLE ONLY, not an edit target. Match soft low-poly 3D, large matte polygon faces and beveled edges, simple chunky silhouette, soft light from upper left. Center one object occupying about 80% of square canvas, three-quarter view. Truly transparent background. No floor, cast shadow outside object, frame, text, numbers, logos, watermark, photorealism, tiny screws, rust, complex noise or metallic glare.\nSubject: The SAME manual workbench shown in the second reference upgraded into an automated assembly workbench: preserve ivory tabletop, graphite legs and lower shelf, orange front strip and vise; add a sturdy overhead ivory gantry with small orange motor and cyan status strip. Keep the whole object visible, same view.",
+      "references": [
+        "src/assets/items/stone.webp",
+        "generated source exec-5f2c7389-ab9e-4911-947c-755bc13414ff.png"
+      ],
+      "source_filename": "exec-37721641-5819-4dd8-ba77-ff22175db7cc.png",
+      "source_dimensions": [
+        1254,
+        1254
+      ],
+      "source_sha256": "8ddf014eb6dd4f4c9f51135131c6d6dcff7c6687d2da116dd12fc44660af590c",
+      "game_path": "src/assets/items/workbench_2.webp",
+      "game_dimensions": [
+        512,
+        512
+      ],
+      "game_bytes": 48886,
+      "game_sha256": "57521d1cd50a30a06f8c976f25f46f31ac966efadb835c9cf4555bdbb4dd00de",
+      "alpha_range": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "water",
+      "prompt": "Use case: stylized-concept. Asset type: one isolated inventory sprite for the Vireon survival game. Reference is STYLE ONLY, not an edit target. Match soft low-poly 3D, large matte polygon faces and beveled edges, simple chunky silhouette, soft light from upper left. Center one object occupying about 80% of square canvas, three-quarter view. Truly transparent background. No floor, cast shadow outside object, frame, text, numbers, logos, watermark, photorealism, tiny screws, rust, complex noise or metallic glare.\nSubject: One large simple water droplet, rich pale cyan blue, chunky gently faceted low-poly silhouette with a rounded base and pointed top; fluid production indicator, no bottle.",
+      "references": [
+        "src/assets/items/stone.webp"
+      ],
+      "source_filename": "exec-6e5f508f-7dff-4468-a267-a0c0e485a538.png",
+      "source_dimensions": [
+        1254,
+        1254
+      ],
+      "source_sha256": "a6c563ce358bfc3f36274e47d7563c7d3c3e712581ffe208580e3d903a0b49f8",
+      "game_path": "src/assets/items/water.webp",
+      "game_dimensions": [
+        512,
+        512
+      ],
+      "game_bytes": 20078,
+      "game_sha256": "ccdd1230a2d9fe1688b6d2678040401e6a28fea53a25bda71bbe91aba48ef00b",
+      "alpha_range": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "oxygen",
+      "prompt": "Use case: stylized-concept. Asset type: one isolated inventory sprite for the Vireon survival game. Reference is STYLE ONLY, not an edit target. Match soft low-poly 3D, large matte polygon faces and beveled edges, simple chunky silhouette, soft light from upper left. Center one object occupying about 80% of square canvas, three-quarter view. Truly transparent background. No floor, cast shadow outside object, frame, text, numbers, logos, watermark, photorealism, tiny screws, rust, complex noise or metallic glare.\nSubject: A pair of bonded rounded cyan blue oxygen gas spheres, two touching identical gently faceted matte spheres, simple readable chemistry indicator; no text, no letters, no molecule labels, no container.",
+      "references": [
+        "src/assets/items/stone.webp"
+      ],
+      "source_filename": "exec-e923aea1-34ff-4f24-a5a3-8f6543917966.png",
+      "source_dimensions": [
+        1254,
+        1254
+      ],
+      "source_sha256": "47a462cdae96310a44dea0c91d75fb7715bb4ff5113374724989e61ce39a5834",
+      "game_path": "src/assets/items/oxygen.webp",
+      "game_dimensions": [
+        512,
+        512
+      ],
+      "game_bytes": 22196,
+      "game_sha256": "ea3b7db658b2835028461973e31216504bd3fbb9fd7671ec35eb5a1782e6c843",
+      "alpha_range": [
+        0,
+        255
+      ]
+    },
+    {
+      "id": "hydrogen",
+      "prompt": "Use case: stylized-concept. Asset type: one isolated inventory sprite for the Vireon survival game. Reference is STYLE ONLY, not an edit target. Match soft low-poly 3D, large matte polygon faces and beveled edges, simple chunky silhouette, soft light from upper left. Center one object occupying about 80% of square canvas, three-quarter view. Truly transparent background. No floor, cast shadow outside object, frame, text, numbers, logos, watermark, photorealism, tiny screws, rust, complex noise or metallic glare.\nSubject: A pair of bonded rounded pale mint green hydrogen gas spheres, two touching identical gently faceted matte spheres, simple readable chemistry indicator; no text, no letters, no molecule labels, no container. Distinguish from cyan oxygen.",
+      "references": [
+        "src/assets/items/stone.webp"
+      ],
+      "source_filename": "exec-00d74e5f-bf45-458d-84af-8b70da620cdf.png",
+      "source_dimensions": [
+        1254,
+        1254
+      ],
+      "source_sha256": "8554acf59dea8c666db5fc28f8ceee1d518010851eca40b60e79d28fc07924f7",
+      "game_path": "src/assets/items/hydrogen.webp",
+      "game_dimensions": [
+        512,
+        512
+      ],
+      "game_bytes": 19810,
+      "game_sha256": "74d7d85fdbc284b24d8b582c9708de2512ce85274dc655cebb187e476b8d90ee",
+      "alpha_range": [
+        0,
+        255
+      ]
+    }
+  ],
+  "total_game_bytes": 690294
+}

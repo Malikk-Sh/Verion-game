@@ -1,7 +1,7 @@
 import { createCraftingView } from './crafting';
 import { BUILDABLE, ITEMS, type BuildingKind } from '../game/defs';
 import { countItem } from '../game/inventory';
-import { RECIPES, RECIPE_BY_ID, queueJob, clearQueue, collectInput, beginPassage, cancelJob, collectOutput, connect, habitable, loadFuel, machine, sealCheck, startJob, type Link } from '../game/production';
+import { RECIPES, RECIPE_BY_ID, queueJob, clearQueue, collectInput, beginPassage, cancelJob, collectOutput, connect, habitable, loadFuel, machine, sealCheck, startJob, type Link, type Building } from '../game/production';
 import { place, placementProblem } from '../buildings';
 import { heightAt } from '../world';
 import type { GameState } from '../game/state';
@@ -10,6 +10,7 @@ import './production.css';
 type Host = { game(): GameState|null; show(): void; close(): void; changed():void; refill(id:string|null):void; tone(ok:boolean):void };
 const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
 const h=<K extends keyof HTMLElementTagNameMap>(tag:K,text='',cls='')=>{const e=document.createElement(tag);e.textContent=text;e.className=cls;return e;};
+const stationName=(g:GameState,b:Building)=>ITEMS[b.kind].name+(b.kind==='workbench'?(b.level===2?' II':' I'):'')+(g.world.base.buildings.some(v=>v.id!==b.id&&v.kind===b.kind&&v.level===b.level)?' · X'+b.x+' Z'+b.z:'');
 const btn=(label:string,fn:()=>void,disabled=false)=>{const b=h('button',label,'ui-btn');b.disabled=disabled;b.onclick=fn;return b;};
 export function createProductionPanel(host:Host){
  const crafting=createCraftingView();
@@ -18,7 +19,7 @@ export function createProductionPanel(host:Host){
  function open(id='hand',upgrade=false){station=id;crafting.open(id,upgrade);tab='recipes';message='';host.show();draw();}
  el('close-production').onclick=()=>{host.refill(null);host.close();};
  for(const t of ['recipes','build','links'])el('production-'+t).onclick=()=>{host.refill(null);tab=t;message='';draw();};
- function choices(g:GameState){const select=h('select');select.setAttribute('aria-label','Станция');select.append(new Option('Ручной крафт','hand'));if(g.player.x>37.5&&g.player.x<42.5&&g.player.z>37&&g.player.z<43.1)select.append(new Option('Капсула · ручной порт','capsule'));for(const b of g.world.base.buildings)if(Math.hypot(b.x-g.player.x,b.z-g.player.z)<=3.2)select.append(new Option(ITEMS[b.kind].name+(b.kind==='workbench'?(b.level===2?' II':' I'):'')+' · '+b.id,b.id));if(station!=='hand'&&station!=='capsule'&&!machine(g,station))station='hand';select.value=station;select.onchange=()=>{host.refill(null);station=select.value;crafting.open(station);message='';draw();};return select;}
+ function choices(g:GameState){const select=h('select');select.setAttribute('aria-label','Станция');select.append(new Option('Ручной крафт','hand'));if(g.player.x>37.5&&g.player.x<42.5&&g.player.z>37&&g.player.z<43.1)select.append(new Option('Капсула · ручной порт','capsule'));for(const b of g.world.base.buildings)if(Math.hypot(b.x-g.player.x,b.z-g.player.z)<=3.2)select.append(new Option(stationName(g,b),b.id));if(station!=='hand'&&station!=='capsule'&&!machine(g,station))station='hand';select.value=station;select.onchange=()=>{host.refill(null);station=select.value;crafting.open(station);message='';draw();};return select;}
  function draw(){const focus=document.activeElement as HTMLInputElement|null,keepSearch=focus?.id==='craft-search',cursor=keepSearch?[focus.selectionStart,focus.selectionEnd]:null;const g=host.game();if(!g)return;el('production-message').textContent=message;
   for(const t of ['recipes','build','links'])el('production-'+t).setAttribute('aria-pressed',String(tab===t));
   const content=el('production-content');content.replaceChildren();
@@ -26,7 +27,7 @@ export function createProductionPanel(host:Host){
   el('production-panel').querySelector('h2')!.textContent=tab==='build'?'Строительство':tab==='links'?'Соединения':station==='hand'?'Крафт · В кармане':machine(g,station)?.kind==='workbench'?'Крафт · Верстак '+(machine(g,station)!.level===2?'II':'I'):'Мастерская';
   if(tab==='recipes'){
    content.append(choices(g));if(station==='capsule'){const status=h('p','Ручной порт · '+Math.round(g.world.capsuleMilliGU/1000)+'/2400 GU · 20 GU/с');status.id='production-status';content.append(status);for(const [id,label] of [['capsule-out','Капсула → баллоны'],['capsule-in','Баллоны → капсула']]){const fill=btn(label+' · удерживать',()=>{});fill.onpointerdown=e=>{e.preventDefault();fill.setPointerCapture(e.pointerId);host.refill(id);};for(const type of ['pointerup','pointercancel','lostpointercapture'])fill.addEventListener(type,()=>host.refill(null));fill.onkeydown=e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();host.refill(id);}};fill.onkeyup=()=>host.refill(null);content.append(fill);}return;}const b=machine(g,station),s=b?.kind??'hand',job=b?.job??(station==='hand'?g.world.base.hand:null);
-   if(s==='hand'||s==='workbench'){content.append(crafting.draw(g,station,say,host.changed,draw));if(keepSearch){const search=el<HTMLInputElement>('craft-search');search.focus({preventScroll:true});search.setSelectionRange(cursor![0]??0,cursor![1]??0);}lastStatus='';return;}
+   if(s==='hand'||s==='workbench'){const view=crafting.draw(g,station,say,host.changed,draw);content.append(view);if(view.dataset.mode==='upgrade')el('production-panel').querySelector('h2')!.textContent='Улучшение · Верстак';if(keepSearch&&view.dataset.mode!=='upgrade'){const search=el<HTMLInputElement>('craft-search');search.focus({preventScroll:true});search.setSelectionRange(cursor![0]??0,cursor![1]??0);}lastStatus='';return;}
    const status=h('p','','production-status');status.id='production-status';content.append(status);
    if(b){const actions=h('div','','production-actions');actions.append(btn('Вернуть входы',()=>say(collectInput(g,station)>0?'':'Вход пуст или рюкзак полон','Входы возвращены')));actions.append(btn('Забрать выход',()=>say(collectOutput(g,station)>0?'':'Нет готового выхода или рюкзак полон','Перенесено в рюкзак')));
     if(b.kind==='biogenerator')actions.append(btn('Загрузить 1 волокно',()=>say(loadFuel(g,station),'Топливо загружено')));
@@ -52,8 +53,8 @@ export function createProductionPanel(host:Host){
   }else{
    content.append(h('p','Каждый сегмент ≤4 м расходует один кабель или трубу. Кабель соединяет сеть; труба направлена от электролиза к приёмнику.','help'));
    const form=h('div','','production-links');const type=h('select');type.setAttribute('aria-label','Тип соединения');type.id='link-kind';type.append(new Option('Кабель · '+countItem(g.player.inventory,'cable'),'cable'),new Option('Труба O₂ · '+countItem(g.player.inventory,'gas_pipe'),'gas_pipe'));
-   const source=h('select'),target=h('select');source.id='link-from';target.id='link-to';source.setAttribute('aria-label','Источник');target.setAttribute('aria-label','Приёмник');for(const b of g.world.base.buildings){source.append(new Option(ITEMS[b.kind].name+(b.kind==='workbench'?(b.level===2?' II':' I'):'')+' · '+b.id,b.id));target.append(new Option(ITEMS[b.kind].name+(b.kind==='workbench'?(b.level===2?' II':' I'):'')+' · '+b.id,b.id));}target.append(new Option('Капсула','capsule'));form.append(type,source,target,btn('Соединить',()=>say(connect(g,type.value as Link['kind'],source.value,target.value),'Соединение оплачено и подключено')));content.append(form);
-   for(const l of g.world.base.links)content.append(h('p',`${l.kind==='cable'?'EU':'O₂'}: ${l.from} → ${l.to}`));
+   const source=h('select'),target=h('select');source.id='link-from';target.id='link-to';source.setAttribute('aria-label','Источник');target.setAttribute('aria-label','Приёмник');for(const b of g.world.base.buildings){source.append(new Option(stationName(g,b),b.id));target.append(new Option(stationName(g,b),b.id));}target.append(new Option('Капсула','capsule'));form.append(type,source,target,btn('Соединить',()=>say(connect(g,type.value as Link['kind'],source.value,target.value),'Соединение оплачено и подключено')));content.append(form);
+   for(const l of g.world.base.links)content.append(h('p',`${l.kind==='cable'?'EU':'O₂'}: ${machine(g,l.from)?stationName(g,machine(g,l.from)!):'Капсула'} → ${machine(g,l.to)?stationName(g,machine(g,l.to)!):'Капсула'}`));
   }
   lastStatus='';tick();
  }
