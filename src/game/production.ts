@@ -1,5 +1,6 @@
 import { heightAt } from '../world';
 import catalog from './catalog.generated.json';
+import { recordQuestFact } from './questFacts';
 import { BUILDABLE, ITEMS, TANKS, TOOLS, type BuildingKind } from './defs';
 import { addItems, countItem, emptyInventory, firstEmpty, removeItems, type Slot } from './inventory';
 import { dropItems } from './mining';
@@ -198,10 +199,12 @@ export function productionTick(g: GameState, ms: number, refillId: string | null
   let left=available-remaining;for(const b of supply){const n=Math.min(left,b.energy,40*ms);b.energy-=n;left-=n;}
 
  }
- const finish=(job:Job,slots:Slot[],b?:Building)=>{const r=RECIPE_BY_ID.get(job.recipeId)!;if(job.workMs<r.seconds*1000)return false;if(r.id==='melt_in_generator'){if(b!.water>19000)return false;b!.water+=1000;}else if(r.id==='electrolysis'){if(b!.oxygen>240000)return false;b!.oxygen+=240000;}else if(!insert(slots,outputSlots(r)))return false;changed=true;return true;};
+ if([...power.values()].some(n=>n>0))changed=recordQuestFact(g,'system:power')||changed;
+ const finish=(job:Job,slots:Slot[],b?:Building)=>{const r=RECIPE_BY_ID.get(job.recipeId)!;if(job.workMs<r.seconds*1000)return false;if(r.id==='melt_in_generator'){if(b!.water>19000)return false;b!.water+=1000;}else if(r.id==='electrolysis'){if(b!.oxygen>240000)return false;b!.oxygen+=240000;}else if(!insert(slots,outputSlots(r)))return false;recordQuestFact(g,'craft:'+r.id);for(const id of Object.keys(r.outputs))if(Object.hasOwn(ITEMS,id))recordQuestFact(g,'item:'+id);if(b?.kind==='workbench'&&b.level===2&&!nearby(g,b))recordQuestFact(g,'system:auto');changed=true;return true;};
  if(base.hand){base.hand.workMs=Math.min(base.hand.workMs+ms,RECIPE_BY_ID.get(base.hand.recipeId)!.seconds*1000);if(finish(base.hand,g.player.inventory))base.hand=null;}
  const manual=base.hand?undefined:manualWork(g);
- for(const b of base.buildings)if(b.job&&b.enabled){const r=RECIPE_BY_ID.get(b.job.recipeId)!,rate=energyRate(b,r);if(b.kind==='workbench'&&b.level===1&&b!==manual)continue;b.job.workMs=Math.min(r.seconds*1000,b.job.workMs+(rate?(power.get(b.id)??0)/rate:ms));if(finish(b.job,b.output,b))b.job=null;}
+ let automaticWork=false;
+ for(const b of base.buildings)if(b.job&&b.enabled){const r=RECIPE_BY_ID.get(b.job.recipeId)!,rate=energyRate(b,r);if(b.kind==='workbench'&&b.level===1&&b!==manual)continue;const before=b.job.workMs;b.job.workMs=Math.min(r.seconds*1000,b.job.workMs+(rate?(power.get(b.id)??0)/rate:ms));if(b.kind==='workbench'&&b.level===2&&b.job.workMs>before)automaticWork=true;if(finish(b.job,b.output,b))b.job=null;}
  for(const l of base.links)if(l.kind==='gas_pipe'){const a=machine(g,l.from)!,b=machine(g,l.to),cap=b?480000:2400000,stored=b?b.oxygen:g.world.capsuleMilliGU;const n=Math.min(a.oxygen,cap-stored,40*ms);a.oxygen-=n;if(b)b.oxygen+=n;else g.world.capsuleMilliGU+=n;}
  for(const b of base.buildings)if(b.kind==='dome'){
   const sealed=sealCheck(b.zone.shell).sealed,occupied=insideDome(b,g.player.x,g.player.y,g.player.z);
@@ -211,7 +214,8 @@ export function productionTick(g: GameState, ms: number, refillId: string | null
   if(sealed){if(installed.length){b.zone.lossRemainder+=Math.round(.096*ms*1000);const loss=Math.floor(b.zone.lossRemainder/1000);b.zone.lossRemainder%=1000;b.zone.q=Math.max(0,b.zone.q-loss);}if(powered>0){b.zone.purity=Math.min(1,b.zone.purity+ms/30000*powered);const step=.0005*ms*powered;b.zone.temperature+=Math.sign(20-b.zone.temperature)*Math.min(step,Math.abs(20-b.zone.temperature));}else{if(occupied)b.zone.purity=Math.max(0,b.zone.purity-ms/360000);b.zone.temperature=outside+(b.zone.temperature-outside)*Math.exp(-ms/300000);}}
   else {b.zone.q=Math.floor(b.zone.q*Math.exp(-ms/30000));b.zone.purity*=Math.exp(-ms/15000);b.zone.temperature=outside+(b.zone.temperature-outside)*Math.exp(-ms/60000);}
  }
- const refill=refillId&&machine(g,refillId);if(refill&&Math.hypot(refill.x-g.player.x,refill.z-g.player.z)<=3.2){let budget=Math.min(refill.oxygen,(power.get(refill.id)??0)*10);for(const t of g.player.bottles)if(t){const n=Math.min(budget,TANKS[t.itemId].capacity-(t.milliGU??0));t.milliGU=(t.milliGU??0)+n;refill.oxygen-=n;budget-=n;}}
+ const refill=refillId&&machine(g,refillId);if(refill&&Math.hypot(refill.x-g.player.x,refill.z-g.player.z)<=3.2){let budget=Math.min(refill.oxygen,(power.get(refill.id)??0)*10);for(const t of g.player.bottles)if(t){const n=Math.min(budget,TANKS[t.itemId].capacity-(t.milliGU??0));t.milliGU=(t.milliGU??0)+n;refill.oxygen-=n;budget-=n;if(n>0)changed=recordQuestFact(g,'system:refill')||changed;}}
+ if(automaticWork&&g.progress.quests.facts.includes('system:auto')&&base.buildings.some(habitable))changed=recordQuestFact(g,'system:base')||changed;
  let passage:ProductionTick['passage']=null;
  if(base.passage){base.passage.remainingMs=Math.max(0,base.passage.remainingMs-ms);if(!base.passage.remainingMs){const d=machine(g,base.passage.domeId)!;passage={x:d.x,y:d.y+.12,z:d.z+(base.passage.direction==='in'?1:3.5)};base.passage=null;changed=true;}}
  return {changed,passage};
@@ -220,5 +224,6 @@ export function productionTick(g: GameState, ms: number, refillId: string | null
 /** Death preserves WIP: incomplete hand inputs, or a finished output, join the cargo. */
 export function releaseHandOnDeath(g:GameState) {
  const job=g.world.base.hand;g.world.base.handQueue=[];if(!job)return;const r=RECIPE_BY_ID.get(job.recipeId)!;
+ if(job.workMs>=r.seconds*1000)recordQuestFact(g,'craft:'+r.id);
  dropItems(g,g.player.x,g.player.z,job.workMs>=r.seconds*1000?outputSlots(r):job.reserved);g.world.base.hand=null;g.world.base.handQueue=[];g.world.base.passage=null;
 }

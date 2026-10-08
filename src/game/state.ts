@@ -5,16 +5,19 @@ import { BASIC_SUIT, BUILDABLE, CONTENT_VERSION, GENERATOR_VERSION, ITEMS, LEGAC
 import { emptyInventory, INVENTORY_SIZE, type Slot } from './inventory';
 import { NODES, NODE_BY_ID } from './resources';
 import { CYCLE_TICKS, START_OFFSET_TICKS } from './daycycle';
+import { freshQuestProgress, QUEST_FACTS, type QuestProgress } from './questFacts';
+import { QUEST_IDS, type QuestId } from './questCatalog';
 /**
  * Complete persistent game state. Plain JSON only: no class instances, GPU objects or
  * functions (TECHNICAL §2). Revision numbers live in save manifests.
  *
+ * State version 5 adds bounded quest facts and milestones. Version 4 adds workstation levels.
  * State version 3 adds persistent production and construction. Version 2 introduced four suit
  * parts, hotbar selection (an index into
  * the first inventory row — not a separate container), display-only vitals and the day-phase
  * offset. Version 1/2 saves (including content 1.0.0) are migrated by sanitizeState() without loss.
  */
-export const STATE_VERSION = 4;
+export const STATE_VERSION = 5;
 export const HOTBAR_SIZE = 6;
 export type ItemStack = NonNullable<Slot>;
 export type Drop = { id: string; x: number; z: number; items: ItemStack[] };
@@ -33,7 +36,7 @@ export type GameState = {
   hotbar: number;
  };
  world: { base: BaseState; capsuleMilliGU: number; nodes: Record<string, number>; drops: Drop[]; nextDropId: number; dayOffsetTicks: number };
- progress: { visited: string[]; discovered: string[]; selected: string };
+ progress: { visited: string[]; discovered: string[]; selected: string; quests: QuestProgress };
 };
 export const SPAWN_POSE = { x: 40, z: 42, yaw: .38, pitch: -.035 };
 const basicSuit = (): Suit => ({ helmet: { itemId: BASIC_SUIT.helmet, count: 1 }, chest: { itemId: BASIC_SUIT.chest, count: 1 }, legs: { itemId: BASIC_SUIT.legs, count: 1 }, boots: { itemId: BASIC_SUIT.boots, count: 1 } });
@@ -45,7 +48,7 @@ export function newGame(worldId: string, seed: number, createdAt: number, y: num
   meta: { worldId, name, seed: seed >>> 0, planetId: 'verdana', generatorVersion: GENERATOR_VERSION, contentVersion: CONTENT_VERSION, stateVersion: STATE_VERSION, createdAt, activeTicks: 0 },
   player: { x: SPAWN_POSE.x, y, z: SPAWN_POSE.z, yaw: SPAWN_POSE.yaw, pitch: SPAWN_POSE.pitch, vitals: { health: 100, satiety: 100 }, survival: freshSurvival(), suit: basicSuit(), bottles: [{ itemId: 'bottle_1', count: 1, milliGU: TANKS.bottle_1.capacity }, null], inventory, hotbar: 0 },
   world: { base: freshBase(), capsuleMilliGU: 2400000, nodes: Object.fromEntries(NODES.map(n => [n.id, n.amount])), drops: [], nextDropId: 1, dayOffsetTicks: START_OFFSET_TICKS },
-  progress: { visited: [], discovered: [], selected: 'iron' },
+  progress: { visited: [], discovered: [], selected: 'iron', quests: freshQuestProgress() },
  };
 }
 export const cloneState = (s: GameState): GameState => structuredClone(s);
@@ -89,6 +92,7 @@ export function migrateRaw(raw: unknown): unknown {
  if (!isObj(raw) || !isObj(raw.meta)) return raw;
  const version = raw.meta.contentVersion;
  if (version === CONTENT_VERSION) {
+  if(raw.meta.stateVersion===4){const r=structuredClone(raw);obj(r.progress,'progress').quests=freshQuestProgress();(r.meta as Obj).stateVersion=STATE_VERSION;return r;}
   if (raw.meta.stateVersion !== 2 && raw.meta.stateVersion !== 3) return raw;
   const r = structuredClone(raw);
   const player = obj(r.player, 'player'), world = obj(r.world, 'world');
@@ -106,6 +110,7 @@ export function migrateRaw(raw: unknown): unknown {
   const base=validateBase(world.base,true);
   base.handQueue=[];for(const b of base.buildings)if(b.kind==='workbench')b.queue=[];
   world.base=base;
+  obj(r.progress,'progress').quests=freshQuestProgress();
   (r.meta as Obj).stateVersion = STATE_VERSION;
   return r;
  }
@@ -118,6 +123,7 @@ export function migrateRaw(raw: unknown): unknown {
  w.dayOffsetTicks = START_OFFSET_TICKS;
  m.contentVersion = CONTENT_VERSION; m.stateVersion = STATE_VERSION;
  w.base = freshBase();
+ obj(r.progress,'progress').quests=freshQuestProgress();
  for (const n of NODES) if (!(n.id in obj(w.nodes, 'world.nodes')) && ['sand-a','grass-a','grass-b'].includes(n.id)) (w.nodes as Obj)[n.id] = n.amount;
  return r;
 }
@@ -147,6 +153,11 @@ export function sanitizeState(input: unknown): GameState {
   if (generatedId && Number(generatedId[1]) >= nextDropId) throw new InvalidState('world.nextDropId', 'счётчик должен быть больше всех существующих идентификаторов куч');
  }
  const ids = (v: unknown, p: string) => arr(v, p, 64).map((x, i) => str(x, `${p}[${i}]`, 32, ID));
+ const qp=obj(pr.quests,'progress.quests');
+ const facts=arr(qp.facts,'quests.facts',QUEST_FACTS.size).map(v=>{if(typeof v!=='string'||!QUEST_FACTS.has(v))throw new InvalidState('quests.facts','неизвестный факт');return v;});
+ const completed=arr(qp.completed,'quests.completed',QUEST_IDS.length).map(v=>{if(!(QUEST_IDS as readonly unknown[]).includes(v))throw new InvalidState('quests.completed','неизвестная цель');return v as QuestId;});
+ if(new Set(facts).size!==facts.length||new Set(completed).size!==completed.length)throw new InvalidState('quests','повтор факта или цели');
+ if(qp.tracked!==null&&!(QUEST_IDS as readonly unknown[]).includes(qp.tracked))throw new InvalidState('quests.tracked','неизвестная цель');
  return {
   meta: { worldId: str(m.worldId, 'meta.worldId', 48, ID), name: str(m.name, 'meta.name', 48), seed: int(m.seed, 'meta.seed', 0, 0xffffffff), planetId: 'verdana', generatorVersion: GENERATOR_VERSION, contentVersion: CONTENT_VERSION, stateVersion: STATE_VERSION, createdAt: int(m.createdAt, 'meta.createdAt', 0, 8.64e15), activeTicks: int(m.activeTicks, 'meta.activeTicks', 0, Number.MAX_SAFE_INTEGER) },
   player: { x: num(pl.x, 'player.x', -200, 360), y: num(pl.y, 'player.y', -100, 200), z: num(pl.z, 'player.z', -200, 360), yaw: num(pl.yaw, 'player.yaw', -1e6, 1e6), pitch: num(pl.pitch, 'player.pitch', -2, 2),
@@ -155,7 +166,7 @@ export function sanitizeState(input: unknown): GameState {
    bottles: [bottleSlot(bottles[0], 'player.bottles[0]'), bottleSlot(bottles[1], 'player.bottles[1]')], inventory: inv.map((s, i) => slot(s, `player.inventory[${i}]`)),
    hotbar: int(pl.hotbar, 'player.hotbar', 0, HOTBAR_SIZE - 1) },
   world: { base: validateBase(w.base), capsuleMilliGU: int(w.capsuleMilliGU, 'world.capsuleMilliGU', 0, 2400000), nodes, drops, nextDropId, dayOffsetTicks: int(w.dayOffsetTicks, 'world.dayOffsetTicks', 0, CYCLE_TICKS - 1) },
-  progress: { visited: ids(pr.visited, 'progress.visited'), discovered: ids(pr.discovered, 'progress.discovered'), selected: str(pr.selected, 'progress.selected', 32, ID) },
+  progress: { visited: ids(pr.visited, 'progress.visited'), discovered: ids(pr.discovered, 'progress.discovered'), selected: str(pr.selected, 'progress.selected', 32, ID), quests:{facts,completed,tracked:qp.tracked as QuestId|null} },
  };
 }
 

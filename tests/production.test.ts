@@ -107,7 +107,7 @@ test('Cable and gas segment limits include height, and a rejected segment spends
 
 
 test('Production has its own state version: old saves migrate, corrupt current saves cannot gain gas',()=>{
- const g=fresh();assert.equal(g.meta.stateVersion,4);const old:any=cloneState(g);old.meta.stateVersion=2;delete old.world.base;delete old.world.nodes['grass-a'];delete old.world.nodes['grass-b'];delete old.world.nodes['sand-a'];old.world.capsuleMilliGU=12345;old.player.survival.emergencyMs=1234;
- const migrated=sanitizeState(old);assert.equal(migrated.meta.stateVersion,4);assert.equal(migrated.world.capsuleMilliGU,12345);assert.equal(migrated.player.survival.emergencyMs,1234);assert.equal(migrated.world.base.buildings.length,0);
+ const g=fresh();assert.equal(g.meta.stateVersion,5);const old:any=cloneState(g);old.meta.stateVersion=2;delete old.world.base;delete old.world.nodes['grass-a'];delete old.world.nodes['grass-b'];delete old.world.nodes['sand-a'];old.world.capsuleMilliGU=12345;old.player.survival.emergencyMs=1234;
+ const migrated=sanitizeState(old);assert.equal(migrated.meta.stateVersion,5);assert.equal(migrated.world.capsuleMilliGU,12345);assert.equal(migrated.player.survival.emergencyMs,1234);assert.equal(migrated.world.base.buildings.length,0);
  const corrupt:any=cloneState(g);delete corrupt.world.capsuleMilliGU;assert.throws(()=>sanitizeState(corrupt),/capsuleMilliGU/);delete corrupt.world.base;assert.throws(()=>sanitizeState(corrupt),/world.base/);
 });
