@@ -14,7 +14,7 @@ export function machineView(g:GameState,id:string,say:(error:string,success?:str
  const change=()=>{changed();draw();};
  right.append(h('h3','Рюкзак'),grid(g.player.inventory,i=>{
   if(id.startsWith('crate-')){if(transferSlot(g.player.inventory,i,g.world.crates[id]))change();else say('Ящик полон');}
-  else if(id==='capsule'){say(installTank(g,i).ok?'':'Выберите баллон','Баллон установлен');}
+  else if(id==='capsule'){const result=installTank(g,i);say(result.ok?'':result.reason,'Баллон установлен');}
   else if(b)say(loadMachineSlot(g,id,i),'Предмет загружен');
  }));
  if(id.startsWith('crate-')){left.append(h('h3','Ящик · 24 ячейки'),grid(g.world.crates[id],i=>{if(transferSlot(g.world.crates[id],i,g.player.inventory))change();else say('Рюкзак полон');}));return root;}

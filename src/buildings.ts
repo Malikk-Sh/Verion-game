@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { boxes, box, heightAt, type Box } from './world';
 import { BUILDABLE, ITEMS, type BuildingKind } from './game/defs';
-import { removeItems } from './game/inventory';
 import { insideDome, makeBuilding, domeFaces, type Building } from './game/production';
 import type { GameState } from './game/state';
 export function placementProblem(g: GameState, kind: BuildingKind, x: number, z: number): string {
