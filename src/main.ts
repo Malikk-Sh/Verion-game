@@ -1,3 +1,5 @@
+import { Diagnostics, observeDiagnostics } from './diagnostics';
+import { sceneInterval } from './renderPolicy';
 import { createWorldInteraction } from './worldInteraction';
 import { packStation } from './game/worldActions';
 import { countItem } from './game/inventory';
@@ -50,15 +52,18 @@ const wrap=(a:number)=>Math.atan2(Math.sin(a),Math.cos(a));
 function boot(){
  const renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});
  renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1;
- renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
- const scene=new THREE.Scene();const camera=new THREE.PerspectiveCamera(68,1,.07,1400);
+ renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFShadowMap;
+ const scene=new THREE.Scene();const camera=new THREE.PerspectiveCamera(68,1,.15,1400);
  const built=createBuildings(scene),interaction=createWorldInteraction(scene,camera);
  const world=createWorld(scene),actor=new Character(boxes),audio=new Ambience(),settings=loadSettings();
+ const diagnostics=new Diagnostics(),gl=renderer.getContext(),rendererVersion=String(gl.getParameter(gl.VERSION));
+ const gpuExtension=gl.getExtension('WEBGL_debug_renderer_info');
+ const deviceInfo={renderer:rendererVersion,gpu:gpuExtension?String(gl.getParameter(gpuExtension.UNMASKED_RENDERER_WEBGL)):'unavailable',cores:navigator.hardwareConcurrency,deviceMemory:(navigator as Navigator&{deviceMemory?:number}).deviceMemory??null,userAgent:navigator.userAgent,parallelShaderCompile:!!gl.getExtension('KHR_parallel_shader_compile'),browserTimings:typeof PerformanceObserver==='undefined'?[]:PerformanceObserver.supportedEntryTypes.filter(t=>['event','longtask','long-animation-frame'].includes(t))};
  applyVisorSettings(settings.visor);
- const viewDirection=new THREE.Vector3(),viewPos=new THREE.Vector3(),tmp=new THREE.Vector3();
+ const viewDirection=new THREE.Vector3(),viewPos=new THREE.Vector3(),shadowAnchor=new THREE.Vector3(),tmp=new THREE.Vector3();
  const keys=new Set<string>(),input:Input={forward:0,right:0,run:false,jump:false};
  let joyX=0,joyY=0,runToggle=false,joyPointer:number|null=null,lookPointer:number|null=null,lastX=0,lastY=0;
- let started=false,running=false,selected='iron',nearest:Landmark|undefined,last=performance.now(),lastUI=0;
+ let started=false,running=false,selected='iron',nearest:Landmark|undefined,last=performance.now(),lastDiagnosticFrame=last,lastUI=0;
  // ---------- S1 game state: one clock, finite deposits, inventory, saves ----------
  const clock=new SimClock(),mining:Mining={nodeId:null,ticks:0};
  let lastSurvivalEvent='none';
@@ -70,14 +75,16 @@ function boot(){
  const liveDialogs=new Set(['inventory-panel','suit-panel','production-panel']);
  const hand=createViewModel();
  const TITLE_OFFSET=-.42;
+ let captureRequested:((data:string)=>void)|null=null;
+ let sceneReady=false,lastRender=-Infinity,renderElapsed=0,lastRenderedDialog='',renderCalls=0,renderTriangles=0;
  let exported=false,frames:number[]=[],showMetrics=false,wake=0,bob=0,stride=0,fov=70,titleTime=0,lastObjective='',settingsReturn='welcome';
- const visited=new Set<string>(),discovered=new Set<string>();let dialog='welcome';const ALL_DIALOGS=['welcome','paused','settings','hud-settings-panel','visor-settings-panel','quest-panel','map-panel','info-panel','inventory-panel','suit-panel','saves-panel','lease-panel','death-panel','production-panel'];
+ const visited=new Set<string>(),discovered=new Set<string>();let dialog='welcome';const ALL_DIALOGS=['welcome','paused','settings','hud-settings-panel','visor-settings-panel','quest-panel','map-panel','info-panel','inventory-panel','suit-panel','saves-panel','lease-panel','death-panel','production-panel','diagnostics-panel'];
  const insideCapsule=(x=actor.x,z=actor.z)=>x>37.5&&x<42.5&&z>37&&z<43.1;
 
  // ---------- Settings ----------
  function applyQuality(q:Quality){
-  settings.quality=q;saveSettings(settings);world.setQuality(q);renderer.shadowMap.enabled=q!=='low';
-  renderer.setPixelRatio(q==='high'?Math.min(devicePixelRatio,1.5):1);resize();
+  settings.quality=q;saveSettings(settings);world.setQuality(q);renderer.shadowMap.enabled=q!=='low';lastRender=-Infinity;diagnostics.event('quality',0,{quality:q});
+  renderer.setPixelRatio(q==='high'?Math.min(devicePixelRatio,1.5):q==='low'?.75:1);resize();
   el('quality-label').textContent=QUALITY_LABEL[q];
  }
  function applyBob(on:boolean){settings.bob=on;saveSettings(settings);el('bob-label').textContent=on?'Покачивание: вкл.':'Покачивание: выкл.';el('bob-toggle').setAttribute('aria-pressed',String(on));}
@@ -119,7 +126,7 @@ function boot(){
  function refreshHud(){applyHudSettings(settings.hud);
   const c=el<HTMLCanvasElement>('compass'),r=c.getBoundingClientRect();c.width=Math.max(1,Math.round(r.width*devicePixelRatio));c.height=Math.max(1,Math.round(r.height*devicePixelRatio));
  }
- function resize(){const portrait=innerHeight>innerWidth;el('portrait').hidden=!portrait;renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();refreshHud();
+ function resize(){lastRender=-Infinity;const portrait=innerHeight>innerWidth;el('portrait').hidden=!portrait;renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();refreshHud();
   if(portrait&&started)pause('Продолжим в горизонтальном режиме');}
  addEventListener('resize',resize);
  addEventListener('blur',()=>pause('Экспедиция приостановлена'));
@@ -148,7 +155,7 @@ function boot(){
  const questBook=createQuestBook({game:()=>game,show:()=>{questReturn=dialog==='paused'?'paused':null;setDialog('quest-panel');},close:()=>{void saver?.save();if(questReturn)setDialog(questReturn);else resume();},changed:()=>{lastObjective='';updateUI();void saver?.save();},tone:()=>audio.tone('ui')});
  const openQuests=()=>{if(!started||!game||game.player.vitals.health<=0||saver?.halted)return;if(dialog==='quest-panel'){questBook.escape();return;}if(running||liveDialogs.has(dialog)||dialog==='paused')questBook.open();};
  el('quests-button').onclick=openQuests;
- const production=createProductionPanel({game:()=>game,show:()=>setDialog('production-panel'),close:()=>{void saver?.save();resume();},changed:()=>{if(game)built.sync(game);syncDrops();hudKey='';updateHotbar();void saver?.save();},refill:id=>{refillMachine=id;if(!id)void saver?.save();},tone:ok=>audio.tone(ok?'item':'warn')});
+ const production=createProductionPanel({game:()=>game,show:()=>setDialog('production-panel'),close:()=>{void saver?.save();resume();},changed:()=>{if(game)built.sync(game);world.invalidateShadows();syncDrops();hudKey='';updateHotbar();void saver?.save();},measure:(name,ms)=>{diagnostics.span(name,ms);diagnostics.event(name,ms,{dialog,quality:settings.quality});},refill:id=>{const wasRefilling=refillMachine!==null;refillMachine=id;if(wasRefilling&&!id)void saver?.save();},tone:ok=>audio.tone(ok?'item':'warn')});
  el('craft-button').onclick=()=>production.open();
 
  // ---------- Context action: mine (hold) / pick up / scan, decided by the aim and the selected item ----------
@@ -161,11 +168,11 @@ function boot(){
   lastSurvivalEvent='none';hudKey='';updateUI();updateAimUI();
   void (saver?.save()??Promise.resolve()).finally(()=>{respawnBtn.disabled=false;resume();});
  };
- function retrieveStation(){if(!game||!running||!nearMachine)return;const error=packStation(game,nearMachine);toast(error?'Не удалось забрать':'Станция в рюкзаке',error||'Содержимое сохранено');if(!error){built.sync(game);hudKey='';updateHotbar();void saver?.save();}}
+ function retrieveStation(){if(!game||!running||!nearMachine)return;const error=packStation(game,nearMachine);toast(error?'Не удалось забрать':'Станция в рюкзаке',error||'Содержимое сохранено');if(!error){built.sync(game);world.invalidateShadows();hudKey='';updateHotbar();void saver?.save();}}
  el('retrieve-station').onclick=retrieveStation;
  function doAction(){
   if(!running||!game)return;
-  const result=interaction.action(game);if(result!==null){toast(result?'Действие в мире':'Готово',result||'Установлено');built.sync(game);hudKey='';updateHotbar();interaction.update(game,true);updateAimUI();void saver?.save();return;}
+  const result=interaction.action(game);if(result!==null){toast(result?'Действие в мире':'Готово',result||'Установлено');built.sync(game);world.invalidateShadows();hudKey='';updateHotbar();interaction.update(game,true);updateAimUI();void saver?.save();return;}
   if(actionKind==='capsule')production.open('capsule');
   else if(actionKind==='crate'&&interaction.target)production.open(interaction.target);
   else if(actionKind==='pickup'&&nearDrop){const moved=pickUp(game,nearDrop);audio.tone(moved?'item':'warn');toast(moved?'Поднято':'Рюкзак полон',moved?`${moved} предм.`:'Освободите ячейку');syncDrops();hudKey='';updateHotbar();}
@@ -234,6 +241,20 @@ function boot(){
  el('day').onclick=toggleDay;
  el('map-button').onclick=()=>{audio.tone('ui');setDialog('map-panel');};el('close-map').onclick=resume;
  el('close-info').onclick=resume;
+ function diagnosticContext(){return {quality:settings.quality,dialog,running,visible:!document.hidden,calls:renderCalls,triangles:renderTriangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures,fineBlocks:world.terrain.fineBlocks,buildings:game?.world.base.buildings.length??0,links:game?.world.base.links.length??0,activeTicks:clock.activeTicks};}
+ function sceneGeometry(){const frustum=new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse)),data:{name:string;material:string;triangles:number;instances:number}[]=[];
+  scene.traverseVisible(o=>{const m=o as THREE.Mesh;if(!m.isMesh||!m.geometry||m.frustumCulled&&!frustum.intersectsObject(m))return;const instances=(m as THREE.InstancedMesh).isInstancedMesh?(m as THREE.InstancedMesh).count:1,material=Array.isArray(m.material)?m.material.map(v=>v.name||v.type).join(','):m.material.name||m.material.type;data.push({name:m.name||material,material,instances,triangles:(m.geometry.index?.count??m.geometry.attributes.position.count)/3*instances});});return data.sort((a,b)=>b.triangles-a.triangles);
+ }
+ function diagnosticReport(){return diagnostics.report({...deviceInfo,viewport:{width:innerWidth,height:innerHeight,dpr:devicePixelRatio,renderDpr:renderer.getPixelRatio()},context:diagnosticContext(),sceneGeometry:sceneGeometry(),asset:[...document.querySelectorAll<HTMLScriptElement>('script[type=module][src]')].find(e=>!e.src.includes('/@vite/'))?.getAttribute('src')?.split('/').pop()??''});}
+ observeDiagnostics(diagnostics,()=>({dialog,quality:settings.quality}));
+ const statusDiagnostics=()=>{el('diagnostics-toggle').textContent=diagnostics.enabled?'Остановить запись':'Начать новую запись';el('diagnostics-status').textContent=diagnostics.enabled?'Запись идёт. Закройте меню и повторите зависание.':'Запись остановлена. Лог можно сохранить в файл.';};
+ el('diagnostics-button').onclick=()=>{setDialog('diagnostics-panel');statusDiagnostics();};
+ el('diagnostics-back').onclick=()=>setDialog('settings');
+ el('diagnostics-toggle').onclick=()=>{if(diagnostics.enabled)diagnostics.stop();else diagnostics.startRecording();statusDiagnostics();};
+ el('diagnostics-export').onclick=()=>{const blob=new Blob([JSON.stringify(diagnosticReport(),null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='vireon-performance-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+ el('diagnostics-clear').onclick=()=>{diagnostics.stop();diagnostics.clear();statusDiagnostics();};
+ canvas.addEventListener('webglcontextlost',()=>diagnostics.event('webglcontextlost'));
+ canvas.addEventListener('webglcontextrestored',()=>{diagnostics.event('webglcontextrestored');lastRender=-Infinity;world.invalidateShadows();});
  el('metrics-toggle').onclick=()=>{showMetrics=!showMetrics;el('metrics').hidden=!showMetrics;el('metrics-toggle').textContent=showMetrics?'Скрыть показатели сцены':'Показать показатели сцены';};
  const toggleRun=()=>{if(!running)return;runToggle=!runToggle;updateRun();};el('run').onpointerdown=e=>{e.preventDefault();toggleRun();};el('run').onclick=e=>{if(e.detail===0)toggleRun();};
  el('jump').onpointerdown=event=>{event.preventDefault();if(running)input.jump=true;};
@@ -250,7 +271,7 @@ function boot(){
   setDialog('info-panel');updateUI();
  }
  addEventListener('keydown',event=>{
-  if(event.code==='Escape'){event.preventDefault();if(dialog==='quest-panel'){questBook.escape();return;}if((dialog==='hud-settings-panel'||dialog==='visor-settings-panel')){setDialog('settings');return;}if(dialog==='settings'){setDialog(settingsReturn);return;}if(started){if(running)pause();else resume();}return;}
+  if(event.code==='Escape'){event.preventDefault();if(dialog==='quest-panel'){questBook.escape();return;}if((dialog==='hud-settings-panel'||dialog==='visor-settings-panel'||dialog==='diagnostics-panel')){setDialog('settings');return;}if(dialog==='settings'){setDialog(settingsReturn);return;}if(started){if(running)pause();else resume();}return;}
   if(event.target instanceof HTMLElement && (event.target.isContentEditable || event.target.closest('input,textarea,select')))return;
   if(event.code==='KeyJ'&&started&&!event.repeat){event.preventDefault();openQuests();return;}
   if(event.code==='KeyM'&&started&&!event.repeat){event.preventDefault();if(dialog==='map-panel')resume();else setDialog('map-panel');return;}
@@ -309,6 +330,7 @@ function boot(){
   return cloneState(g);
  }
  function setSaveStatus(st:SaverStatus|{kind:'none'|'idle';message?:string}){
+  diagnostics.event('save:'+st.kind,0,{revision:'revision' in st?st.revision:0});
   const e=el('save-status');e.dataset.kind=st.kind;
   el('save-text').textContent=st.kind==='saving'?'Сохранение…':st.kind==='saved'?'Сохранено':st.kind==='error'?'Ошибка сохранения':st.kind==='lease-lost'?'Запись остановлена':st.kind==='none'?'Без сохранения':'Без мира';
   e.title=st.kind==='saved'?`Ревизия ${(st as SaverStatus).revision}`:'';
@@ -334,7 +356,7 @@ function boot(){
  }
  const newId=()=>'w-'+Date.now().toString(36)+'-'+Math.floor(Math.random()*1e9).toString(36);
  async function initStore(){
-  try{store=await SaveStore.open();}catch(e){store=null;storeError=e instanceof Error?e.message:String(e);}
+  try{store=await SaveStore.open();store.measure=(name,ms)=>diagnostics.span(name,ms);}catch(e){store=null;storeError=e instanceof Error?e.message:String(e);}
   await refreshSlots();
  }
  async function refreshSlots(){
@@ -361,8 +383,8 @@ function boot(){
   game=state;refreshQuestProgress(state);questBook.reset();slotId=id;clock.stop();clock.activeTicks=state.meta.activeTicks;mining.nodeId=null;mining.ticks=0;
   actor.reset();Object.assign(actor,{x:state.player.x,y:state.player.y,z:state.player.z,yaw:state.player.yaw,pitch:state.player.pitch});actor.previous={x:actor.x,y:actor.y,z:actor.z};lastSurvivalEvent='none';holdMine=holdRefill=false;
   visited.clear();discovered.clear();state.progress.visited.forEach(v=>visited.add(v));state.progress.discovered.forEach(v=>discovered.add(v));selected=LANDMARKS.some(l=>l.id===state.progress.selected)?state.progress.selected:'iron';
-  applyNodes();built.sync(state);syncDrops();hudKey='';updateHotbar();shownDay=null;world.setTime(phaseSeconds(state.meta.activeTicks,state.world.dayOffsetTicks),true);updateDayButton();panels.reset();
-  if(id&&store){saver=new Saver(store,id,token,revision,state.meta.activeTicks,snapshot,setSaveStatus,baseRevision);saver.startHeartbeat();setSaveStatus(saver.status);}else{saver=null;setSaveStatus({kind:'none'});}
+  applyNodes();built.sync(state);world.invalidateShadows();syncDrops();hudKey='';updateHotbar();shownDay=null;world.setTime(phaseSeconds(state.meta.activeTicks,state.world.dayOffsetTicks),true);updateDayButton();panels.reset();
+  if(id&&store){saver=new Saver(store,id,token,revision,state.meta.activeTicks,snapshot,setSaveStatus,baseRevision,(name,ms)=>diagnostics.span(name,ms));saver.startHeartbeat();setSaveStatus(saver.status);}else{saver=null;setSaveStatus({kind:'none'});}
   updateUI();
  }
  async function newExpedition():Promise<boolean>{
@@ -445,6 +467,7 @@ function boot(){
   actionBtn.title=blocked||actionLabel;
  }
  function onMined(ev:Extract<ReturnType<typeof mineTick>,{kind:'block'}>){
+  world.invalidateShadows();
   const n=NODE_BY_ID.get(ev.nodeId)!;audio.tone('item');applyNodes();
   if(ev.toGround){syncDrops();toast('Рюкзак полон',`${itemName(ev.itemId)} оставлена на земле`);}
   else toast(`+1 · в рюкзаке ${countItem(game!.player.inventory,ev.itemId)}`,itemName(ev.itemId));
@@ -530,7 +553,7 @@ function boot(){
  function updateVisor(){el('visor').hidden=!game?.player.suit.helmet;}
  function updateUI(){
   updateVisor();
-  nearMachine=null;if(game){const nearestBuilding=game.world.base.buildings.filter(b=>Math.hypot(b.x-actor.x,b.z-actor.z)<3.2).sort((a,b)=>Math.hypot(a.x-actor.x,a.z-actor.z)-Math.hypot(b.x-actor.x,b.z-actor.z))[0];nearMachine=interaction.target&&machine(game,interaction.target)?interaction.target:null;}
+  nearMachine=game&&interaction.target&&machine(game,interaction.target)?interaction.target:null;
   nearDrop=null;if(game)for(const d of game.world.drops)if(Math.hypot(d.x-actor.x,d.z-actor.z)<2.2){nearDrop=d.id;break;}
   const target=LANDMARKS.find(p=>p.id===selected)!;
   const d=Math.hypot(actor.x-target.x,actor.z-target.z);el('target-name').textContent=target.name;el('target-distance').textContent=`${Math.round(d)} м`;
@@ -541,14 +564,16 @@ function boot(){
   const o=objective();if(o!==lastObjective){lastObjective=o;el('objective-text').textContent=o;const ob=el('objective');ob.classList.remove('pulse');void ob.offsetWidth;ob.classList.add('pulse');}
   updateVitals();updateHotbar();updateDayButton();
  }
- function state(){const sorted=[...frames].sort((a,b)=>a-b);return {ready:true,version:'S2.6',worldTarget:interaction.target,quests:game?structuredClone(game.progress.quests):null,questBook:questBook.debug(),vitals:game?{...game.player.vitals}:null,survival:game?{...game.player.survival}:null,capsuleMilliGU:game?.world.capsuleMilliGU??0,base:game?structuredClone(game.world.base):null,visibleDrops:dropGroup.children.length,slotId,revision:saver?.revision??0,saveStatus:saver?.status.kind??(game?'none':'idle'),halted:!!saver?.halted,activeTicks:clock.activeTicks,clockRunning:clock.running,hotbar:game?.player.hotbar??0,cells:game?game.player.inventory.map(s=>s?{...s}:null):[],suit:game?Object.fromEntries(Object.entries(game.player.suit).map(([k,v])=>[k,v?.itemId??null])):null,worn:game?wornParts(game):0,bottles:game?game.player.bottles.map(b=>b?{...b}:null):[],oxygenGU:game?oxygenGU(game):0,dayPhase:dayPhase(),dayOffsetTicks:game?.world.dayOffsetTicks??0,nightValue:world.nightValue,action:actionKind,handItem:hand.visible,panel:panels.debug,aimNode,mineRatio,nodes:game?{...game.world.nodes}:null,inventory:game?game.player.inventory.filter(Boolean).map(s=>({...s})):[],drops:game?game.world.drops.length:0,storage:!!store,grassCount:world.grassCount,fullscreen:!!document.fullscreenElement,running,dialog,night:!isDay(dayPhase()),selected,visited:[...visited],activeTime:clock.activeSeconds,position:{x:actor.x,y:actor.y,z:actor.z},yaw:actor.yaw,pitch:actor.pitch,grounded:actor.grounded,input:{...input,joyX,joyY,joyPointer,lookPointer},quality:settings.quality,sound:settings.sound,bob:settings.bob,fov:settings.fov,fineTerrainBlocks:world.terrain.fineBlocks,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0,viewport:{width:innerWidth,height:innerHeight},renderer:renderer.getContext().getParameter(renderer.getContext().VERSION)};}
+ function state(){const sorted=[...frames].sort((a,b)=>a-b);return {ready:true,version:'S2.7',worldTarget:interaction.target,quests:game?structuredClone(game.progress.quests):null,questBook:questBook.debug(),vitals:game?{...game.player.vitals}:null,survival:game?{...game.player.survival}:null,capsuleMilliGU:game?.world.capsuleMilliGU??0,base:game?structuredClone(game.world.base):null,visibleDrops:dropGroup.children.length,slotId,revision:saver?.revision??0,saveStatus:saver?.status.kind??(game?'none':'idle'),halted:!!saver?.halted,activeTicks:clock.activeTicks,clockRunning:clock.running,hotbar:game?.player.hotbar??0,cells:game?game.player.inventory.map(s=>s?{...s}:null):[],suit:game?Object.fromEntries(Object.entries(game.player.suit).map(([k,v])=>[k,v?.itemId??null])):null,worn:game?wornParts(game):0,bottles:game?game.player.bottles.map(b=>b?{...b}:null):[],oxygenGU:game?oxygenGU(game):0,dayPhase:dayPhase(),dayOffsetTicks:game?.world.dayOffsetTicks??0,nightValue:world.nightValue,action:actionKind,handItem:hand.visible,panel:panels.debug,aimNode,mineRatio,nodes:game?{...game.world.nodes}:null,inventory:game?game.player.inventory.filter(Boolean).map(s=>({...s})):[],drops:game?game.world.drops.length:0,storage:!!store,grassCount:world.grassCount,fullscreen:!!document.fullscreenElement,running,dialog,night:!isDay(dayPhase()),selected,visited:[...visited],activeTime:clock.activeSeconds,position:{x:actor.x,y:actor.y,z:actor.z},yaw:actor.yaw,pitch:actor.pitch,grounded:actor.grounded,input:{...input,joyX,joyY,joyPointer,lookPointer},quality:settings.quality,sound:settings.sound,bob:settings.bob,fov:settings.fov,fineTerrainBlocks:world.terrain.fineBlocks,drawCalls:renderCalls,triangles:renderTriangles,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0,viewport:{width:innerWidth,height:innerHeight},renderer:rendererVersion,diagnostics:diagnostics.enabled,shadowTarget:world.sunLight.target.position.toArray(),shadowBias:world.sunLight.shadow.bias};}
  const dev=!!(import.meta as unknown as {env?:{DEV?:boolean}}).env?.DEV;
- Object.defineProperty(window,'__vireon',{value:{getState:state,save:()=>saver?.save(),snapshot:()=>game?snapshot():null,
+ Object.defineProperty(window,'__vireon',{value:{getState:state,save:()=>saver?.save(),snapshot:()=>game?snapshot():null,diagnostics:()=>diagnosticReport(),
   // Development-only verification helpers; absent from production builds.
-  ...(dev?{setState:(raw:unknown)=>{if(!game)return;const next=sanitizeState(raw);if(next.meta.worldId!==game.meta.worldId)throw new Error('Test state belongs to another world');game=next;Object.assign(actor,{x:next.player.x,y:next.player.y,z:next.player.z,yaw:next.player.yaw,pitch:next.player.pitch});actor.vy=actor.vx=actor.vz=actor.airSpeed=0;actor.grounded=true;actor.previous={x:actor.x,y:actor.y,z:actor.z};clock.activeTicks=next.meta.activeTicks;built.sync(next);applyNodes();syncDrops();hudKey='';updateUI();updateAimUI();},teleport:(x:number,z:number,yaw:number,pitch=-.2)=>{actor.x=x;actor.z=z;actor.y=heightAt(x,z);actor.yaw=yaw;actor.pitch=pitch;actor.vy=actor.vx=actor.vz=actor.airSpeed=0;actor.grounded=true;actor.previous={x,y:actor.y,z};}}:{})},writable:false});
+  ...(dev?{captureFrame:()=>new Promise<string>(resolve=>{if(captureRequested)throw new Error('Capture already pending');captureRequested=resolve;}),setState:(raw:unknown)=>{if(!game)return;const next=sanitizeState(raw);if(next.meta.worldId!==game.meta.worldId)throw new Error('Test state belongs to another world');game=next;Object.assign(actor,{x:next.player.x,y:next.player.y,z:next.player.z,yaw:next.player.yaw,pitch:next.player.pitch});actor.vy=actor.vx=actor.vz=actor.airSpeed=0;actor.grounded=true;actor.previous={x:actor.x,y:actor.y,z:actor.z};clock.activeTicks=next.meta.activeTicks;built.sync(next);world.invalidateShadows();applyNodes();syncDrops();hudKey='';updateUI();updateAimUI();},teleport:(x:number,z:number,yaw:number,pitch=-.2)=>{actor.x=x;actor.z=z;actor.y=heightAt(x,z);actor.yaw=yaw;actor.pitch=pitch;actor.vy=actor.vx=actor.vz=actor.airSpeed=0;actor.grounded=true;actor.previous={x,y:actor.y,z};}}:{})},writable:false});
 
  let handBobX=0,handBobY=0;
  const draw=(now:number)=>{
+  const workStart=diagnostics.stamp();let measured=workStart;
+  const diagnosticGapMs=now-lastDiagnosticFrame;lastDiagnosticFrame=now;
   const actualFrameMs=now-last;const dt=Math.min(actualFrameMs/1000,.25);last=now;
   if(running){
    input.forward=(keys.has('KeyW')||keys.has('ArrowUp')?1:0)-(keys.has('KeyS')||keys.has('ArrowDown')?1:0)+joyY;
@@ -578,7 +603,7 @@ function boot(){
   }
   if(game&&steps>0&&refreshQuestProgress(game))productionChanged=true;
   if(productionChanged&&game&&game.player.vitals.health>0){hudKey='';updateHotbar();if(dialog==='production-panel')production.draw();void saver?.save();}
-  if(game&&saver)saver.tick(clock.activeTicks);if(dialog==='production-panel')production.tick();
+  if(game&&saver)saver.tick(clock.activeTicks);measured=diagnostics.stage('simulation',measured);if(dialog==='production-panel')production.tick();measured=diagnostics.stage('production-ui',measured);
   if(!started){
    // Title cinematic: a slow arc around the capsule with the spires behind.
    // Title shot: low, slow orbit; capsule sits in the right third, horizon and sky stay in frame.
@@ -598,18 +623,29 @@ function boot(){
    const targetFov=settings.fov+(Math.hypot(actor.vx,actor.vz)>4&&running&&settings.bob?6:0);fov+=(targetFov-fov)*Math.min(1,dt*6);if(Math.abs(camera.fov-fov)>.01){camera.fov=fov;camera.updateProjectionMatrix();}
   }
   // Explicit pause (and settings opened from it) freezes the whole scene, not only the controller.
-  const frozen=started&&(dialog==='paused'||dialog==='settings'||(dialog==='hud-settings-panel'||dialog==='visor-settings-panel'));
+  const frozen=started&&(dialog==='paused'||dialog==='settings'||(dialog==='hud-settings-panel'||dialog==='visor-settings-panel'||dialog==='diagnostics-panel'));
   if(game&&started)world.setTime(dayPhase());
-  world.update(frozen?0:dt,camera,renderer);renderer.render(scene,camera);
-  if(started&&hand.visible&&dialog!=='suit-panel'){hand.update(frozen?0:dt,camera,{sun:world.sunLight,hemi:world.hemiLight},holdMine&&mineRatio>0,handBobX,handBobY);renderer.autoClear=false;renderer.clearDepth();renderer.render(hand.scene,camera);renderer.autoClear=true;}
+  measured=diagnostics.stage('camera',measured);
+  renderElapsed+=dt;
+  const renderScene=sceneReady&&!document.hidden&&(now-lastRender>=sceneInterval(started,running||liveDialogs.has(dialog),dialog,settings.quality)-.5||dialog!==lastRenderedDialog);
+  if(renderScene){
+   shadowAnchor.set(actor.x,actor.y,actor.z);
+   world.update(frozen?0:renderElapsed,camera,renderer,!started||(!frozen&&!dialog),diagnostics.enabled?(name,ms)=>diagnostics.span('world:'+name,ms):undefined,started?shadowAnchor:undefined);
+   measured=diagnostics.stage('world',measured);renderer.render(scene,camera);renderCalls=renderer.info.render.calls;renderTriangles=renderer.info.render.triangles;
+   if(started&&hand.visible&&dialog!=='suit-panel'){hand.update(frozen?0:renderElapsed,camera,{sun:world.sunLight,hemi:world.hemiLight},holdMine&&mineRatio>0,handBobX,handBobY);renderer.autoClear=false;renderer.clearDepth();renderer.render(hand.scene,camera);renderer.autoClear=true;renderCalls+=renderer.info.render.calls;renderTriangles+=renderer.info.render.triangles;}
+   if(captureRequested){const resolve=captureRequested;captureRequested=null;resolve(canvas.toDataURL('image/png'));}
+   lastRender=now;lastRenderedDialog=dialog;renderElapsed=0;
+  }
+  measured=diagnostics.stage('render-submit',measured);
   if(!frozen)audio.update(dt,started&&insideCapsule()?1:0,world.nightValue);
   if(started){drawCompass(bearing(Math.sin(actor.yaw),Math.cos(actor.yaw)));updateMarker();interaction.update(game,running);computeAim();updateAimUI();}
   if(running&&dt>0){frames.push(actualFrameMs);if(frames.length>180)frames.shift();}
-  if(now-lastUI>150){updateUI();lastUI=now;if(showMetrics){const s=state();const ob=el('objective').getBoundingClientRect();el('metrics').style.top=`${Math.round(ob.bottom+8)}px`;el('metrics').textContent=`S2.6 / WebGL2 / DPR ${renderer.getPixelRatio()} / ${settings.quality}\nВызовы: ${s.drawCalls} · треуг.: ${s.triangles}\nКадр p95: ${s.frameP95Ms.toFixed(1)} мс\nX ${actor.x.toFixed(1)} · Z ${actor.z.toFixed(1)}\nЭто замер текущего браузера`;}}
+  if(now-lastUI>150){updateUI();lastUI=now;if(showMetrics){const sorted=[...frames].sort((a,b)=>a-b),s={drawCalls:renderCalls,triangles:renderTriangles,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0};const ob=el('objective').getBoundingClientRect();el('metrics').style.top=`${Math.round(ob.bottom+8)}px`;el('metrics').textContent=`S2.7 / WebGL2 / DPR ${renderer.getPixelRatio()} / ${settings.quality}\nВызовы: ${s.drawCalls} · треуг.: ${s.triangles}\nКадр p95: ${s.frameP95Ms.toFixed(1)} мс\nX ${actor.x.toFixed(1)} · Z ${actor.z.toFixed(1)}\nЭто замер текущего браузера`;}}
+  diagnostics.stage('hud',measured);if(diagnostics.enabled)diagnostics.frame(diagnosticGapMs,workStart,diagnosticContext());
   requestAnimationFrame(draw);
  };
  document.body.dataset.started='false';applyQuality(settings.quality);applySound(settings.sound);applyBob(settings.bob);applyFov(settings.fov);fov=settings.fov;world.setTime(516,true);updateUI();
- document.body.dataset.running='false';requestAnimationFrame(draw);
- void initStore().then(()=>{document.body.dataset.ready='true';});
+ document.body.dataset.running='false';el<HTMLButtonElement>('start').disabled=true;requestAnimationFrame(draw);
+ void (async()=>{world.prepare(renderer);await renderer.compileAsync(scene,camera);await hand.prewarm(renderer,camera,{sun:world.sunLight,hemi:world.hemiLight});renderer.render(scene,camera);sceneReady=true;last=performance.now();await initStore();el<HTMLButtonElement>('start').disabled=false;document.body.dataset.ready='true';})().catch(e=>{console.error(e);error('Не удалось подготовить сцену: '+String(e));});
 }
 try { boot(); } catch(e){ console.error(e);error('Нужен браузер с WebGL 2. Попробуйте обновить браузер или открыть сцену на другом устройстве. '+(e instanceof Error?e.message:'')); }

@@ -94,14 +94,14 @@ export function createCraftingView(){
   else work.append(h('p','Одна работа. Готовое → рюкзак.','craft-hint'));
   tick(g,id);return root;
  }
- function tick(g:GameState,id:string){if(!status||!progress||!bar)return;const b=machine(g,id),job=b?.job??(id==='hand'?g.world.base.hand:null),p=b?power(g,b):null;
+ function tick(g:GameState,id:string){if(!status||!progress||!bar)return;const b=machine(g,id),job=b?.job??(id==='hand'?g.world.base.hand:null),p=b?.level===2?power(g,b):null;
   let text=id==='hand'?'Без очереди':b?.level===1?'Рядом с вами · без очереди':'Без присутствия игрока';
   if(b&&!nearby(g,b))text=b.level===1?'Пауза · подойдите к верстаку':'Автоматизация работает вдали';
   if(b?.level===1&&g.world.base.hand)text='Пауза · занят карманным крафтом';if(b&&!b.enabled)text='Пауза · верстак выключен';
-  if(b?.level===2&&!p!.available)text='Пауза · нет питания';status.textContent=text;
+  if(b?.level===2&&!p!.available)text='Пауза · нет питания';if(status.textContent!==text)status.textContent=text;
   if(powerBadge&&p){powerBadge.textContent=!b!.enabled?'ϟ Верстак выключен':p.available?'ϟ Питание подключено':p.connected?'ϟ Генератор: нет энергии':'ϟ Подключите генератор кабелем';powerBadge.dataset.power=p.available?'ready':'missing';}
-  const r=job?RECIPE_BY_ID.get(job.recipeId)!:null,ratio=job&&r?Math.min(1,job.workMs/(r.seconds*1000)):0;bar.style.width=ratio*100+'%';
-  progress.textContent=job&&r?(b?.level===2?'1. ':'')+name(Object.keys(r.outputs)[0])+' · '+Math.floor(ratio*100)+'%'+(ratio===1?(b?' · освободите выход':' · освободите место в рюкзаке'):' · '+((r.seconds*1000-job.workMs)/1000).toFixed(1)+' с'):'Нет активной работы';
+  const r=job?RECIPE_BY_ID.get(job.recipeId)!:null,ratio=job&&r?Math.min(1,job.workMs/(r.seconds*1000)):0;const width=ratio*100+'%';if(bar.style.width!==width)bar.style.width=width;
+  const progressText=job&&r?(b?.level===2?'1. ':'')+name(Object.keys(r.outputs)[0])+' · '+Math.floor(ratio*100)+'%'+(ratio===1?(b?' · освободите выход':' · освободите место в рюкзаке'):' · '+((r.seconds*1000-job.workMs)/1000).toFixed(1)+' с'):'Нет активной работы';if(progress.textContent!==progressText)progress.textContent=progressText;
   const blocked=!b&&!!job&&ratio===1,pack=viewRoot?.querySelector('.craft-backpack'),bag=viewRoot?.querySelector<HTMLButtonElement>('[data-craft-view="bag"]'),notice=pack?.querySelector<HTMLElement>('.craft-bag-notice');pack?.classList.toggle('craft-bag-blocked',blocked);bag?.classList.toggle('craft-bag-blocked',blocked);if(notice)notice.hidden=!blocked;
   if(previousJob!==undefined&&job&&previousJob!==job){queueMicrotask(()=>{pulseCraft('.craft-result');pulseCraft('.craft-active');});}previousJob=job;
   const sig=b?JSON.stringify(b.output):JSON.stringify(g.player.inventory);if(outputSignature!==undefined&&outputSignature!==sig)queueMicrotask(()=>pulseCraft(b?'.craft-output':'.craft-backpack','[data-craft-view="bag"]'));outputSignature=sig;

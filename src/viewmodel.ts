@@ -51,5 +51,9 @@ export function createViewModel() {
   sun.color.copy(light.sun.color); sun.intensity = light.sun.intensity * .75;
   sun.position.copy(camera.position).add(light.sun.position).sub(light.sun.target.position); sun.target.position.copy(camera.position);
  }
- return { scene, setItem, update, get visible() { return current !== null; } };
+ async function prewarm(renderer:THREE.WebGLRenderer,camera:THREE.Camera,light:{sun:THREE.DirectionalLight;hemi:THREE.HemisphereLight}){
+  const previous=current;for(const id of Object.keys(HAND_MODELS))if(!built.has(id))built.set(id,HAND_MODELS[id]());
+  holder.clear();for(const model of built.values())holder.add(model);update(1,camera,light,false,0,0);await renderer.compileAsync(scene,camera);renderer.render(scene,camera);holder.clear();current=null;setItem(previous);
+ }
+ return { scene, setItem, update, prewarm, get visible() { return current !== null; } };
 }

@@ -29,7 +29,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [browser, survival, production, crafting, quests]
+        suite: [browser, survival, production, crafting, quests, performance]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

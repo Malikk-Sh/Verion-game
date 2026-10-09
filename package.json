@@ -19,7 +19,9 @@
     "verify:hud": "node tools/verify_hud.mjs",
     "verify:production": "node tools/verify_production.mjs",
     "verify:crafting": "node tools/verify_crafting.mjs",
-    "verify:quests": "node tools/verify_quests.mjs"
+    "verify:quests": "node tools/verify_quests.mjs",
+    "verify:performance": "node tools/verify_performance.mjs",
+    "profile:runtime": "node tools/profile_runtime.mjs"
   },
   "dependencies": {
     "three": "0.180.0"

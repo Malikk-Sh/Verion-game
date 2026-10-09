@@ -14,7 +14,7 @@ export class Saver {
  private timer: ReturnType<typeof setInterval> | null = null;
  halted = false;
  status: SaverStatus;
- constructor(private store: SaveStore, readonly slotId: string, readonly token: string, public revision: number, activeTicks: number, private snapshot: () => GameState, private onStatus: (s: SaverStatus) => void = () => {}, private baseRevision = revision) {
+ constructor(private store: SaveStore, readonly slotId: string, readonly token: string, public revision: number, activeTicks: number, private snapshot: () => GameState, private onStatus: (s: SaverStatus) => void = () => {}, private baseRevision = revision, private measure?: (name:string,ms:number)=>void) {
   this.lastTicks = activeTicks; this.status = { kind: 'saved', revision };
  }
  startHeartbeat() {
@@ -30,7 +30,7 @@ export class Saver {
  save(): Promise<void> {
   if (this.halted) return Promise.resolve();
   if (this.inflight) { this.pending = true; return this.inflight.then(() => this.pending ? (this.pending = false, this.save()) : undefined); }
-  const state = this.snapshot();
+  const at=performance.now(),state = this.snapshot();this.measure?.('save:snapshot',performance.now()-at);
   this.lastTicks = state.meta.activeTicks;
   this.set({ kind: 'saving', revision: this.revision });
   this.inflight = this.store.commit(this.slotId, this.token, this.baseRevision, state).then(rev => {
@@ -40,7 +40,7 @@ export class Saver {
    if (err.code === 'lease') { this.leaseLost(); return; }
    this.halted = err.code === 'quota' || err.code === 'conflict';
    this.set({ kind: 'error', revision: this.revision, code: err.code, message: err.code === 'quota' ? 'Не удалось сохранить: мало места. Изменения приостановлены — сделайте экспорт' : 'Не удалось сохранить: ' + err.message });
-  }).finally(() => { this.inflight = null; });
+  }).finally(() => { this.measure?.('save:commit-wall',performance.now()-at);this.inflight = null; });
   return this.inflight;
  }
  /** Retry after the player freed space; clears the halt for non-lease errors. */
