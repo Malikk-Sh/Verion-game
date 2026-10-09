@@ -1,3 +1,14 @@
+import { Diagnostics, observeDiagnostics } from './diagnostics';
+import { sceneInterval } from './renderPolicy';
+import { createWorldInteraction } from './worldInteraction';
+import { packStation } from './game/worldActions';
+import { countItem } from './game/inventory';
+import { createQuestBook } from './ui/quests';
+import { refreshQuestProgress } from './game/quests';
+import { QUEST_BY_ID } from './game/questCatalog';
+import { createProductionPanel } from './ui/production';
+import { createBuildings } from './buildings';
+import { productionTick, manualWork, releaseHandOnDeath, breathingDome, machine } from './game/production';
 import * as THREE from 'three';
 import './style.css';
 import './ui/hud.css';
@@ -11,11 +22,12 @@ import { boxes, EYE, FIXED_DT, heightAt, LANDMARKS, ROUTE, MIN, MAX, SIZE, type 
 import { SimClock } from './game/clock';
 import { ITEMS, MATERIALS, TOOLS } from './game/defs';
 import { phaseSeconds, isDay, offsetFor, MORNING_S, EVENING_S } from './game/daycycle';
-import { selectHotbar, oxygenGU, oxygenCapacityGU, wornParts } from './game/backpack';
+import { selectHotbar, oxygenGU, wornParts } from './game/backpack';
+import { survivalTick, survivalSpeed, eatPulp, refillCapsule, refillFromCapsule, loseCargo, respawnAtCapsule, accessibleOxygen, CAPSULE_CAPACITY } from './game/survival';
 import { createPanels, cellContent, cellAria } from './ui/panels';
 import { createViewModel } from './viewmodel';
 import { NODES, NODE_BY_ID } from './game/resources';
-import { newGame, cloneState, SPAWN_POSE, HOTBAR_SIZE, type GameState } from './game/state';
+import { newGame, cloneState, sanitizeState, SPAWN_POSE, HOTBAR_SIZE, type GameState } from './game/state';
 import { mineTick, pickUp, toolSlot, itemName, REACH, ticksFor, type Mining } from './game/mining';
 import { SaveStore, SaveError, type SlotRecord } from './persist/store';
 import { Saver, type SaverStatus } from './persist/saver';
@@ -40,30 +52,39 @@ const wrap=(a:number)=>Math.atan2(Math.sin(a),Math.cos(a));
 function boot(){
  const renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});
  renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1;
- renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
- const scene=new THREE.Scene();const camera=new THREE.PerspectiveCamera(68,1,.07,1400);
+ renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFShadowMap;
+ const scene=new THREE.Scene();const camera=new THREE.PerspectiveCamera(68,1,.15,1400);
+ const built=createBuildings(scene),interaction=createWorldInteraction(scene,camera);
  const world=createWorld(scene),actor=new Character(boxes),audio=new Ambience(),settings=loadSettings();
+ const diagnostics=new Diagnostics(),gl=renderer.getContext(),rendererVersion=String(gl.getParameter(gl.VERSION));
+ const gpuExtension=gl.getExtension('WEBGL_debug_renderer_info');
+ const deviceInfo={renderer:rendererVersion,gpu:gpuExtension?String(gl.getParameter(gpuExtension.UNMASKED_RENDERER_WEBGL)):'unavailable',cores:navigator.hardwareConcurrency,deviceMemory:(navigator as Navigator&{deviceMemory?:number}).deviceMemory??null,userAgent:navigator.userAgent,parallelShaderCompile:!!gl.getExtension('KHR_parallel_shader_compile'),browserTimings:typeof PerformanceObserver==='undefined'?[]:PerformanceObserver.supportedEntryTypes.filter(t=>['event','longtask','long-animation-frame'].includes(t))};
  applyVisorSettings(settings.visor);
- const viewDirection=new THREE.Vector3(),viewPos=new THREE.Vector3(),tmp=new THREE.Vector3();
+ const viewDirection=new THREE.Vector3(),viewPos=new THREE.Vector3(),shadowAnchor=new THREE.Vector3(),tmp=new THREE.Vector3();
  const keys=new Set<string>(),input:Input={forward:0,right:0,run:false,jump:false};
  let joyX=0,joyY=0,runToggle=false,joyPointer:number|null=null,lookPointer:number|null=null,lastX=0,lastY=0;
- let started=false,running=false,selected='iron',nearest:Landmark|undefined,last=performance.now(),lastUI=0;
+ let started=false,running=false,selected='iron',nearest:Landmark|undefined,last=performance.now(),lastDiagnosticFrame=last,lastUI=0;
  // ---------- S1 game state: one clock, finite deposits, inventory, saves ----------
  const clock=new SimClock(),mining:Mining={nodeId:null,ticks:0};
+ let lastSurvivalEvent='none';
  const token=(globalThis.crypto?.randomUUID?.()??Math.random().toString(36).slice(2)+Date.now().toString(36));
  let game:GameState|null=null,store:SaveStore|null=null,saver:Saver|null=null,storeError='',slotId:string|null=null;
- let holdMine=false,aimNode:string|null=null,aimReason='',mineRatio=0,strikeClock=0,nearDrop:string|null=null,slots:SlotRecord[]=[],actionKind='none',hudKey='';
- const liveDialogs=new Set(['inventory-panel','suit-panel']);
+ let holdMine=false,holdRefill=false,aimNode:string|null=null,aimReason='',mineRatio=0,strikeClock=0,nearDrop:string|null=null,slots:SlotRecord[]=[],actionKind='none',hudKey='';
+ let refillTanks=false;
+ let refillMachine:string|null=null,nearMachine:string|null=null;
+ const liveDialogs=new Set(['inventory-panel','suit-panel','production-panel']);
  const hand=createViewModel();
  const TITLE_OFFSET=-.42;
- let exported=false,autoTarget='',frames:number[]=[],showMetrics=false,wake=0,bob=0,stride=0,fov=70,titleTime=0,lastObjective='',settingsReturn='welcome';
- const visited=new Set<string>(),discovered=new Set<string>();let dialog='welcome';const ALL_DIALOGS=['welcome','paused','settings','hud-settings-panel','visor-settings-panel','objective-panel','map-panel','info-panel','inventory-panel','suit-panel','saves-panel','lease-panel'];
+ let captureRequested:((data:string)=>void)|null=null;
+ let sceneReady=false,lastRender=-Infinity,renderElapsed=0,lastRenderedDialog='',renderCalls=0,renderTriangles=0;
+ let exported=false,frames:number[]=[],showMetrics=false,wake=0,bob=0,stride=0,fov=70,titleTime=0,lastObjective='',settingsReturn='welcome';
+ const visited=new Set<string>(),discovered=new Set<string>();let dialog='welcome';const ALL_DIALOGS=['welcome','paused','settings','hud-settings-panel','visor-settings-panel','quest-panel','map-panel','info-panel','inventory-panel','suit-panel','saves-panel','lease-panel','death-panel','production-panel','diagnostics-panel'];
  const insideCapsule=(x=actor.x,z=actor.z)=>x>37.5&&x<42.5&&z>37&&z<43.1;
 
  // ---------- Settings ----------
  function applyQuality(q:Quality){
-  settings.quality=q;saveSettings(settings);world.setQuality(q);renderer.shadowMap.enabled=q!=='low';
-  renderer.setPixelRatio(q==='high'?Math.min(devicePixelRatio,1.5):1);resize();
+  settings.quality=q;saveSettings(settings);world.setQuality(q);renderer.shadowMap.enabled=q!=='low';lastRender=-Infinity;diagnostics.event('quality',0,{quality:q});
+  renderer.setPixelRatio(q==='high'?Math.min(devicePixelRatio,1.5):q==='low'?.75:1);resize();
   el('quality-label').textContent=QUALITY_LABEL[q];
  }
  function applyBob(on:boolean){settings.bob=on;saveSettings(settings);el('bob-label').textContent=on?'Покачивание: вкл.':'Покачивание: выкл.';el('bob-toggle').setAttribute('aria-pressed',String(on));}
@@ -71,9 +92,10 @@ function boot(){
  function applySound(on:boolean){settings.sound=on;saveSettings(settings);audio.setEnabled(on);el('sound-label').textContent=on?'Звук: вкл.':'Звук: выкл.';el('sound-toggle').setAttribute('aria-pressed',String(on));}
 
  const updateRun=()=>{input.run=runToggle||keys.has('ShiftLeft')||keys.has('ShiftRight');el('run').setAttribute('aria-pressed',String(input.run));};
- function clearInput(){keys.clear();joyX=joyY=0;holdMine=false;input.forward=input.right=0;input.jump=false;runToggle=false;joyPointer=lookPointer=null;el('stick').style.transform='translate(0,0)';updateRun();}
+ function clearInput(){interaction.cancel();keys.clear();joyX=joyY=0;holdMine=holdRefill=false;refillMachine=null;input.forward=input.right=0;input.jump=false;runToggle=false;joyPointer=lookPointer=null;el('stick').style.transform='translate(0,0)';updateRun();}
  function setDialog(which:string|null){
-  clearInput();last=performance.now();running=which===null;dialog=which||'';
+  if(game?.player.vitals.health===0&&(which===null||liveDialogs.has(which)||['map-panel','info-panel','quest-panel'].includes(which)))which='death-panel';
+  clearInput();if(which)el('target-marker').hidden=true;last=performance.now();running=which===null;dialog=which||'';
   // The clock runs in play and in the inventory (time does not stop there, SYSTEMS §1); every other dialog freezes it.
   if(started&&(running||liveDialogs.has(dialog))&&!saver?.halted)clock.start();else clock.stop();
   el('veil').hidden=which===null;
@@ -81,8 +103,9 @@ function boot(){
   el('veil').classList.toggle('live',liveDialogs.has(dialog));
   document.body.dataset.dialog=which??'';
   document.body.dataset.running=String(running);
-  el('objective').setAttribute('aria-expanded',String(which==='objective-panel'));
-  if(which==='map-panel')drawMap();if(which==='inventory-panel')panels.drawInventory();if(which==='suit-panel')panels.drawSuit();if(which==='saves-panel')void refreshSlots();if(which==='paused')updatePauseInfo();
+  el('objective').setAttribute('aria-expanded',String(which==='quest-panel'));
+  if(which==='quest-panel')questBook.draw();
+  if(which==='production-panel')production.draw();if(which==='map-panel')drawMap();if(which==='inventory-panel')panels.drawInventory();if(which==='suit-panel')panels.drawSuit();if(which==='saves-panel')void refreshSlots();if(which==='paused')updatePauseInfo();
   if(running)audio.resume();else if(started&&(which==='paused'||which==='settings'||which==='hud-settings-panel'||which==='visor-settings-panel'))audio.suspend();
  }
  function pause(reason='Пауза'){if(!started)return;el('pause-title').textContent=reason;setDialog('paused');void saver?.save();}
@@ -96,13 +119,14 @@ function boot(){
  function resume(){
   if(innerHeight>innerWidth||document.hidden||!game)return;
   if(saver?.halted){showHalt();return;}
+  if(game.player.vitals.health<=0){started=true;document.body.dataset.started='true';setDialog('death-panel');return;}
   const first=!started;started=true;document.body.dataset.started='true';setDialog(null);el('start').blur();
   if(first){audio.start();audio.setEnabled(settings.sound);wake=2.6;bootSequence();}
  }
  function refreshHud(){applyHudSettings(settings.hud);
   const c=el<HTMLCanvasElement>('compass'),r=c.getBoundingClientRect();c.width=Math.max(1,Math.round(r.width*devicePixelRatio));c.height=Math.max(1,Math.round(r.height*devicePixelRatio));
  }
- function resize(){const portrait=innerHeight>innerWidth;el('portrait').hidden=!portrait;renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();refreshHud();
+ function resize(){lastRender=-Infinity;const portrait=innerHeight>innerWidth;el('portrait').hidden=!portrait;renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();refreshHud();
   if(portrait&&started)pause('Продолжим в горизонтальном режиме');}
  addEventListener('resize',resize);
  addEventListener('blur',()=>pause('Экспедиция приостановлена'));
@@ -121,24 +145,46 @@ function boot(){
  el('import-button').onclick=()=>el<HTMLInputElement>('import-file').click();
  el<HTMLInputElement>('import-file').addEventListener('change',e=>{const input=e.target as HTMLInputElement,file=input.files?.[0];input.value='';if(file)void importFile(file);});
  // ---------- Inventory / suit screens (live: game time keeps running) ----------
- const panels=createPanels({game:()=>game,hazard:()=>!insideCapsule(),tone:k=>audio.tone(k),
+ const panels=createPanels({game:()=>game,hazard:()=>!insideCapsule()&&!(game&&breathingDome(game)),tone:k=>audio.tone(k),
   changed:what=>{if(what==='drop')syncDrops();hudKey='';updateHotbar();updateVisor();},
   show:which=>{if(started&&(running||liveDialogs.has(dialog)))setDialog(which);},close:()=>{void saver?.save();resume();}});
  const openPanel=(which:'inventory-panel'|'suit-panel')=>{audio.tone('ui');if(dialog===which){void saver?.save();resume();return;}if(running||liveDialogs.has(dialog)){if(which==='inventory-panel'&&dialog!=='suit-panel')panels.reset();setDialog(which);}};
  el('inventory-button').onclick=()=>openPanel('inventory-panel');
- el('suit-button').onclick=()=>openPanel('suit-panel');
  el('close-inventory').onclick=()=>{audio.tone('ui');void saver?.save();resume();};
+ let questReturn:string|null=null;
+ const questBook=createQuestBook({game:()=>game,show:()=>{questReturn=dialog==='paused'?'paused':null;setDialog('quest-panel');},close:()=>{void saver?.save();if(questReturn)setDialog(questReturn);else resume();},changed:()=>{lastObjective='';updateUI();void saver?.save();},tone:()=>audio.tone('ui')});
+ const openQuests=()=>{if(!started||!game||game.player.vitals.health<=0||saver?.halted)return;if(dialog==='quest-panel'){questBook.escape();return;}if(running||liveDialogs.has(dialog)||dialog==='paused')questBook.open();};
+ el('quests-button').onclick=openQuests;
+ const production=createProductionPanel({game:()=>game,show:()=>setDialog('production-panel'),close:()=>{void saver?.save();resume();},changed:()=>{if(game)built.sync(game);world.invalidateShadows();syncDrops();hudKey='';updateHotbar();void saver?.save();},measure:(name,ms)=>{diagnostics.span(name,ms);diagnostics.event(name,ms,{dialog,quality:settings.quality});},refill:id=>{const wasRefilling=refillMachine!==null;refillMachine=id;if(wasRefilling&&!id)void saver?.save();},tone:ok=>audio.tone(ok?'item':'warn')});
+ el('craft-button').onclick=()=>production.open();
+
  // ---------- Context action: mine (hold) / pick up / scan, decided by the aim and the selected item ----------
  const actionBtn=el('action');
+ const respawnBtn=el<HTMLButtonElement>('respawn-capsule');
+ respawnBtn.onclick=()=>{
+  if(!game||game.player.vitals.health>0||saver?.halted||respawnBtn.disabled)return;
+  respawnBtn.disabled=true;
+  respawnAtCapsule(game,heightAt(SPAWN_POSE.x,SPAWN_POSE.z)+.14);actor.reset();
+  lastSurvivalEvent='none';hudKey='';updateUI();updateAimUI();
+  void (saver?.save()??Promise.resolve()).finally(()=>{respawnBtn.disabled=false;resume();});
+ };
+ function retrieveStation(){if(!game||!running||!nearMachine)return;const error=packStation(game,nearMachine);toast(error?'Не удалось забрать':'Станция в рюкзаке',error||'Содержимое сохранено');if(!error){built.sync(game);world.invalidateShadows();hudKey='';updateHotbar();void saver?.save();}}
+ el('retrieve-station').onclick=retrieveStation;
  function doAction(){
   if(!running||!game)return;
-  if(actionKind==='pickup'&&nearDrop){const moved=pickUp(game,nearDrop);audio.tone(moved?'item':'warn');toast(moved?'Поднято':'Рюкзак полон',moved?`${moved} предм.`:'Освободите ячейку');syncDrops();hudKey='';updateHotbar();}
+  const result=interaction.action(game);if(result!==null){toast(result?'Действие в мире':'Готово',result||'Установлено');built.sync(game);world.invalidateShadows();hudKey='';updateHotbar();interaction.update(game,true);updateAimUI();void saver?.save();return;}
+  if(actionKind==='capsule')production.open('capsule');
+  else if(actionKind==='crate'&&interaction.target)production.open(interaction.target);
+  else if(actionKind==='pickup'&&nearDrop){const moved=pickUp(game,nearDrop);audio.tone(moved?'item':'warn');toast(moved?'Поднято':'Рюкзак полон',moved?`${moved} предм.`:'Освободите ячейку');syncDrops();hudKey='';updateHotbar();}
+  else if(actionKind==='upgrade'&&nearMachine)production.openUpgrade(nearMachine);
+  else if(actionKind==='machine'&&nearMachine)production.open(nearMachine);
   else if(actionKind==='scan')inspect();
+  else if(actionKind==='eat' && game && eatPulp(game)==='ate'){ audio.tone('item'); toast('Питание','Пульпа использована · +8 сытости'); hudKey=''; updateVitals(); updateHotbar(); updateAimUI(); }
  }
- actionBtn.addEventListener('pointerdown',e=>{e.preventDefault();if(!running)return;if(actionKind==='mine'){holdMine=true;capture(actionBtn,e);}else doAction();});
- for(const type of ['pointerup','pointercancel','lostpointercapture'])actionBtn.addEventListener(type,()=>{holdMine=false;});
- actionBtn.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&!e.repeat){e.preventDefault();if(actionKind==='mine')holdMine=true;else doAction();}});
- actionBtn.addEventListener('keyup',()=>{holdMine=false;});
+ actionBtn.addEventListener('pointerdown',e=>{e.preventDefault();if(!running)return;if(actionKind==='mine'||actionKind==='refill'){holdMine=actionKind==='mine';holdRefill=actionKind==='refill';capture(actionBtn,e);}else doAction();});
+ for(const type of ['pointerup','pointercancel','lostpointercapture'])actionBtn.addEventListener(type,()=>{if(holdRefill)void saver?.save();holdMine=holdRefill=false;});
+ actionBtn.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&!e.repeat){e.preventDefault();if(actionKind==='mine'||actionKind==='refill'){holdMine=actionKind==='mine';holdRefill=actionKind==='refill';}else doAction();}});
+ actionBtn.addEventListener('keyup',()=>{if(holdRefill)void saver?.save();holdMine=holdRefill=false;});
  // ---------- Hotbar: the first six cells of the backpack ----------
  const hotbarSlots=el('hotbar-slots');
  const hotCells=Array.from({length:HOTBAR_SIZE},(_,i)=>{const b=document.createElement('button');b.className='cell hot';b.dataset.hot=String(i);b.onclick=()=>selectSlot(i);hotbarSlots.append(b);return b;});
@@ -150,11 +196,10 @@ function boot(){
   const s=inv[game.player.hotbar];
   el('hotbar-name').textContent=s?ITEMS[s.itemId].name:`Ячейка ${game.player.hotbar+1} пуста`;
   el('hotbar-meta').textContent=!s?'':s.durability!==undefined?`${s.durability} / ${TOOLS[s.itemId].durability}`:s.milliGU!==undefined?`${Math.round(s.milliGU/1000)} GU`:ITEMS[s.itemId].stack>1?`×${s.count}`:'';
-  hand.setItem(s&&TOOLS[s.itemId]&&(s.durability??0)>0?s.itemId:null);
+  hand.setItem(s?.itemId==='wrench'?'wrench':s&&TOOLS[s.itemId]&&(s.durability??0)>0?s.itemId:null);
   if(dialog==='inventory-panel')panels.drawInventory();
  }
- el('objective').onclick=()=>{if(!running)return;audio.tone('ui');setDialog('objective-panel');};
- el('close-objective').onclick=resume;el('objective-back').onclick=resume;
+ el('objective').onclick=openQuests;
  el('resume').onclick=resume;el('pause-button').onclick=()=>{audio.tone('ui');pause();};
  el('reset').onclick=()=>{if(saver?.halted)return;actor.reset();resume();};
  el('quality-toggle').onclick=()=>{const order:Quality[]=['low','standard','high'];applyQuality(order[(order.indexOf(settings.quality)+1)%3]);};
@@ -196,8 +241,22 @@ function boot(){
  el('day').onclick=toggleDay;
  el('map-button').onclick=()=>{audio.tone('ui');setDialog('map-panel');};el('close-map').onclick=resume;
  el('close-info').onclick=resume;
+ function diagnosticContext(){return {quality:settings.quality,dialog,running,visible:!document.hidden,calls:renderCalls,triangles:renderTriangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures,fineBlocks:world.terrain.fineBlocks,buildings:game?.world.base.buildings.length??0,links:game?.world.base.links.length??0,activeTicks:clock.activeTicks};}
+ function sceneGeometry(){const frustum=new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse)),data:{name:string;material:string;triangles:number;instances:number}[]=[];
+  scene.traverseVisible(o=>{const m=o as THREE.Mesh;if(!m.isMesh||!m.geometry||m.frustumCulled&&!frustum.intersectsObject(m))return;const instances=(m as THREE.InstancedMesh).isInstancedMesh?(m as THREE.InstancedMesh).count:1,material=Array.isArray(m.material)?m.material.map(v=>v.name||v.type).join(','):m.material.name||m.material.type;data.push({name:m.name||material,material,instances,triangles:(m.geometry.index?.count??m.geometry.attributes.position.count)/3*instances});});return data.sort((a,b)=>b.triangles-a.triangles);
+ }
+ function diagnosticReport(){return diagnostics.report({...deviceInfo,viewport:{width:innerWidth,height:innerHeight,dpr:devicePixelRatio,renderDpr:renderer.getPixelRatio()},context:diagnosticContext(),sceneGeometry:sceneGeometry(),asset:[...document.querySelectorAll<HTMLScriptElement>('script[type=module][src]')].find(e=>!e.src.includes('/@vite/'))?.getAttribute('src')?.split('/').pop()??''});}
+ observeDiagnostics(diagnostics,()=>({dialog,quality:settings.quality}));
+ const statusDiagnostics=()=>{el('diagnostics-toggle').textContent=diagnostics.enabled?'Остановить запись':'Начать новую запись';el('diagnostics-status').textContent=diagnostics.enabled?'Запись идёт. Закройте меню и повторите зависание.':'Запись остановлена. Лог можно сохранить в файл.';};
+ el('diagnostics-button').onclick=()=>{setDialog('diagnostics-panel');statusDiagnostics();};
+ el('diagnostics-back').onclick=()=>setDialog('settings');
+ el('diagnostics-toggle').onclick=()=>{if(diagnostics.enabled)diagnostics.stop();else diagnostics.startRecording();statusDiagnostics();};
+ el('diagnostics-export').onclick=()=>{const blob=new Blob([JSON.stringify(diagnosticReport(),null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='vireon-performance-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+ el('diagnostics-clear').onclick=()=>{diagnostics.stop();diagnostics.clear();statusDiagnostics();};
+ canvas.addEventListener('webglcontextlost',()=>diagnostics.event('webglcontextlost'));
+ canvas.addEventListener('webglcontextrestored',()=>{diagnostics.event('webglcontextrestored');lastRender=-Infinity;world.invalidateShadows();});
  el('metrics-toggle').onclick=()=>{showMetrics=!showMetrics;el('metrics').hidden=!showMetrics;el('metrics-toggle').textContent=showMetrics?'Скрыть показатели сцены':'Показать показатели сцены';};
- el('run').onclick=()=>{if(!running)return;runToggle=!runToggle;updateRun();};
+ const toggleRun=()=>{if(!running)return;runToggle=!runToggle;updateRun();};el('run').onpointerdown=e=>{e.preventDefault();toggleRun();};el('run').onclick=e=>{if(e.detail===0)toggleRun();};
  el('jump').onpointerdown=event=>{event.preventDefault();if(running)input.jump=true;};
 
  function toast(kind:string,text:string){const t=el('toast');t.hidden=true;void t.offsetWidth;el('toast-kind').textContent=kind;el('toast-text').textContent=text;t.hidden=false;}
@@ -212,19 +271,23 @@ function boot(){
   setDialog('info-panel');updateUI();
  }
  addEventListener('keydown',event=>{
-  if(event.code==='Escape'){event.preventDefault();if((dialog==='hud-settings-panel'||dialog==='visor-settings-panel')){setDialog('settings');return;}if(dialog==='settings'){setDialog(settingsReturn);return;}if(started){if(running)pause();else resume();}return;}
+  if(event.code==='Escape'){event.preventDefault();if(dialog==='quest-panel'){questBook.escape();return;}if((dialog==='hud-settings-panel'||dialog==='visor-settings-panel'||dialog==='diagnostics-panel')){setDialog('settings');return;}if(dialog==='settings'){setDialog(settingsReturn);return;}if(started){if(running)pause();else resume();}return;}
+  if(event.target instanceof HTMLElement && (event.target.isContentEditable || event.target.closest('input,textarea,select')))return;
+  if(event.code==='KeyJ'&&started&&!event.repeat){event.preventDefault();openQuests();return;}
   if(event.code==='KeyM'&&started&&!event.repeat){event.preventDefault();if(dialog==='map-panel')resume();else setDialog('map-panel');return;}
   if(event.code==='KeyI'&&started&&!event.repeat){event.preventDefault();openPanel('inventory-panel');return;}
+  if(event.code==='KeyB'&&started&&!event.repeat){event.preventDefault();if(running||liveDialogs.has(dialog))production.open();return;}
   if(event.code==='KeyC'&&started&&!event.repeat){event.preventDefault();openPanel('suit-panel');return;}
   if(!running)return;
   if(/^Digit[1-6]$/.test(event.code)){event.preventDefault();selectSlot(Number(event.code.slice(5))-1);return;}
+  if(event.code==='KeyR'&&!event.repeat){event.preventDefault();retrieveStation();return;}
   if(event.code==='KeyN'&&!event.repeat){event.preventDefault();toggleDay();return;}
   if(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','ShiftLeft','ShiftRight','KeyE','KeyF'].includes(event.code))event.preventDefault();
-  if(event.code==='KeyF'&&!event.repeat){if(actionKind==='mine')holdMine=true;else doAction();}
+  if(event.code==='KeyF'&&!event.repeat){if(actionKind==='mine'||actionKind==='refill'){holdMine=actionKind==='mine';holdRefill=actionKind==='refill';}else doAction();}
   keys.add(event.code);if(event.code==='Space'&&!event.repeat)input.jump=true;
   if(event.code==='KeyE'&&!event.repeat)inspect();updateRun();
  });
- addEventListener('keyup',event=>{keys.delete(event.code);if(event.code==='KeyF')holdMine=false;updateRun();});
+ addEventListener('keyup',event=>{keys.delete(event.code);if(event.code==='KeyF'){if(holdRefill)void saver?.save();holdMine=holdRefill=false;}updateRun();});
  const stick=el('joystick');
  const capture=(target:HTMLElement,event:PointerEvent)=>{try{target.setPointerCapture(event.pointerId);}catch{/* Synthetic pointer events have no OS capture; real pointers do. */}};
  function moveStick(event:PointerEvent){const r=stick.getBoundingClientRect();let x=event.clientX-(r.left+r.width/2),y=event.clientY-(r.top+r.height/2);const len=Math.hypot(x,y),max=Math.max(1,(r.width-el('stick').getBoundingClientRect().width)/2-r.width*.06);if(len>max){x*=max/len;y*=max/len;}joyX=x/max;joyY=-y/max;if(Math.abs(joyX)<.1)joyX=0;if(Math.abs(joyY)<.1)joyY=0;el('stick').style.transform=`translate(${x}px,${y}px)`;}
@@ -251,18 +314,23 @@ function boot(){
  function applyNodes(){
   if(!game)return;
   for(const n of NODES)world.setNodeAmount(n.id,game.world.nodes[n.id],n.amount);
-  // Colliders follow the deposits: an outcrop that is fully mined no longer blocks the path.
-  for(const o of new Set(NODES.map(n=>n.outcrop))){const left=NODES.filter(n=>n.outcrop===o).reduce((a,n)=>a+game!.world.nodes[n.id],0),id=o+'-outcrop',i=boxes.findIndex(b=>b.id===id);
-   if(left<=0&&i>=0){removedBoxes.set(id,boxes[i]);boxes.splice(i,1);}else if(left>0&&i<0&&removedBoxes.has(id)){boxes.push(removedBoxes.get(id)!);removedBoxes.delete(id);}}
+  for(const [id,nodeId] of [['iron-outcrop','iron-a'],['copper-outcrop','copper-a'],['stone-outcrop','stone-a'],['ice-outcrop','ice-a']]){
+   const original=mineralBoxes.get(id);if(!original)continue;const i=boxes.findIndex(b=>b.id===id);if(i>=0)boxes.splice(i,1);
+   const n=NODE_BY_ID.get(nodeId)!,left=game.world.nodes[nodeId];if(left<=0)continue;
+   const k=.42+.58*left/n.amount,cx=(original.minX+original.maxX)/2,cz=(original.minZ+original.maxZ)/2;
+   boxes.push({...original,minX:cx+(original.minX-cx)*k,maxX:cx+(original.maxX-cx)*k,minZ:cz+(original.minZ-cz)*k,maxZ:cz+(original.maxZ-cz)*k,maxY:original.minY+(original.maxY-original.minY)*k});
+  }
  }
- const removedBoxes=new Map<string,typeof boxes[number]>();
+ const mineralBoxes=new Map(boxes.filter(b=>b.id.endsWith('-outcrop')).map(b=>[b.id,{...b}]));
  function snapshot():GameState{
   const g=game!;g.meta.activeTicks=clock.activeTicks;
   Object.assign(g.player,{x:actor.x,y:actor.y,z:actor.z,yaw:actor.yaw,pitch:actor.pitch});
-  g.progress={visited:[...visited],discovered:[...discovered],selected};
+  refreshQuestProgress(g);
+  Object.assign(g.progress,{visited:[...visited],discovered:[...discovered],selected});
   return cloneState(g);
  }
  function setSaveStatus(st:SaverStatus|{kind:'none'|'idle';message?:string}){
+  diagnostics.event('save:'+st.kind,0,{revision:'revision' in st?st.revision:0});
   const e=el('save-status');e.dataset.kind=st.kind;
   el('save-text').textContent=st.kind==='saving'?'Сохранение…':st.kind==='saved'?'Сохранено':st.kind==='error'?'Ошибка сохранения':st.kind==='lease-lost'?'Запись остановлена':st.kind==='none'?'Без сохранения':'Без мира';
   e.title=st.kind==='saved'?`Ревизия ${(st as SaverStatus).revision}`:'';
@@ -288,7 +356,7 @@ function boot(){
  }
  const newId=()=>'w-'+Date.now().toString(36)+'-'+Math.floor(Math.random()*1e9).toString(36);
  async function initStore(){
-  try{store=await SaveStore.open();}catch(e){store=null;storeError=e instanceof Error?e.message:String(e);}
+  try{store=await SaveStore.open();store.measure=(name,ms)=>diagnostics.span(name,ms);}catch(e){store=null;storeError=e instanceof Error?e.message:String(e);}
   await refreshSlots();
  }
  async function refreshSlots(){
@@ -312,11 +380,11 @@ function boot(){
   if(!saver.halted)await saver.save();saver.stopHeartbeat();await store.releaseLease(slotId,token).catch(()=>{});saver=null;slotId=null;
  }
  function startGame(state:GameState,id:string|null,revision:number,baseRevision=revision){
-  game=state;slotId=id;clock.stop();clock.activeTicks=state.meta.activeTicks;mining.nodeId=null;mining.ticks=0;
-  actor.reset();Object.assign(actor,{x:state.player.x,y:state.player.y,z:state.player.z,yaw:state.player.yaw,pitch:state.player.pitch});actor.previous={x:actor.x,y:actor.y,z:actor.z};
+  game=state;refreshQuestProgress(state);questBook.reset();slotId=id;clock.stop();clock.activeTicks=state.meta.activeTicks;mining.nodeId=null;mining.ticks=0;
+  actor.reset();Object.assign(actor,{x:state.player.x,y:state.player.y,z:state.player.z,yaw:state.player.yaw,pitch:state.player.pitch});actor.previous={x:actor.x,y:actor.y,z:actor.z};lastSurvivalEvent='none';holdMine=holdRefill=false;
   visited.clear();discovered.clear();state.progress.visited.forEach(v=>visited.add(v));state.progress.discovered.forEach(v=>discovered.add(v));selected=LANDMARKS.some(l=>l.id===state.progress.selected)?state.progress.selected:'iron';
-  applyNodes();syncDrops();hudKey='';updateHotbar();shownDay=null;world.setTime(phaseSeconds(state.meta.activeTicks,state.world.dayOffsetTicks),true);updateDayButton();panels.reset();
-  if(id&&store){saver=new Saver(store,id,token,revision,state.meta.activeTicks,snapshot,setSaveStatus,baseRevision);saver.startHeartbeat();setSaveStatus(saver.status);}else{saver=null;setSaveStatus({kind:'none'});}
+  applyNodes();built.sync(state);world.invalidateShadows();syncDrops();hudKey='';updateHotbar();shownDay=null;world.setTime(phaseSeconds(state.meta.activeTicks,state.world.dayOffsetTicks),true);updateDayButton();panels.reset();
+  if(id&&store){saver=new Saver(store,id,token,revision,state.meta.activeTicks,snapshot,setSaveStatus,baseRevision,(name,ms)=>diagnostics.span(name,ms));saver.startHeartbeat();setSaveStatus(saver.status);}else{saver=null;setSaveStatus({kind:'none'});}
   updateUI();
  }
  async function newExpedition():Promise<boolean>{
@@ -366,32 +434,45 @@ function boot(){
  }
  /** Aim label under the reticle and the context action button (mine / pick up / scan / none). */
  function updateAimUI(){
-  const box=el('aim'),n=aimNode&&game?NODE_BY_ID.get(aimNode):undefined;
-  box.hidden=!n||!running;document.body.dataset.aim=String(!!n);
+  nearMachine=game&&interaction.target&&machine(game,interaction.target)?interaction.target:null;
+  const box=el('aim'),n=aimNode&&game&&!interaction.target?NODE_BY_ID.get(aimNode):undefined;
+  el('aim-name').textContent='';el('aim-meta').textContent='';box.hidden=true;document.body.dataset.aim='false';
   let kind='none',label='Действие',iconId='i-hand',blocked='';
+  const selected=game?.player.inventory[game.player.hotbar];
+  if(game && selected?.itemId==='pulp' && !n && !nearDrop && game.player.vitals.satiety<100){kind='eat';label='Есть';iconId='i-food';}
   if(n&&game){
    const left=game.world.nodes[n.id],ti=toolSlot(game),sel=game.player.inventory[game.player.hotbar];
-   const secs=ti>=0?(ticksFor(n.material,TOOLS[game.player.inventory[ti]!.itemId].timeMul)/20):0;
-   blocked=ti<0?(sel&&TOOLS[sel.itemId]?'Инструмент сломан':game.player.inventory.some(x=>x&&TOOLS[x.itemId])?'Выберите мультитул':'Нужен инструмент'):'';
-   el('aim-name').textContent=itemName(n.itemId)+(ti>=0?` · ${secs%1?secs.toFixed(1):secs} с`:'');
-   el('aim-meta').textContent=aimReason||blocked||`${left} / ${n.amount}`;box.classList.toggle('blocked',!!(aimReason||blocked));
+   const secs=n.material==='grass'?1:ti>=0?(ticksFor(n.material,TOOLS[game.player.inventory[ti]!.itemId].timeMul)/20):0;
+   blocked=game.world.base.hand||manualWork(game)?'Ручная работа: завершите или отмените':ti<0&&n.material!=='grass'?(sel&&TOOLS[sel.itemId]?'Инструмент сломан':game.player.inventory.some(x=>x&&TOOLS[x.itemId])?'Выберите мультитул':'Нужен инструмент'):'';
+   el('aim-name').textContent=itemName(n.itemId)+(ti>=0||n.material==='grass'?` · ${secs%1?secs.toFixed(1):secs} с`:'');
+   el('aim-meta').textContent=aimReason||blocked||`В рюкзаке: ${countItem(game.player.inventory,n.itemId)}`;box.classList.toggle('blocked',!!(aimReason||blocked));
    (el('aim-bar').firstElementChild as HTMLElement).style.transform=`scaleX(${mineRatio})`;
    kind='mine';label='Добыть';iconId='i-pick';
   }else if(nearDrop){kind='pickup';label='Поднять';iconId='i-pack';}
+  else if(kind!=='eat'&&nearMachine){kind='machine';label='Открыть станцию';iconId='i-plug';const b=game&&machine(game,nearMachine);if(b){if(selected?.itemId==='wrench'&&b.kind==='workbench'&&b.level===1){kind='upgrade';label='Улучшить';iconId='i-gear';}box.hidden=!running;el('aim-name').textContent=ITEMS[b.kind].name;el('aim-meta').textContent=kind==='upgrade'?'Ключ · улучшение до II':b.kind==='workbench'?'Уровень '+b.level+' · Мастерская · B':'Мастерская · B';box.classList.remove('blocked');(el('aim-bar').firstElementChild as HTMLElement).style.transform='scaleX(0)';document.body.dataset.aim='true';}}
+  else if(kind==='eat'){blocked=game!.player.survival.foodCooldownMs>0?'Подождите перед следующей порцией':'';}
   else if(nearest){kind='scan';label='Сканировать';iconId='i-scan';}
-  const disabled=kind==='none'||!!blocked||!running;
-  actionKind=disabled?'none':kind;if(disabled)holdMine=false;
+  if(game&&interaction.building){kind='place';label='Установить';iconId='i-pack';el('aim-name').textContent=selected?ITEMS[selected.itemId].name:'';el('aim-meta').textContent=interaction.problem||'Установить · F';blocked=interaction.problem;}
+  else if(game&&interaction.linking){kind='link';label='Соединить';iconId='i-plug';el('aim-name').textContent=selected?ITEMS[selected.itemId].name:'';el('aim-meta').textContent=interaction.hint;}
+  else if(game&&interaction.target?.startsWith('crate-')){kind='crate';label='Открыть ящик';iconId='i-pack';el('aim-name').textContent='Ящик';el('aim-meta').textContent='Открыть · F';}
+  else if(game&&interaction.target==='capsule'&&kind!=='eat'){kind='capsule';label='Открыть заправку';iconId='i-plug';el('aim-name').textContent='Капсула · кислородный порт';el('aim-meta').textContent='Заправить баллоны · F';}
+  box.hidden=!running||!el('aim-name').textContent;document.body.dataset.aim=String(!box.hidden);
+  if(box.hidden){el('aim-name').textContent='';el('aim-meta').textContent='';box.classList.remove('blocked');(el('aim-bar').firstElementChild as HTMLElement).style.transform='scaleX(0)';}
+  el('retrieve-station').hidden=!running||!nearMachine||interaction.building||interaction.linking;
+  const disabled=kind==='none' ||!!blocked||!running;
+  actionKind=disabled?'none':kind;if(disabled||kind!=='mine')holdMine=false;if(disabled||kind!=='refill')holdRefill=false;
   actionBtn.dataset.kind=kind;actionBtn.setAttribute('aria-disabled',String(disabled));actionBtn.style.setProperty('--p',String(mineRatio));
-  const actionLabel=kind==='mine'?'Добыть (удерживать)':label;
+  const actionLabel=kind==='mine'?'Добыть (удерживать)':kind==='refill'?label+' (удерживать)':label;
   if(actionBtn.getAttribute('aria-label')!==actionLabel){el('action-icon').innerHTML=`<use href="#${iconId}"/>`;actionBtn.setAttribute('aria-label',actionLabel);}
   actionBtn.title=blocked||actionLabel;
  }
  function onMined(ev:Extract<ReturnType<typeof mineTick>,{kind:'block'}>){
+  world.invalidateShadows();
   const n=NODE_BY_ID.get(ev.nodeId)!;audio.tone('item');applyNodes();
   if(ev.toGround){syncDrops();toast('Рюкзак полон',`${itemName(ev.itemId)} оставлена на земле`);}
-  else toast(`+1 · осталось ${ev.left}`,itemName(ev.itemId));
+  else toast(`+1 · в рюкзаке ${countItem(game!.player.inventory,ev.itemId)}`,itemName(ev.itemId));
   if(!ev.left){toast('Запас исчерпан',n.name);}
-  if(ev.toolBroke){audio.tone('warn');toast('Инструмент сломан',itemName('tool_stone')+' · ремонт появится с крафтом');}
+  if(ev.toolBroke){audio.tone('warn');toast('Инструмент сломан',itemName('tool_stone')+' · новый мультитул: 4 камня + 2 волокна в мастерской');}
   hudKey='';updateHotbar();
  }
  // ---------- Holographic map (mirrored x so it matches the first-person view: east = −x) ----------
@@ -448,33 +529,31 @@ function boot(){
   const t=LANDMARKS.find(p=>p.id===selected)!;const d=Math.hypot(actor.x-t.x,actor.z-t.z);
   tmp.set(t.x,heightAt(t.x,t.z)+2.4,t.z).project(camera);
   const visible=started&&running&&d>t.radius*.6&&tmp.z<1&&Math.abs(tmp.x)<1.1&&Math.abs(tmp.y)<1.1;
-  marker.style.opacity=visible?'1':'0';
-  if(visible){marker.style.transform=`translate(${(tmp.x*.5+.5)*innerWidth}px,${Math.max(innerHeight<500?92:118,(-tmp.y*.5+.5)*innerHeight)}px) translate(-50%,-50%)`;el('marker-distance').textContent=`${Math.round(d)} м`;}
+  marker.hidden=!visible;marker.style.opacity=visible?'1':'0';
+  if(visible){marker.style.transform=`translate(${Math.max(26,Math.min(innerWidth-26,(tmp.x*.5+.5)*innerWidth))}px,${Math.max(innerHeight<500?92:118,Math.min(innerHeight-30,(-tmp.y*.5+.5)*innerHeight))}px) translate(-50%,-50%)`;el('marker-distance').textContent=`${Math.round(d)} м`;}
  }
- const mined=(item:string)=>!!game&&NODES.some(n=>n.itemId===item&&game!.world.nodes[n.id]<n.amount);
- /** Short task for the HUD chip and a longer hint shown when it is expanded. */
- function objective():[string,string]{
-  if(insideCapsule())return ['Выйдите из капсулы','Выход — через шлюз позади. Метка на компасе показывает ближайшую цель.'];
-  if(game){
-   if(!mined('iron_raw'))return ['Найдите железо','Подойдите к выходу железной руды (метка на компасе), выберите мультитул в ячейке 1 и удерживайте «Добыть» [F].'];
-   if(!mined('copper_raw'))return ['Добудьте медь','Медный выход — восточнее железного.'];
-   if(!mined('ice'))return ['Наберите лёд','Ледяная глыба — в низине на севере.'];
-   if(!mined('stone'))return ['Соберите камень','Каменная осыпь — слева от капсулы.'];
-   if(!exported)return ['Сохраните мир','Ресурсы найдены. Откройте меню — сохраните мир и попробуйте экспорт файла.'];
-  }
-  if(visited.size>=LANDMARKS.length)return ['Маршрут завершён','Все места осмотрены.'];
-  return ['Исследуйте долину',`Следуйте метке на компасе и сканируйте места: ${visited.size} из ${LANDMARKS.length}.`];
+ /** Neutral entry to the development map. */
+ function objective():string{
+  return 'Дерево развития';
  }
  function updateVitals(){
-  if(!game)return;const g=game,o2=oxygenGU(g),cap=oxygenCapacityGU(g)||1;
-  const set=(id:string,v:number,ratio:number)=>{const e=el(id);e.dataset.low=String(ratio<=.2);e.style.setProperty('--v',String(Math.max(0,Math.min(1,ratio))));const b=e.querySelector('b')!;const t=String(Math.round(v));if(b.textContent!==t)b.textContent=t;};
-  set('g-health',g.player.vitals.health,g.player.vitals.health/100);set('g-satiety',g.player.vitals.satiety,g.player.vitals.satiety/100);set('g-oxygen',o2,o2/cap);
-  el('g-oxygen').setAttribute('aria-label',`Кислород ${Math.round(o2)} GU`);el('g-health').setAttribute('aria-label',`Здоровье ${Math.round(g.player.vitals.health)}`);el('g-satiety').setAttribute('aria-label',`Сытость ${Math.round(g.player.vitals.satiety)}`);
+  if(!game)return;const g=game,inCapsule=insideCapsule(actor.x,actor.z);
+  const source=accessibleOxygen(g,inCapsule),o2=source.amount,cap=source.capacity;
+  const unit=el('g-oxygen').querySelector('small')!;if(unit.textContent!==source.unit)unit.textContent=source.unit;
+  const ratio=cap>0?o2/cap:0;
+  const set=(id:string,v:number,fill:number)=>{const e=el(id);e.dataset.low=String(fill<=.2);e.style.setProperty('--v',String(Math.max(0,Math.min(1,fill))));const b=e.querySelector('b')!;const t=String(Math.round(v));if(b.textContent!==t)b.textContent=t;};
+  set('g-health',g.player.vitals.health,g.player.vitals.health/100);set('g-satiety',g.player.vitals.satiety,g.player.vitals.satiety/100);set('g-oxygen',o2,ratio);
+  el('g-oxygen').setAttribute('aria-label',source.emergency?`Аварийное дыхание ${Math.ceil(o2)} секунд`:`Кислород ${Math.round(o2)} GU`);el('g-health').setAttribute('aria-label',`Здоровье ${Math.round(g.player.vitals.health)}`);el('g-satiety').setAttribute('aria-label',`Сытость ${Math.round(g.player.vitals.satiety)}`);
+  const alert=el('survival-alert');
+  const critical=started&&g.player.vitals.health>0&&(ratio<=.2||g.player.vitals.health<=20||g.player.vitals.satiety===0);
+  alert.setAttribute('aria-hidden',String(!critical));document.body.dataset.hazard=critical?'critical':'safe';
+  const text=!critical?'':ratio<=.2?(source.emergency?'АВАРИЙНЫЙ РЕЗЕРВ ЗАКАНЧИВАЕТСЯ':!inCapsule&&!breathingDome(g)&&wornParts(g)<4?'КОСТЮМ НЕГЕРМЕТИЧЕН':'КИСЛОРОД КРИТИЧЕСКИ НИЗКИЙ'):g.player.vitals.health<=20?'ЗДОРОВЬЕ КРИТИЧЕСКИ НИЗКО':'СЫТОСТЬ ИСЧЕРПАНА';
+  const textNode=el('survival-alert-text');if(textNode.textContent!==text)textNode.textContent=text;
  }
  function updateVisor(){el('visor').hidden=!game?.player.suit.helmet;}
  function updateUI(){
   updateVisor();
-  if(game){const want=!mined('iron_raw')?'iron':!mined('copper_raw')?'copper':!mined('ice')?'ice':!mined('stone')?'capsule':null;if(want&&autoTarget!==want){autoTarget=want;selected=want;}}
+  nearMachine=game&&interaction.target&&machine(game,interaction.target)?interaction.target:null;
   nearDrop=null;if(game)for(const d of game.world.drops)if(Math.hypot(d.x-actor.x,d.z-actor.z)<2.2){nearDrop=d.id;break;}
   const target=LANDMARKS.find(p=>p.id===selected)!;
   const d=Math.hypot(actor.x-target.x,actor.z-target.z);el('target-name').textContent=target.name;el('target-distance').textContent=`${Math.round(d)} м`;
@@ -482,32 +561,49 @@ function boot(){
   nearest=LANDMARKS.filter(p=>Math.hypot(actor.x-p.x,actor.z-p.z)<=p.radius).sort((a,b)=>Math.hypot(actor.x-a.x,actor.z-a.z)-Math.hypot(actor.x-b.x,actor.z-b.z))[0];
   document.body.dataset.near=String(!!nearest);
   if(nearest&&started&&!discovered.has(nearest.id)){discovered.add(nearest.id);if(nearest.id!=='capsule'){toast('Новое место',nearest.name);audio.tone('discover');}}
-  const [o,detail]=objective();if(o!==lastObjective){lastObjective=o;el('objective-text').textContent=o;el('objective-detail').textContent=detail;const ob=el('objective');ob.classList.remove('pulse');void ob.offsetWidth;ob.classList.add('pulse');}
+  const o=objective();if(o!==lastObjective){lastObjective=o;el('objective-text').textContent=o;const ob=el('objective');ob.classList.remove('pulse');void ob.offsetWidth;ob.classList.add('pulse');}
   updateVitals();updateHotbar();updateDayButton();
  }
- function state(){const sorted=[...frames].sort((a,b)=>a-b);return {ready:true,version:'S1',slotId,revision:saver?.revision??0,saveStatus:saver?.status.kind??(game?'none':'idle'),halted:!!saver?.halted,activeTicks:clock.activeTicks,clockRunning:clock.running,hotbar:game?.player.hotbar??0,cells:game?game.player.inventory.map(s=>s?{...s}:null):[],suit:game?Object.fromEntries(Object.entries(game.player.suit).map(([k,v])=>[k,v?.itemId??null])):null,worn:game?wornParts(game):0,bottles:game?game.player.bottles.map(b=>b?{...b}:null):[],oxygenGU:game?oxygenGU(game):0,dayPhase:dayPhase(),dayOffsetTicks:game?.world.dayOffsetTicks??0,nightValue:world.nightValue,action:actionKind,handItem:hand.visible,panel:panels.debug,aimNode,mineRatio,nodes:game?{...game.world.nodes}:null,inventory:game?game.player.inventory.filter(Boolean).map(s=>({...s})):[],drops:game?game.world.drops.length:0,storage:!!store,grassCount:world.grassCount,fullscreen:!!document.fullscreenElement,running,dialog,night:!isDay(dayPhase()),selected,visited:[...visited],activeTime:clock.activeSeconds,position:{x:actor.x,y:actor.y,z:actor.z},yaw:actor.yaw,pitch:actor.pitch,grounded:actor.grounded,input:{...input,joyX,joyY,joyPointer,lookPointer},quality:settings.quality,sound:settings.sound,bob:settings.bob,fov:settings.fov,fineTerrainBlocks:world.terrain.fineBlocks,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0,viewport:{width:innerWidth,height:innerHeight},renderer:renderer.getContext().getParameter(renderer.getContext().VERSION)};}
+ function state(){const sorted=[...frames].sort((a,b)=>a-b);return {ready:true,version:'S2.7',worldTarget:interaction.target,quests:game?structuredClone(game.progress.quests):null,questBook:questBook.debug(),vitals:game?{...game.player.vitals}:null,survival:game?{...game.player.survival}:null,capsuleMilliGU:game?.world.capsuleMilliGU??0,base:game?structuredClone(game.world.base):null,visibleDrops:dropGroup.children.length,slotId,revision:saver?.revision??0,saveStatus:saver?.status.kind??(game?'none':'idle'),halted:!!saver?.halted,activeTicks:clock.activeTicks,clockRunning:clock.running,hotbar:game?.player.hotbar??0,cells:game?game.player.inventory.map(s=>s?{...s}:null):[],suit:game?Object.fromEntries(Object.entries(game.player.suit).map(([k,v])=>[k,v?.itemId??null])):null,worn:game?wornParts(game):0,bottles:game?game.player.bottles.map(b=>b?{...b}:null):[],oxygenGU:game?oxygenGU(game):0,dayPhase:dayPhase(),dayOffsetTicks:game?.world.dayOffsetTicks??0,nightValue:world.nightValue,action:actionKind,handItem:hand.visible,panel:panels.debug,aimNode,mineRatio,nodes:game?{...game.world.nodes}:null,inventory:game?game.player.inventory.filter(Boolean).map(s=>({...s})):[],drops:game?game.world.drops.length:0,storage:!!store,grassCount:world.grassCount,fullscreen:!!document.fullscreenElement,running,dialog,night:!isDay(dayPhase()),selected,visited:[...visited],activeTime:clock.activeSeconds,position:{x:actor.x,y:actor.y,z:actor.z},yaw:actor.yaw,pitch:actor.pitch,grounded:actor.grounded,input:{...input,joyX,joyY,joyPointer,lookPointer},quality:settings.quality,sound:settings.sound,bob:settings.bob,fov:settings.fov,fineTerrainBlocks:world.terrain.fineBlocks,drawCalls:renderCalls,triangles:renderTriangles,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0,viewport:{width:innerWidth,height:innerHeight},renderer:rendererVersion,diagnostics:diagnostics.enabled,shadowTarget:world.sunLight.target.position.toArray(),shadowBias:world.sunLight.shadow.bias};}
  const dev=!!(import.meta as unknown as {env?:{DEV?:boolean}}).env?.DEV;
- Object.defineProperty(window,'__vireon',{value:{getState:state,save:()=>saver?.save(),snapshot:()=>game?snapshot():null,
-  // Development-only verification helper; absent from production and standalone builds.
-  ...(dev?{teleport:(x:number,z:number,yaw:number,pitch=-.2)=>{actor.x=x;actor.z=z;actor.y=heightAt(x,z);actor.yaw=yaw;actor.pitch=pitch;actor.previous={x,y:actor.y,z};}}:{})},writable:false});
+ Object.defineProperty(window,'__vireon',{value:{getState:state,save:()=>saver?.save(),snapshot:()=>game?snapshot():null,diagnostics:()=>diagnosticReport(),
+  // Development-only verification helpers; absent from production builds.
+  ...(dev?{captureFrame:()=>new Promise<string>(resolve=>{if(captureRequested)throw new Error('Capture already pending');captureRequested=resolve;}),setState:(raw:unknown)=>{if(!game)return;const next=sanitizeState(raw);if(next.meta.worldId!==game.meta.worldId)throw new Error('Test state belongs to another world');game=next;Object.assign(actor,{x:next.player.x,y:next.player.y,z:next.player.z,yaw:next.player.yaw,pitch:next.player.pitch});actor.vy=actor.vx=actor.vz=actor.airSpeed=0;actor.grounded=true;actor.previous={x:actor.x,y:actor.y,z:actor.z};clock.activeTicks=next.meta.activeTicks;built.sync(next);world.invalidateShadows();applyNodes();syncDrops();hudKey='';updateUI();updateAimUI();},teleport:(x:number,z:number,yaw:number,pitch=-.2)=>{actor.x=x;actor.z=z;actor.y=heightAt(x,z);actor.yaw=yaw;actor.pitch=pitch;actor.vy=actor.vx=actor.vz=actor.airSpeed=0;actor.grounded=true;actor.previous={x,y:actor.y,z};}}:{})},writable:false});
 
  let handBobX=0,handBobY=0;
  const draw=(now:number)=>{
+  const workStart=diagnostics.stamp();let measured=workStart;
+  const diagnosticGapMs=now-lastDiagnosticFrame;lastDiagnosticFrame=now;
   const actualFrameMs=now-last;const dt=Math.min(actualFrameMs/1000,.25);last=now;
   if(running){
    input.forward=(keys.has('KeyW')||keys.has('ArrowUp')?1:0)-(keys.has('KeyS')||keys.has('ArrowDown')?1:0)+joyY;
    input.right=(keys.has('KeyD')||keys.has('ArrowRight')?1:0)-(keys.has('KeyA')||keys.has('ArrowLeft')?1:0)+joyX;
   }else{input.forward=input.right=0;input.jump=false;}
   // One accepted clock drives everything: ≤5 fixed 50 ms steps per frame, nothing while paused/hidden.
-  const steps=clock.advance(actualFrameMs);
-  for(let i=0;i<steps;i++){const px=actor.x,pz=actor.z;actor.step(FIXED_DT,input);input.jump=false;
+  const steps=clock.advance(actualFrameMs);let productionChanged=false;
+  for(let i=0;i<steps;i++){const px=actor.x,pz=actor.z;if(game?.world.base.passage){input.forward=input.right=0;input.run=false;input.jump=false;}actor.step(FIXED_DT,input,game?survivalSpeed(game):1);input.jump=false;
    const moved=Math.hypot(actor.x-px,actor.z-pz);if(actor.grounded&&moved>0){stride+=moved;bob+=moved*(input.run?2.4:2.9);if(stride>(input.run?.82:.68)){stride=0;audio.step(input.run,insideCapsule());}}
-   if(game){game.player.x=actor.x;game.player.z=actor.z;const ev=mineTick(game,mining,running?aimNode:null,running&&holdMine);
+   if(game){
+    Object.assign(game.player,{x:actor.x,y:actor.y,z:actor.z});
+    const produced=productionTick(game,50,refillMachine,isDay(dayPhase())?10:-10);
+    if(dialog==='production-panel'&&insideCapsule()&&refillMachine==='capsule-out')refillFromCapsule(game,FIXED_DT);if(dialog==='production-panel'&&insideCapsule()&&refillMachine==='capsule-in')refillCapsule(game,FIXED_DT);
+    if(produced.passage){Object.assign(actor,produced.passage);actor.previous={x:actor.x,y:actor.y,z:actor.z};Object.assign(game.player,produced.passage);}
+    if(produced.changed)productionChanged=true;
+    const survival=survivalTick(game,FIXED_DT,insideCapsule(),(input.run||(!actor.grounded&&actor.airSpeed>3.5*survivalSpeed(game)+.01))&&moved>0);
+    if(survival!==lastSurvivalEvent){lastSurvivalEvent=survival;if(survival==='warning')toast('ВНИМАНИЕ','Проверьте кислород');if(survival==='damage')audio.tone('warn');}
+    if(survival==='death'){
+     clock.activeTicks-=steps-i-1;releaseHandOnDeath(game);loseCargo(game);game.world.base.passage=null;mining.nodeId=null;mining.ticks=0;aimReason='';mineRatio=0;strikeClock=0;
+     syncDrops();hudKey='';updateHotbar();updateVitals();setDialog('death-panel');void saver?.save();break;
+    }
+    if(running&&holdRefill&&actionKind==='refill'&&insideCapsule()&&(refillTanks?refillFromCapsule(game,FIXED_DT):refillCapsule(game,FIXED_DT))){hudKey='';updateHotbar();}
+    const ev=mineTick(game,mining,running?aimNode:null,running&&holdMine&&!game.world.base.hand&&!manualWork(game)&&!game.world.base.passage);
     aimReason=ev.kind==='blocked'?ev.reason:'';mineRatio=ev.kind==='progress'?ev.ratio:0;
     if(ev.kind==='progress'){strikeClock-=FIXED_DT;if(strikeClock<=0){strikeClock=.45;audio.strike(NODE_BY_ID.get(ev.nodeId)!.material==='ice');}}else strikeClock=0;
     if(ev.kind==='block')onMined(ev);}
   }
-  if(game&&saver)saver.tick(clock.activeTicks);
+  if(game&&steps>0&&refreshQuestProgress(game))productionChanged=true;
+  if(productionChanged&&game&&game.player.vitals.health>0){hudKey='';updateHotbar();if(dialog==='production-panel')production.draw();void saver?.save();}
+  if(game&&saver)saver.tick(clock.activeTicks);measured=diagnostics.stage('simulation',measured);if(dialog==='production-panel')production.tick();measured=diagnostics.stage('production-ui',measured);
   if(!started){
    // Title cinematic: a slow arc around the capsule with the spires behind.
    // Title shot: low, slow orbit; capsule sits in the right third, horizon and sky stay in frame.
@@ -524,21 +620,32 @@ function boot(){
    const pitch=actor.pitch-ease*.45;
    viewDirection.set(Math.sin(actor.yaw)*Math.cos(pitch),Math.sin(pitch),Math.cos(actor.yaw)*Math.cos(pitch));camera.lookAt(tmp.copy(viewPos).add(viewDirection));
    if(ease>0)camera.rotateZ(Math.sin(ease*3)*.06*ease);
-   const targetFov=settings.fov+(input.run&&moving&&settings.bob?6:0);fov+=(targetFov-fov)*Math.min(1,dt*6);if(Math.abs(camera.fov-fov)>.01){camera.fov=fov;camera.updateProjectionMatrix();}
+   const targetFov=settings.fov+(Math.hypot(actor.vx,actor.vz)>4&&running&&settings.bob?6:0);fov+=(targetFov-fov)*Math.min(1,dt*6);if(Math.abs(camera.fov-fov)>.01){camera.fov=fov;camera.updateProjectionMatrix();}
   }
   // Explicit pause (and settings opened from it) freezes the whole scene, not only the controller.
-  const frozen=started&&(dialog==='paused'||dialog==='settings'||(dialog==='hud-settings-panel'||dialog==='visor-settings-panel'));
+  const frozen=started&&(dialog==='paused'||dialog==='settings'||(dialog==='hud-settings-panel'||dialog==='visor-settings-panel'||dialog==='diagnostics-panel'));
   if(game&&started)world.setTime(dayPhase());
-  world.update(frozen?0:dt,camera,renderer);renderer.render(scene,camera);
-  if(started&&hand.visible&&dialog!=='suit-panel'){hand.update(frozen?0:dt,camera,{sun:world.sunLight,hemi:world.hemiLight},holdMine&&mineRatio>0,handBobX,handBobY);renderer.autoClear=false;renderer.clearDepth();renderer.render(hand.scene,camera);renderer.autoClear=true;}
+  measured=diagnostics.stage('camera',measured);
+  renderElapsed+=dt;
+  const renderScene=sceneReady&&!document.hidden&&(now-lastRender>=sceneInterval(started,running||liveDialogs.has(dialog),dialog,settings.quality)-.5||dialog!==lastRenderedDialog);
+  if(renderScene){
+   shadowAnchor.set(actor.x,actor.y,actor.z);
+   world.update(frozen?0:renderElapsed,camera,renderer,!started||(!frozen&&!dialog),diagnostics.enabled?(name,ms)=>diagnostics.span('world:'+name,ms):undefined,started?shadowAnchor:undefined);
+   measured=diagnostics.stage('world',measured);renderer.render(scene,camera);renderCalls=renderer.info.render.calls;renderTriangles=renderer.info.render.triangles;
+   if(started&&hand.visible&&dialog!=='suit-panel'){hand.update(frozen?0:renderElapsed,camera,{sun:world.sunLight,hemi:world.hemiLight},holdMine&&mineRatio>0,handBobX,handBobY);renderer.autoClear=false;renderer.clearDepth();renderer.render(hand.scene,camera);renderer.autoClear=true;renderCalls+=renderer.info.render.calls;renderTriangles+=renderer.info.render.triangles;}
+   if(captureRequested){const resolve=captureRequested;captureRequested=null;resolve(canvas.toDataURL('image/png'));}
+   lastRender=now;lastRenderedDialog=dialog;renderElapsed=0;
+  }
+  measured=diagnostics.stage('render-submit',measured);
   if(!frozen)audio.update(dt,started&&insideCapsule()?1:0,world.nightValue);
-  if(started){drawCompass(bearing(Math.sin(actor.yaw),Math.cos(actor.yaw)));updateMarker();computeAim();updateAimUI();}
+  if(started){drawCompass(bearing(Math.sin(actor.yaw),Math.cos(actor.yaw)));updateMarker();interaction.update(game,running);computeAim();updateAimUI();}
   if(running&&dt>0){frames.push(actualFrameMs);if(frames.length>180)frames.shift();}
-  if(now-lastUI>150){updateUI();lastUI=now;if(showMetrics){const s=state();const ob=el('objective').getBoundingClientRect();el('metrics').style.top=`${Math.round(ob.bottom+8)}px`;el('metrics').textContent=`S1 / WebGL2 / DPR ${renderer.getPixelRatio()} / ${settings.quality}\nВызовы: ${s.drawCalls} · треуг.: ${s.triangles}\nКадр p95: ${s.frameP95Ms.toFixed(1)} мс\nX ${actor.x.toFixed(1)} · Z ${actor.z.toFixed(1)}\nЭто замер текущего браузера`;}}
+  if(now-lastUI>150){updateUI();lastUI=now;if(showMetrics){const sorted=[...frames].sort((a,b)=>a-b),s={drawCalls:renderCalls,triangles:renderTriangles,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0};const ob=el('objective').getBoundingClientRect();el('metrics').style.top=`${Math.round(ob.bottom+8)}px`;el('metrics').textContent=`S2.7 / WebGL2 / DPR ${renderer.getPixelRatio()} / ${settings.quality}\nВызовы: ${s.drawCalls} · треуг.: ${s.triangles}\nКадр p95: ${s.frameP95Ms.toFixed(1)} мс\nX ${actor.x.toFixed(1)} · Z ${actor.z.toFixed(1)}\nЭто замер текущего браузера`;}}
+  diagnostics.stage('hud',measured);if(diagnostics.enabled)diagnostics.frame(diagnosticGapMs,workStart,diagnosticContext());
   requestAnimationFrame(draw);
  };
  document.body.dataset.started='false';applyQuality(settings.quality);applySound(settings.sound);applyBob(settings.bob);applyFov(settings.fov);fov=settings.fov;world.setTime(516,true);updateUI();
- document.body.dataset.running='false';requestAnimationFrame(draw);
- void initStore().then(()=>{document.body.dataset.ready='true';});
+ document.body.dataset.running='false';el<HTMLButtonElement>('start').disabled=true;requestAnimationFrame(draw);
+ void (async()=>{world.prepare(renderer);await renderer.compileAsync(scene,camera);await hand.prewarm(renderer,camera,{sun:world.sunLight,hemi:world.hemiLight});renderer.render(scene,camera);sceneReady=true;last=performance.now();await initStore();el<HTMLButtonElement>('start').disabled=false;document.body.dataset.ready='true';})().catch(e=>{console.error(e);error('Не удалось подготовить сцену: '+String(e));});
 }
 try { boot(); } catch(e){ console.error(e);error('Нужен браузер с WebGL 2. Попробуйте обновить браузер или открыть сцену на другом устройстве. '+(e instanceof Error?e.message:'')); }

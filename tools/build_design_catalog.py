@@ -12,7 +12,7 @@ soil_a|Грунт Верданы
 soil_b|Реголит Нивы
 soil_c|Пепельный грунт Пирры
 soil_asteroid|Астероидная крошка
-grass|Съедобная трава
+grass|Местная трава
 fiber|Растительные волокна
 pulp|Пищевая масса
 ice|Кусок льда
@@ -79,6 +79,7 @@ for metal in ['iron','copper','gold','velite','astrite']:
  item(metal+'_dust',items[metal]['name'].replace('слиток','пыль'))
  item(metal+'_speck',items[metal]['name'].replace('слиток','пылинка'))
 for i,n in [('water','Вода'),('oxygen','Кислород'),('hydrogen','Водород'),('co2','Газ CO₂'),('buffer_gas','Фоновый газ'),('oil','Нефть'),('fuel','Нефтяное горючее')]:item(i,n,'fluid',0)
+items['water']['stack']=64
 base_sources={'stone':['verdana','niva','asteroid','pyra'],'sand':['verdana','niva','pyra'],'grass':['verdana'],'ice':['verdana','niva'],'carbon':['verdana','niva','asteroid','pyra'],'carbonate':['verdana','niva','pyra'],'volatile_rock':['verdana','niva','pyra'],'hydrocarbon_rock':['niva','pyra'],'oil':['verdana'],'soil_a':['verdana'],'soil_b':['niva'],'soil_c':['pyra'],'soil_asteroid':['asteroid'],'iron_raw':['verdana','niva','asteroid','pyra'],'copper_raw':['verdana','niva','asteroid','pyra'],'gold_raw':['verdana','niva','asteroid','pyra'],'velite_raw':['niva','asteroid'],'astrite_raw':['pyra'],'seed_reed':['verdana'],'seed_tuber':['verdana'],'seed_bean':['verdana'],'seed_tree':['verdana'],'seed_potato':['niva'],'fragment_a':['verdana'],'fragment_b':['niva','asteroid'],'fragment_c':['pyra'],'blueprint_rocket':['verdana'],'blueprint_industry':['niva'],'blueprint_station':['asteroid'],'blueprint_heat':['pyra'],'ore_core':['asteroid'],'research_sample':['pyra']}
 base_sources['fiber']=['niva','pyra']
 for i,worlds in base_sources.items():items[i]['source']={'worlds':worlds,'method':'See WORLD and SYSTEMS; source does not imply a free spawn'}
@@ -172,6 +173,7 @@ bottle_2|Баллон II
 bottle_3|Баллон III
 canister|Канистра жидкости
 gas_canister|Канистра газа
+wrench|Гаечный ключ
 tool_stone|Каменный мультитул
 pick_iron|Железная кирка
 pick_steel|Стальная кирка
@@ -188,7 +190,7 @@ turret|Защитная турель
 ammo|Боеприпасы турели
 beacon|Навигационный маяк'''
 for line in objects.splitlines():
- i,n=line.split('|'); item(i,n,'equipment' if i.startswith(('suit','bottle','underwear','pick','drill','sword','jetpack','tool_')) or i in ['grapple','claws','canister','gas_canister','rocket_1','rocket_2','rocket_3','rover','trailer'] else 'placeable',1 if i.startswith(('suit','bottle','underwear','pick','drill','sword','jetpack','tool_','rocket')) or i in ['grapple','claws','canister','gas_canister','rover','trailer'] else 16)
+ i,n=line.split('|'); item(i,n,'equipment' if i.startswith(('suit','bottle','underwear','pick','drill','sword','jetpack','tool_')) or i in ['wrench','grapple','claws','canister','gas_canister','rocket_1','rocket_2','rocket_3','rover','trailer'] else 'placeable',1 if i.startswith(('suit','bottle','underwear','pick','drill','sword','jetpack','tool_','rocket')) or i in ['wrench','grapple','claws','canister','gas_canister','rover','trailer'] else 16)
 
 def R(id,station,inp,out,t=5,power=0,tech='start',scope='core',note=''):
  recipes.append(dict(id=id,station=station,inputs=inp,outputs=out,seconds=t,EU_per_second=power,tech=tech,scope=scope,note=note))
@@ -205,6 +207,7 @@ for metal in ['iron','copper','gold','velite','astrite']:
 R('glass','kiln',{'sand':2,'fiber':2},{'glass':1},6)
 R('charcoal','kiln',{'fiber':8},{'carbon':1},10,note='Требует окислитель печи как другие операции kiln.')
 R('steel','arc_furnace',{'iron':2,'carbon':1},{'steel':2},10,20,'power')
+C('wrench','workbench',{'iron':4,'copper':1},note='Многоразовый инструмент улучшения построек; не расходуется при улучшении.')
 C('wire','workbench',{'copper':1},count=4)
 C('cloth','hand',{'fiber':4})
 C('seal','workbench',{'fiber':2,'carbon':1},count=2)
@@ -306,7 +309,7 @@ C('oil_pump','fabricator',{'steel':4,'motor':1,'copper':2},tech='steel')
 C('oil_generator','fabricator',{'steel':6,'motor':2,'circuit':1},tech='steel')
 C('hydrogen_collector','fabricator',{'steel':4,'velite':4,'gas_tank':1,'circuit_adv':1},tech='velite')
 R('electrolysis','electrolyzer',{'water':1},{'oxygen':240,'hydrogen':480},10,12,'power',note='H₂ автоматически сбрасывается до установки модуля сбора; воду и газы учитывать разными игровыми единицами.')
-R('melt_in_generator','electrolyzer',{'ice':1},{'water':1},2,6,'power')
+R('melt_in_generator','kiln',{'ice':1,'fiber':1},{'water':1},2,0,'start',note='1 переносимая единица воды = 1 WU; слот сырья и слот топлива.')
 R('melt_bulk','ice_melter',{'ice':4},{'water':4},4,20,'steel')
 R('extract_co2','gas_extractor',{'carbonate':1},{'co2':40,'mineral_residue':1},10,30,'steel')
 R('extract_buffer','gas_extractor',{'volatile_rock':1},{'buffer_gas':40,'mineral_residue':1},10,30,'steel')
@@ -356,9 +359,10 @@ for r in recipes:
  for i in (*r['inputs'],*r['outputs']): assert i in items,(r['id'],i)
  assert r['station']=='hand' or r['station'] in items,r
 assert len({r['id'] for r in recipes})==len(recipes)
-data={'version':'1.1.0','status':'baseline_design_not_playtested','units':{'EU':'условная энергия','GU':'условная единица конкретного газа','WU':'условная единица воды','FU':'условная единица нефтепродукта'},'items':items,'recipes':recipes}
+upgrades={'workbench':{'fromLevel':1,'toLevel':2,'tool':'wrench','inputs':{'iron':6,'wire':4,'circuit':1},'EU_per_second':4,'queueCapacity':5}}
+data={'upgrades':upgrades,'version':'1.1.0','status':'baseline_design_not_playtested','units':{'EU':'условная энергия','GU':'условная единица конкретного газа','WU':'условная единица воды','FU':'условная единица нефтепродукта'},'items':items,'recipes':recipes}
 (ROOT/'docs/data/catalog.json').write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n')
-lines=['# Каталог предметов и рецептов — GDD 1.0','', '**Статус:** принятый по делегированию исходный баланс, не результат игрового теста. Единственный численный источник рецептов — [catalog.json](../data/catalog.json). Генератор таблицы: `tools/build_design_catalog.py`.','', 'Все новые баллоны, баки, аккумуляторы, ракеты и jetpack создаются пустыми. Улучшение переносит фактический остаток в пределах новой ёмкости; лишнее требует свободной тары, иначе крафт запрещён. Модифицированные предметы нельзя стакать. `hand` — ручной крафт. Время ручного крафта не ставит мир на паузу. Изготовление корпуса на верстаке/станции не расходует EU; рабочие операции машин расходуют указанную мощность. Помещение/свет/культура и природный источник являются дополнительными условиями, описанными в системной спецификации.','', 'Операции компоста, плавки и электролиза перечислены здесь; просеивание, выращивание, добыча, генерация энергии, ремонт и планетарные эффекты имеют формулы в соседних разделах. Нет скрытого рецепта получения любого предмета через универсальную валюту.','', '## Рецепты','', '| ID | Где | Вход | Выход | Секунды | EU/с | Технология / объём |','| --- | --- | --- | --- | ---: | ---: | --- |']
+lines=['# Каталог предметов и рецептов — GDD 1.0','', '**Статус:** принятый по делегированию исходный баланс, не результат игрового теста. Единственный численный источник рецептов — [catalog.json](../data/catalog.json). Генератор таблицы: `tools/build_design_catalog.py`.','', 'Все новые баллоны, баки, аккумуляторы, ракеты и jetpack создаются пустыми. Улучшение переносит фактический остаток в пределах новой ёмкости; лишнее требует свободной тары, иначе крафт запрещён. Модифицированные предметы нельзя стакать. `hand` — ручной крафт. Время ручного крафта не ставит мир на паузу. Карманный крафт использует до двух типов материалов, без очереди. Верстак I имеет четыре входных слота и одну ручную работу: вдали от игрока работа приостанавливается. Верстак II имеет очередь до пяти партий вместе с активной; работает автономно за 4 EU/с только во время сборки. Улучшение I → II: многоразовый ключ в выбранной ячейке быстрого доступа, 6 железа, 4 провода, 1 электроника; текущую работу сначала завершить. Изготовление корпуса на обычном верстаке/станции не расходует EU; рабочие операции машин расходуют указанную мощность. Помещение/свет/культура и природный источник являются дополнительными условиями, описанными в системной спецификации.','', 'Операции компоста, плавки и электролиза перечислены здесь; просеивание, выращивание, добыча, генерация энергии, ремонт и планетарные эффекты имеют формулы в соседних разделах. Нет скрытого рецепта получения любого предмета через универсальную валюту.','', '## Рецепты','', '| ID | Где | Вход | Выход | Секунды | EU/с | Технология / объём |','| --- | --- | --- | --- | ---: | ---: | --- |']
 def desc(d):return ', '.join(f'{v} × {items[k]["name"]}' for k,v in d.items()) or '—'
 for r in recipes:
  lines.append(f'| {r["id"]} | {items.get(r["station"],{}).get("name","Вручную")} | {desc(r["inputs"])} | {desc(r["outputs"])} | {r["seconds"]} | {r["EU_per_second"]} | {r["tech"]} / {r["scope"]} |')

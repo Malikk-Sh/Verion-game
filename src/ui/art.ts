@@ -10,6 +10,28 @@ import helmet from '../assets/items/suit_helmet.webp';
 import chest from '../assets/items/suit_chest.webp';
 import legs from '../assets/items/suit_legs.webp';
 import boots from '../assets/items/suit_boots.webp';
+import sprite_wrench from '../assets/items/wrench.webp';
+import sprite_fiber from '../assets/items/fiber.webp';
+import sprite_iron from '../assets/items/iron.webp';
+import sprite_copper from '../assets/items/copper.webp';
+import sprite_grass from '../assets/items/grass.webp';
+import sprite_sand from '../assets/items/sand.webp';
+import sprite_glass from '../assets/items/glass.webp';
+import sprite_wire from '../assets/items/wire.webp';
+import sprite_circuit from '../assets/items/circuit.webp';
+import sprite_cable from '../assets/items/cable.webp';
+import sprite_gas_pipe from '../assets/items/gas_pipe.webp';
+import sprite_workbench from '../assets/items/workbench.webp';
+import sprite_kiln from '../assets/items/kiln.webp';
+import sprite_biogenerator from '../assets/items/biogenerator.webp';
+import sprite_electrolyzer from '../assets/items/electrolyzer.webp';
+import sprite_refill from '../assets/items/refill.webp';
+import sprite_distributor from '../assets/items/distributor.webp';
+import sprite_dome from '../assets/items/dome.webp';
+import sprite_workbench_2 from '../assets/items/workbench_2.webp';
+import sprite_water from '../assets/items/water.webp';
+import sprite_oxygen from '../assets/items/oxygen.webp';
+import sprite_hydrogen from '../assets/items/hydrogen.webp';
 import figureBoots from '../assets/figure/suit_boots.webp';
 /**
  * Shared local raster sprites: one asset for hotbar, inventory, equipment and inspection.
@@ -19,6 +41,12 @@ import figureBoots from '../assets/figure/suit_boots.webp';
 export const ITEM_ART: Partial<Record<string, string>> = {
  tool_stone: tool, bottle_1: tank, pulp: food, iron_raw: iron, copper_raw: copper,
  ice, stone, suit_helmet: helmet, suit_chest: chest, suit_legs: legs, suit_boots: boots,
+ wrench: sprite_wrench, fiber: sprite_fiber, iron: sprite_iron, copper: sprite_copper,
+ grass: sprite_grass, sand: sprite_sand, glass: sprite_glass, wire: sprite_wire, circuit: sprite_circuit,
+ cable: sprite_cable, gas_pipe: sprite_gas_pipe, workbench: sprite_workbench, kiln: sprite_kiln,
+ biogenerator: sprite_biogenerator, electrolyzer: sprite_electrolyzer, refill: sprite_refill,
+ distributor: sprite_distributor, dome: sprite_dome, workbench_2: sprite_workbench_2,
+ water: sprite_water, oxygen: sprite_oxygen, hydrogen: sprite_hydrogen,
 };
 /** Boots use a stance-specific sprite; removed parts become faint placement guides. */
 export const FIGURE_ART: { parts: Record<SuitPart, string> } = { parts: { helmet, chest, legs, boots: figureBoots } };
@@ -41,7 +69,7 @@ const PART_ITEM: Record<SuitPart, string> = { helmet: 'suit_helmet', chest: 'sui
 export function itemArt(id: string, cls = 'art'): HTMLElement {
  const box = document.createElement('span'); box.className = cls; box.dataset.item = id;
  const url = ITEM_ART[id];
- if (url) { const img = document.createElement('img'); img.src = url; img.alt = ''; img.draggable = false; box.append(img); }
+ if (url) { const img = document.createElement('img'); img.src = url; img.alt = ''; img.decoding = 'async'; img.draggable = false; box.append(img); }
  else box.innerHTML = `<svg viewBox="0 0 48 48" aria-hidden="true">${P[id] ?? '<circle cx="24" cy="24" r="12" fill="#3a5a5c"/>'}</svg>`;
  box.title = ITEMS[id]?.name ?? id;
  return box;

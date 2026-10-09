@@ -43,17 +43,17 @@
 </defs></svg>
 <canvas id="world" aria-label="Трёхмерная долина Верданы"></canvas>
 <div id="visor" aria-hidden="true" hidden></div>
+<div id="survival-alert" aria-live="assertive" aria-hidden="true"><span class="alert-mark">!</span><span id="survival-alert-text">КИСЛОРОД КРИТИЧЕСКИ НИЗКИЙ</span></div>
 <div id="hud">
- <div id="vitals" title="Здоровье и сытость отображаются; их расход появится на этапе «Выживание»">
+ <div id="vitals" title="Кислород, здоровье и сытость расходуются только в активное игровое время">
   <div class="gauge" id="g-health" data-kind="health" role="img" aria-label="Здоровье"><span class="vital-readout"><svg class="g-icon"><use href="#i-heart"/></svg><b>100</b></span></div>
   <div class="gauge" id="g-satiety" data-kind="satiety" role="img" aria-label="Сытость"><span class="vital-readout"><svg class="g-icon"><use href="#i-food"/></svg><b>100</b></span></div>
   <div class="gauge" id="g-oxygen" data-kind="oxygen" role="img" aria-label="Кислород"><span class="vital-readout"><svg class="g-icon"><use href="#i-o2"/></svg><b>240</b><small>GU</small></span></div>
  </div>
  <div id="hud-safe-area" aria-hidden="true"></div>
- <button id="objective" aria-expanded="false" aria-controls="objective-panel"><svg class="obj-arrow"><use href="#i-arrow"/></svg><span id="objective-text">Выйдите из капсулы</span><svg class="obj-chevron"><use href="#i-chevron"/></svg></button>
+ <button id="objective" aria-expanded="false" aria-controls="quest-panel"><svg class="obj-arrow"><use href="#i-arrow"/></svg><span id="objective-text">Дерево развития</span><svg class="obj-chevron"><use href="#i-chevron"/></svg></button>
  <div id="compass-wrap"><canvas id="compass" aria-hidden="true"></canvas><div id="navigation"><span class="nav-arrow"><svg><use href="#i-arrow"/></svg></span><span id="target-name">Железо</span><span id="target-distance"></span></div></div>
  <nav id="hud-buttons" aria-label="Меню">
-  <button id="suit-button" class="tile" title="Костюм [C]" aria-label="Костюм"><svg><use href="#i-helmet"/></svg><span>Костюм</span></button>
   <button id="inventory-button" class="tile" title="Рюкзак [I]" aria-label="Рюкзак"><svg><use href="#i-pack"/></svg><span>Рюкзак</span></button>
   <button id="map-button" class="tile" title="Карта [M]" aria-label="Карта"><svg><use href="#i-map"/></svg><span>Карта</span></button>
   <button id="day" class="tile" title="Сменить день и ночь [N]" aria-label="Сменить день и ночь"><span id="light-icon"><svg><use href="#i-sun"/></svg></span><span id="light-text">День</span></button>
@@ -62,6 +62,7 @@
  <div id="toast" aria-live="polite" hidden><span class="mono tiny" id="toast-kind">ОБНАРУЖЕНО</span><strong id="toast-text"></strong></div>
  <div id="target-marker" aria-hidden="true"><i></i><span id="marker-distance"></span></div>
  <div id="reticle" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+ <button id="retrieve-station" hidden aria-label="Забрать станцию [R]">Забрать · R</button>
  <div id="aim" hidden aria-live="polite"><span id="aim-name"></span><span id="aim-meta"></span><i id="aim-bar"><b></b></i></div>
  <div id="hotbar" role="group" aria-label="Быстрый доступ — первая строка рюкзака"><div id="hotbar-title"><b id="hotbar-name"></b><span id="hotbar-meta"></span></div><div id="hotbar-slots"></div></div>
  <div id="joystick" role="group" aria-label="Джойстик движения"><div class="stick-ring"><span class="stick-ticks"></span><i class="stick-dir up"></i><i class="stick-dir down"></i><i class="stick-dir left"></i><i class="stick-dir right"></i><div id="stick"></div></div></div>
@@ -76,12 +77,25 @@
    <h1 class="wordmark">VIREON</h1>
    <p class="lede">Холодная долина. Одна капсула.<br>Первый шаг человека на новой планете.</p>
    <div class="title-actions"><button id="continue" class="primary" hidden>Продолжить <span aria-hidden="true">→</span></button><button id="start" class="primary">Новая экспедиция <span aria-hidden="true">→</span></button><button id="title-saves" class="secondary" aria-label="Сохранения"><svg><use href="#i-save"/></svg><span>Сохранения</span></button><button id="title-settings" class="secondary" aria-label="Настройки"><svg><use href="#i-gear"/></svg><span>Настройки</span></button></div>
-   <p id="title-continue-info" class="help mono" hidden></p><p class="help">Телефон: джойстик и свайп, основная кнопка справа — действие (удерживайте «Добыть»). Компьютер: WASD, обзор мышью, Space — прыжок, F — действие, 1–6 — быстрый доступ, I — рюкзак, C — костюм, N — день/ночь.<br>Лучше всего — в горизонтальном режиме, со звуком.</p>
+   <p id="title-continue-info" class="help mono" hidden></p><p class="help">Телефон: джойстик и свайп, основная кнопка справа — действие (удерживайте «Добыть»). Компьютер: WASD, обзор мышью, Space — прыжок, F — действие, 1–6 — быстрый доступ, I — рюкзак, C — костюм, J — дерево развития, N — день/ночь.<br>Лучше всего — в горизонтальном режиме, со звуком.</p>
   </div>
-  <div class="title-foot mono tiny"><span class="build-tag">S1.1</span> Этап «Основа»: добыча конечных ресурсов, рюкзак с быстрым доступом, костюм из четырёх частей, смена дня и ночи, сохранение в браузере и экспорт/импорт файла. Кислород, крафт и строительство — следующий этап.</div>
  </section>
- <section id="paused" class="panel pause-panel" hidden><div class="mono tiny kicker">VIREON / МЕНЮ ЭКСПЕДИЦИИ</div><h2 id="pause-title">Пауза</h2><div class="menu-grid"><button id="resume" class="primary">Продолжить <span aria-hidden="true">→</span></button><button id="save-now" class="secondary"><svg><use href="#i-save"/></svg><span>Сохранить</span></button><button id="saves-button" class="secondary"><svg><use href="#i-download"/></svg><span>Сохранения</span></button><button id="settings-button" class="secondary"><svg><use href="#i-gear"/></svg><span>Настройки</span></button><button id="reset" class="secondary"><svg><use href="#i-home"/></svg><span>К капсуле</span></button></div><p id="pause-save-info" class="help mono"></p><p class="help">Мир сохраняется сам каждые 30 активных секунд, при паузе и сворачивании. «К капсуле» — служебный возврат, не телепортация будущей игры.</p></section>
- <section id="objective-panel" class="panel" hidden aria-label="Текущая задача"><div class="panel-heading"><h2>Задача</h2><button id="close-objective" class="icon-button" aria-label="Закрыть задачу">×</button></div><p id="objective-detail"></p><button id="objective-back" class="primary">Продолжить</button></section>
+ <section id="paused" class="panel pause-panel" hidden><div class="mono tiny kicker">VIREON / МЕНЮ ЭКСПЕДИЦИИ</div><h2 id="pause-title">Пауза</h2><div class="menu-grid"><button id="resume" class="primary">Продолжить <span aria-hidden="true">→</span></button><button id="save-now" class="secondary"><svg><use href="#i-save"/></svg><span>Сохранить</span></button><button id="saves-button" class="secondary"><svg><use href="#i-download"/></svg><span>Сохранения</span></button><button id="quests-button" class="secondary"><svg><use href="#i-split"/></svg><span>Дерево развития</span></button><button id="settings-button" class="secondary"><svg><use href="#i-gear"/></svg><span>Настройки</span></button><button id="reset" class="secondary"><svg><use href="#i-home"/></svg><span>К капсуле</span></button></div><p id="pause-save-info" class="help mono"></p><p class="help">Мир сохраняется сам каждые 30 активных секунд, при паузе и сворачивании. «К капсуле» — служебный возврат, не телепортация будущей игры.</p></section>
+ <section id="death-panel" class="panel pause-panel" hidden aria-label="Возрождение">
+  <div class="mono tiny kicker">VIREON / АВАРИЙНЫЙ ПРОТОКОЛ</div><h2>Экспедиция прервана</h2>
+  <p>Груз остался на месте аварии. Костюм и установленные баллоны сохранены.</p>
+  <button id="respawn-capsule" class="primary">Возродиться в капсуле <span aria-hidden="true">→</span></button>
+  <p class="help">50 здоровья, 40 сытости. Если капсула пуста — 90 секунд личного аварийного дыхания. Запасы газа не пополняются. Время остановлено до возрождения.</p>
+ </section>
+ <section id="quest-panel" class="panel ui-panel" hidden role="dialog" aria-modal="true" aria-labelledby="quest-title">
+  <header class="quest-head"><h2 id="quest-title">Дерево развития</h2><span class="quest-world">Вердана</span><button id="quest-close" class="ui-close" aria-label="Закрыть дерево развития"><svg><use href="#i-close"/></svg></button></header>
+  <div class="quest-workspace"><div id="quest-viewport" aria-label="Карта развития: прокрутка в двух направлениях"><div id="quest-extent"><div id="quest-canvas">
+   <div class="quest-columns" aria-hidden="true"><span style="left:14px;width:228px">Основы</span><span style="left:256px;width:82px">Обработка</span><span style="left:385px;width:226px">Сборка</span><span style="left:650px;width:220px">Рабочие системы</span><span style="left:915px;width:97px">Веха</span></div>
+   <span id="quest-station" aria-label="Общее требование сборки — верстак I">Верстак I</span>
+   <svg class="quest-links" viewBox="0 0 1018 638" role="img" aria-label="Связи слева направо. В точках И нужны все входящие ветви."><defs><marker id="quest-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8" fill="context-stroke"/></marker></defs><g id="quest-route-layer"></g><g id="quest-hub-layer"></g></svg><div id="quest-nodes"></div>
+  </div></div></div><section id="quest-detail" hidden aria-labelledby="quest-detail-title"></section></div>
+  <footer class="quest-foot"><div class="quest-legend"><span><b class="quest-done">✓</b> Выполнено</span><span><b class="quest-ready"></b> Доступно</span><span><b></b> Позже</span><span><b>И</b> Все условия</span></div><div class="quest-zoom"><button id="quest-zoom-out" aria-label="Уменьшить карту">−</button><button id="quest-fit">Обзор</button><button id="quest-zoom-in" aria-label="Увеличить карту">+</button></div></footer><p id="quest-announcement" class="quest-sr" aria-live="polite"></p>
+ </section>
  <section id="settings" class="panel settings-panel" hidden><div class="panel-heading"><div><div class="mono tiny kicker">VIREON / НАСТРОЙКИ</div><h2>Настройки</h2></div><button id="settings-back" class="icon-button" aria-label="Закрыть настройки">×</button></div>
   <div class="settings-grid">
    <button id="fullscreen-toggle" class="secondary" aria-pressed="false"><svg><use href="#i-expand"/></svg><span data-fullscreen-label>На весь экран</span></button>
@@ -89,17 +103,19 @@
    <button id="sound-toggle" class="secondary" aria-pressed="true"><svg><use href="#i-sound"/></svg><span id="sound-label">Звук: вкл.</span></button>
    <button id="bob-toggle" class="secondary" aria-pressed="true"><svg><use href="#i-wave"/></svg><span id="bob-label">Покачивание: вкл.</span></button>
    <label class="range-row" for="fov-range"><svg><use href="#i-eye"/></svg><span>Поле зрения</span><input id="fov-range" type="range" min="60" max="95" step="1" value="70"><output id="fov-value">70°</output></label>
+   <button id="diagnostics-button" class="secondary">Диагностика зависаний →</button>
    <button id="metrics-toggle" class="ghost">Показать показатели сцены</button>
   </div>
   <div class="settings-ui-links"><button id="hud-settings-button" class="secondary">Размер интерфейса →</button><button id="visor-settings-button" class="secondary">Эффект визора →</button></div>
   <p id="fullscreen-status" role="status" aria-live="polite"></p>
-  <p class="help">Качество: «экономная» — без теней и пыли; «высокая» — большие тени и чёткость экрана. Покачивание отключает качание камеры и расширение обзора при беге. Настройки сохраняются в этом браузере.</p>
+  <p class="help">Качество: «экономная» — сниженная чёткость 3D, без динамических теней, пыли и мелкой гальки; «высокая» — большие тени и чёткость экрана. Покачивание отключает качание камеры и расширение обзора при беге. Настройки сохраняются в этом браузере.</p>
  </section>
+ <section id="diagnostics-panel" class="panel settings-panel" hidden aria-label="Диагностика зависаний"><div class="panel-heading"><h2>Диагностика</h2><button id="diagnostics-back" class="icon-button" aria-label="Назад в настройки">×</button></div><p class="help">Начните запись, вернитесь в игру и повторите зависание или проблемное действие. Затем сохраните лог и приложите его к сообщению. Запись продолжается после закрытия меню.</p><div class="menu-grid"><button id="diagnostics-toggle" class="primary">Начать новую запись</button><button id="diagnostics-export" class="secondary">Сохранить лог .json</button><button id="diagnostics-clear" class="ghost">Очистить запись</button></div><p id="diagnostics-status" class="help" role="status"></p><p class="help">Лог содержит время кадров, операции игры, качество графики и характеристики браузера. Ограничен по размеру; сохранения мира и содержимое рюкзака в него не входят.</p></section>
  <section id="hud-settings-panel" class="panel" hidden aria-label="Размер интерфейса"><div class="hud-settings-head"><h2>Размер интерфейса</h2><button id="hud-settings-back" class="secondary">← Настройки</button></div><div id="hud-settings-grid" class="hud-settings-grid"></div><div class="hud-settings-actions"><button id="hud-reset" class="secondary">Сбросить размеры</button><button id="hud-preview" class="secondary" hidden>Проверить в игре</button></div><p class="help">100% — средний размер. Сохраняется автоматически. Крупные элементы подстраиваются под экран.</p></section>
  <section id="visor-settings-panel" class="panel" hidden aria-label="Эффект визора"><div class="hud-settings-head"><h2>Эффект визора</h2><button id="visor-settings-back" class="secondary">← Настройки</button></div><div id="visor-settings-grid" class="visor-settings-grid"></div><div class="hud-settings-actions"><button id="visor-reset" class="secondary">Сбросить эффект</button><button id="visor-preview" class="secondary" hidden>Проверить в игре</button></div><p class="help">100% — стандартный эффект. Сила 0% отключает эффект. Визор виден только в надетом шлеме. Настройки сохраняются автоматически.</p></section>
  <section id="map-panel" class="panel map-panel" hidden><div class="panel-heading"><div><div class="mono tiny kicker">ВЕРДАНА / НАВИГАЦИЯ</div><h2>Долина прибытия</h2></div><button id="close-map" class="icon-button" aria-label="Закрыть карту">×</button></div><div class="map-layout"><canvas id="map" width="480" height="480" aria-label="Карта участка и положения игрока"></canvas><div><p class="help">Выберите ориентир — указатель появится на компасе и в мире.</p><div id="landmark-list"></div></div></div></section>
  <section id="inventory-panel" class="panel ui-panel inv-panel" hidden aria-label="Инвентарь">
-  <div class="ui-head"><h2>Инвентарь</h2><button id="close-inventory" class="ui-close" aria-label="Закрыть инвентарь"><svg><use href="#i-close"/></svg></button></div>
+  <div class="ui-head"><h2>Инвентарь</h2><button id="craft-button" class="ui-btn">Крафт</button><button id="close-inventory" class="ui-close" aria-label="Закрыть инвентарь"><svg><use href="#i-close"/></svg></button></div>
   <div class="inv-body">
    <div class="inv-gear"><h3>Снаряжение</h3>
     <div class="suit-card"><span class="card-label">Костюм</span><div class="suit-card-row"><div id="suit-thumb" class="suit-thumb"></div><div class="suit-card-side"><div id="suit-minis" class="suit-minis"></div><button id="open-suit" class="ui-btn">Открыть <svg><use href="#i-next"/></svg></button></div></div></div>
@@ -110,6 +126,10 @@
     <p id="pack-hint" class="pack-hint" aria-live="polite"></p></div>
    <div id="inv-detail" class="inv-detail"></div>
   </div>
+ </section>
+ <section id="production-panel" class="panel ui-panel production-panel" hidden aria-label="Производство">
+  <div class="ui-head"><h2>Мастерская</h2><button id="close-production" class="ui-close" aria-label="Закрыть мастерскую">×</button></div>
+  <p id="production-message" class="production-message" aria-live="polite"></p><div id="production-content" class="production-content"></div>
  </section>
  <section id="suit-panel" class="panel ui-panel suit-panel" hidden aria-label="Костюм">
   <div class="ui-head"><button id="suit-back" class="ui-btn back"><svg><use href="#i-back"/></svg><span>Инвентарь</span></button><h2>Костюм</h2><button id="close-suit" class="ui-close" aria-label="Закрыть костюм"><svg><use href="#i-close"/></svg></button></div>

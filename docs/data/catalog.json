@@ -1,4 +1,18 @@
 {
+  "upgrades": {
+    "workbench": {
+      "fromLevel": 1,
+      "toLevel": 2,
+      "tool": "wrench",
+      "inputs": {
+        "iron": 6,
+        "wire": 4,
+        "circuit": 1
+      },
+      "EU_per_second": 4,
+      "queueCapacity": 5
+    }
+  },
   "version": "1.1.0",
   "status": "baseline_design_not_playtested",
   "units": {
@@ -80,7 +94,7 @@
       }
     },
     "grass": {
-      "name": "Съедобная трава",
+      "name": "Местная трава",
       "kind": "item",
       "stack": 64,
       "source": {
@@ -619,7 +633,7 @@
     "water": {
       "name": "Вода",
       "kind": "fluid",
-      "stack": 0
+      "stack": 64
     },
     "oxygen": {
       "name": "Кислород",
@@ -1104,6 +1118,11 @@
     },
     "gas_canister": {
       "name": "Канистра газа",
+      "kind": "equipment",
+      "stack": 1
+    },
+    "wrench": {
+      "name": "Гаечный ключ",
       "kind": "equipment",
       "stack": 1
     },
@@ -1686,6 +1705,22 @@
       "tech": "power",
       "scope": "core",
       "note": ""
+    },
+    {
+      "id": "craft_wrench",
+      "station": "workbench",
+      "inputs": {
+        "iron": 4,
+        "copper": 1
+      },
+      "outputs": {
+        "wrench": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": "Многоразовый инструмент улучшения построек; не расходуется при улучшении."
     },
     {
       "id": "craft_wire",
@@ -3958,18 +3993,19 @@
     },
     {
       "id": "melt_in_generator",
-      "station": "electrolyzer",
+      "station": "kiln",
       "inputs": {
-        "ice": 1
+        "ice": 1,
+        "fiber": 1
       },
       "outputs": {
         "water": 1
       },
       "seconds": 2,
-      "EU_per_second": 6,
-      "tech": "power",
+      "EU_per_second": 0,
+      "tech": "start",
       "scope": "core",
-      "note": ""
+      "note": "1 переносимая единица воды = 1 WU; слот сырья и слот топлива."
     },
     {
       "id": "melt_bulk",

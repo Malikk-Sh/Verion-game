@@ -13,6 +13,14 @@ for r in rs:
  for group in ['inputs','outputs']:
   assert r[group]
   for i,q in r[group].items():assert i in items and isinstance(q,int) and q>0,(r['id'],i,q)
+# Paid reusable-tool upgrades are canonical alongside recipes.
+for station,u in d.get('upgrades',{}).items():
+ assert station in items and u['tool'] in items
+ assert items[u['tool']]['kind']=='equipment' and items[u['tool']]['stack']==1
+ assert isinstance(u['fromLevel'],int) and u['toLevel']==u['fromLevel']+1
+ assert isinstance(u['queueCapacity'],int) and 1<=u['queueCapacity']<=5
+ assert u['EU_per_second']>0 and u['inputs']
+ for item,q in u['inputs'].items():assert item in items and isinstance(q,int) and q>0
 # Qualitative reachability including station, technology, world and tool gates.
 # Does NOT prove quantities, path geometry, random seed arrival time or power uptime.
 def reach(scopes):

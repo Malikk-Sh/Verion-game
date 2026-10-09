@@ -282,3 +282,30 @@ test('V17: imported drop IDs remain unique and both separate piles can be picked
  assert.equal(next.world.drops.length, 0);
  store.close();
 });
+
+test('S2: immediate death/respawn saves preserve lost cargo and personal reserve through reload/export', async () => {
+ const { loseCargo, respawnAtCapsule, survivalTick } = await import('../src/game/survival.ts');
+ const store = await open(new IDBFactory()), original = newGame('w-death', 1, 1, .5);
+ await store.createSlot(original, 'A');
+ let current = cloneState(original);
+ current.player.x = 60; current.player.z = 60;
+ current.world.capsuleMilliGU = 0; current.player.bottles[0]!.milliGU = 0;
+ const saver = new Saver(store, 'w-death', 'A', 1, 0, () => cloneState(current));
+ loseCargo(current); await saver.save();
+ current = (await store.load('w-death')).state;
+ assert.equal(current.player.vitals.health, 0);
+ assert.equal(current.world.drops.length, 1);
+ assert.equal(current.player.inventory.filter(Boolean).length, 0);
+ assert.deepEqual(parseImport(exportText(buildExport(current, saver.revision, 0))).state, current);
+ respawnAtCapsule(current, .64); await saver.save();
+ current = (await store.load('w-death')).state;
+ assert.equal(current.player.vitals.health, 50); assert.equal(current.player.survival.emergencyMs, 90000);
+ survivalTick(current, 7, true); await saver.save();
+ const reloaded = (await store.load('w-death')).state;
+ assert.equal(reloaded.player.survival.emergencyMs, 83000);
+ assert.equal(reloaded.world.capsuleMilliGU, 0); assert.equal(reloaded.player.bottles[0]!.milliGU, 0);
+ assert.equal(reloaded.world.drops.length, 1);
+ assert.equal(pickUp(reloaded, reloaded.world.drops[0].id), 5);
+ assert.equal(reloaded.world.drops.length, 0);
+ store.close();
+});

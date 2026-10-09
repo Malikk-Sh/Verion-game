@@ -32,7 +32,7 @@ export function splitSlot(inv: Slot[], i: number): Result {
  const half = Math.floor(s.count / 2); s.count -= half; inv[to] = { itemId: s.itemId, count: half };
  return { ok: true, index: to };
 }
-const ORDER = { tool: 0, tank: 1, suit: 2, food: 3, resource: 4 } as const;
+const ORDER = { tool: 0, tank: 1, suit: 2, food: 3, resource: 4, building: 5 } as const;
 /** Sorts cells 7…24 only: merges equal stacks, then orders by category and name. The first row is untouched. */
 export function sortRest(inv: Slot[]) {
  const rest = inv.slice(HOTBAR_SIZE).filter((s): s is NonNullable<Slot> => !!s);
@@ -54,6 +54,15 @@ export function dropSlot(state: GameState, i: number, count?: number): Result {
  return { ok: true };
 }
 export const selectHotbar = (state: GameState, i: number) => { if (inRange(i, HOTBAR_SIZE)) state.player.hotbar = i; };
+/** Ready the exact selected body/line for a world action, using a free quick-access cell first. */
+export function readyWorldItem(state: GameState, from: number): Result {
+ const inv=state.player.inventory;
+ if(!inRange(from,inv.length)||!inv[from])return fail('Ячейка пуста');
+ const free=inv.slice(0,HOTBAR_SIZE).findIndex(s=>!s),to=from<HOTBAR_SIZE?from:free>=0?free:state.player.hotbar;
+ const result=moveSlot(inv,from,to);
+ if(result.ok)selectHotbar(state,to);
+ return result;
+}
 /** The tool in the selected hotbar cell, or null — the active tool is defined by the selection, not by search. */
 export function selectedTool(state: GameState) {
  const s = state.player.inventory[state.player.hotbar];

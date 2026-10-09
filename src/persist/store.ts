@@ -33,6 +33,7 @@ const manifestKey = (slotId: string, revision: number) => `${slotId}#${revision}
 const pageKey = (slotId: string, p: Page) => `${slotId}:${p.kind}:${p.hash}`;
 export class SaveStore {
  faults?: FaultHook;
+ measure?: (name:string,ms:number)=>void;
  private constructor(private db: IDBDatabase, private now: () => number) {}
  static async open(factory: IDBFactory | undefined = globalThis.indexedDB, name = DB_NAME, now: () => number = Date.now): Promise<SaveStore> {
   if (!factory) throw new SaveError('unavailable', 'IndexedDB недоступна в этом браузере');
@@ -114,7 +115,7 @@ export class SaveStore {
   await this.gc(slotId).catch(() => { /* Unreachable pages are retried on the next commit. */ });
   return revision;
  }
- private encode(state: GameState) { this.faults?.('encode'); return encodePages(state); }
+ private encode(state: GameState) { this.faults?.('encode');const at=performance.now(),pages=encodePages(state);this.measure?.('save:encode',performance.now()-at);return pages; }
  private manifest(slotId: string, revision: number, baseRevision: number, state: GameState, pages: Page[]): Manifest {
   return { key: manifestKey(slotId, revision), slotId, revision, baseRevision, snapshotTick: state.meta.activeTicks, savedAt: this.now(), formatVersion: 1, pages: Object.fromEntries(pages.map(p => [p.kind, p.hash])) as Record<PageKind, string> };
  }

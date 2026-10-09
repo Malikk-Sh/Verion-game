@@ -1,0 +1,71 @@
+/* Keep the dense catalogue, with explicit access to the full bag on short screens. */
+.craft-inventory-switch { display: none; }
+.craft-search-row { grid-template-columns: minmax(0, 1fr) max-content; }
+.craft-filter { padding: 4px 6px; font-size: 10px; }
+.craft-legend { display: flex; flex-wrap: wrap; gap: 3px 8px; margin: 0 0 5px; color: #9dbbc4; font-size: 10px; line-height: 1.3; }
+.craft-legend > span:first-child { color: #74d6cf; }
+.craft-lock, .craft-lock-label { position: relative; }
+.craft-lock { position: absolute; top: 6px; right: 5px; width: 10px; height: 12px; }
+.craft-lock-label { padding-left: 13px; }
+.craft-lock::before, .craft-lock-label::before {
+  content: ''; position: absolute; left: 0; bottom: 0; width: 9px; height: 7px;
+  border: 1px solid #b8c4c9; border-radius: 1px; background: #1b2b34;
+}
+.craft-lock::after, .craft-lock-label::after {
+  content: ''; position: absolute; left: 2px; bottom: 6px; width: 5px; height: 5px;
+  border: 1px solid #b8c4c9; border-bottom: 0; border-radius: 4px 4px 0 0;
+}
+.craft-work-status { flex-shrink: 0; }
+.craft-work { display: flex; flex-direction: column; overflow: hidden; }
+.craft-queue { display: flex; flex-direction: column; min-height: 0; flex-shrink: 0; }
+.craft-queue[data-expanded=true] { flex: 1; }
+.craft-queue-toggle { flex-shrink: 0; width: 100%; text-align: left; background: #101e27; border-color: transparent; }
+.craft-queue-toggle::before { content: '▸'; margin-right: 5px; }
+.craft-queue-toggle[aria-expanded=true]::before { content: '▾'; }
+.craft-queue-items { overflow: auto; min-height: 0; overscroll-behavior: contain; }
+.craft-queue-items[hidden] { display: none; }
+.craft-queue-items > .craft-button { width: 100%; }
+.craft-buffer-tools { min-height: 32px; overflow: auto; flex-shrink: 1; }
+.craft-work-status + .craft-work:empty { flex: 0; }
+.craft-layout .craft-bag-notice { color: #f1c570; font-size: 11px; margin: 0 0 5px; }
+.craft-bag-notice[hidden] { display: none; }
+.craft-backpack.craft-bag-blocked .craft-section-title { color: #f1c570; }
+.craft-button.craft-bag-blocked { border-color: #e4b14c; color: #f1c570; }
+.ui-panel.production-panel.crafting-panel.craft-upgrade-panel { height: auto; }
+.craft-assembly > .craft-upgrade-action { display: block; width: 100%; min-height: 36px; margin: 8px 0 0; }
+.craft-assembly > .craft-upgrade-back { margin: 5px 0 0; }
+.craft-layout .craft-upgrade-paid { margin: 8px 0 0; color: #8addc6; font-size: 12px; }
+
+@media (max-width: 720px), (max-height: 430px) {
+  .ui-panel.production-panel.crafting-panel.craft-upgrade-panel { height: calc(100dvh - 12px); }
+  .craft-center[data-view], .craft-upgrade-preview[data-view] {
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .craft-inventory-switch { display: flex; gap: 3px; flex-shrink: 0; margin-bottom: 4px; }
+  .craft-inventory-switch > button { flex: 1; padding: 3px; font-size: 10px; white-space: nowrap; }
+  .craft-center[data-view] > .craft-assembly,
+  .craft-center[data-view] > .craft-backpack,
+  .craft-upgrade-preview[data-view] > .craft-backpack { min-height: 0; overflow: auto; }
+  .craft-center[data-view=assembly] > .craft-backpack,
+  .craft-center[data-view=bag] > .craft-assembly,
+  .craft-upgrade-preview[data-view=assembly] > .craft-backpack,
+  .craft-upgrade-preview[data-view=bag] > .craft-station-comparison { display: none; }
+  .craft-center[data-view] > .craft-backpack,
+  .craft-upgrade-preview[data-view] > .craft-backpack { margin-top: 0; }
+  .craft-center[data-view] > .craft-backpack > .craft-section-title,
+  .craft-upgrade-preview[data-view] > .craft-backpack > .craft-section-title { display: none; }
+  .craft-inventory { max-width: 215px; }
+  .craft-work-status .craft-section-title { margin-bottom: 2px; }
+  .craft-work-status .craft-power { margin: 2px 0; }
+  .craft-work-status .craft-active { padding: 0; min-height: 32px; }
+  .craft-queue-row { padding: 2px; }
+  .craft-queue[data-expanded=true] ~ .craft-buffer-tools { display: none; }
+  .craft-queue-row > .art { width: 24px; height: 24px; }
+  .craft-output { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; }
+  .craft-output-panel { padding-top: 3px; margin-top: 3px; }
+  .craft-output-head { margin-bottom: 3px; }
+  .craft-output .craft-cell { height: 32px; }
+  .craft-assembly > .craft-upgrade-action { min-height: 32px; margin-top: 5px; }
+  .craft-layout .craft-upgrade-paid { margin-top: 4px; font-size: 10px; }
+  .craft-layout .craft-benefit { overflow-wrap: anywhere; }
+}
