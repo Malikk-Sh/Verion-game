@@ -22,9 +22,14 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
-  browser:
+  browser_suite:
+    name: browser / ${{ matrix.suite }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [browser, survival, production, crafting, quests]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,14 +39,17 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: node tools/prepare_ci_browser.mjs
-      - run: npm run verify:browser
-      - run: npm run verify:survival
-      - run: npm run verify:production
-      - run: npm run verify:crafting
-      - run: npm run verify:quests
+      - run: npm run verify:${{ matrix.suite }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: browser-artifacts
+          name: browser-${{ matrix.suite }}
           path: artifacts/
           if-no-files-found: ignore
+  browser:
+    needs: browser_suite
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - run: test "${{ needs.browser_suite.result }}" = success
