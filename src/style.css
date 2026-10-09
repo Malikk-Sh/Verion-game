@@ -279,6 +279,7 @@ input[type=range]::-moz-range-track{height:3px;background:var(--line)}input[type
 .d-bar{display:block;height:9px;background:linear-gradient(90deg,var(--amber-hi) calc(var(--r)*100%),rgba(0,0,0,.55) 0);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}.d-bar.gas,.d-bar.count{background:linear-gradient(90deg,var(--aqua) calc(var(--r)*100%),rgba(0,0,0,.55) 0)}
 .d-desc{margin:2px 0;font-size:13px!important;line-height:1.4!important;color:rgba(233,245,241,.85)!important}
 .d-actions{display:grid;gap:8px;margin-top:auto}.d-actions.two{grid-template-columns:1fr 1fr}.d-actions.two .amber{grid-column:1/-1}
+.inv-detail .d-actions.world{grid-template-columns:1fr}.inv-detail .d-actions.world>.ui-btn{min-height:32px;height:32px}
 /* Suit screen */
 .suit-body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,35fr) minmax(0,30fr) minmax(0,35fr);grid-template-rows:minmax(0,1fr) auto;grid-template-areas:"parts figure detail" "modules modules detail";gap:12px 18px;margin-top:12px}
 .suit-parts{grid-area:parts;display:flex;flex-direction:column;gap:8px;min-height:0}

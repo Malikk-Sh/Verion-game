@@ -109,7 +109,8 @@ export function createPanels(host: PanelHost) {
   } else if (sel?.kind === 'cell') {
    const i = sel.i;
    if(d.category==='building'||s.itemId==='cable'||s.itemId==='gas_pipe'){
-    const use=button(d.category==='building'?'Разместить':'Соединить','i-plug');use.id='act-world';
+    acts.classList.add('world');
+    const use=button(s.itemId==='cable'||s.itemId==='gas_pipe'?'Соединить':'Разместить','i-plug');use.id='act-world';
     use.onclick=()=>{const r=readyWorldItem(g,i);say(r);if(r.ok){moveFrom=null;host.changed('inventory');host.close();}else drawInventory();};acts.append(use);
    }
    if (moveFrom === i) { const cancel = button('Отмена', 'i-close'); cancel.onclick = () => { moveFrom = null; message = 'Перемещение отменено'; host.tone('ui'); drawInventory(); }; acts.append(cancel); }
