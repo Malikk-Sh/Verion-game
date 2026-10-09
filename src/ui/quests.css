@@ -51,7 +51,7 @@
 #quest-panel .quest-legend .quest-ready{border-color:#52dbe1}
 #quest-panel .quest-zoom{display:flex;gap:4px;flex-shrink:0}
 #quest-panel .quest-zoom button{min-height:32px;padding:4px 10px;background:#14252f;border:1px solid #344a55;font-size:12px;clip-path:none}
-#quest-detail{position:absolute;z-index:4;left:0;right:0;bottom:0;max-height:min(265px,55%);background:#14252f;border-top:1px solid #446474;padding:10px 16px;display:flex;flex-direction:column;gap:6px;overflow:hidden}
+#quest-detail{position:absolute;z-index:4;max-height:min(190px,calc(100% - 16px));background:#14252ff5;border:1px solid #446474;border-radius:5px;padding:8px;display:flex;flex-direction:column;gap:6px;overflow:hidden;box-shadow:0 8px 25px #0008}
 #quest-panel .quest-detail-head{display:flex;align-items:center;gap:10px;flex-shrink:0;min-height:32px}
 #quest-panel .quest-detail-head .art{width:34px;height:34px;flex-shrink:0}
 #quest-panel .quest-detail-head h3{font-size:16px;font-weight:400;margin:0}
@@ -69,5 +69,5 @@
 #quest-panel .quest-track{align-self:flex-start;min-height:32px;font-size:12px;flex-shrink:0}
 #quest-panel .art img{width:100%;height:100%;object-fit:contain}
 #quest-panel .quest-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
-@media(max-height:450px){#quest-panel{height:calc(100dvh - 16px)}#quest-panel .quest-head{padding:6px 12px;min-height:44px}#quest-panel h2{font-size:20px}#quest-detail{padding:6px 12px;max-height:65%;gap:4px}#quest-panel .quest-detail-head .art{display:none}}
+@media(max-height:450px){#quest-panel{height:calc(100dvh - 16px)}#quest-panel .quest-head{padding:6px 12px;min-height:44px}#quest-panel h2{font-size:20px}#quest-detail{padding:6px;gap:4px}#quest-panel .quest-detail-head .art{display:none}}
 @media(max-width:560px){#quest-panel .quest-head{gap:9px;padding:8px}#quest-panel h2{font-size:18px}#quest-panel .quest-world{font-size:11px;padding-left:9px}#quest-panel .quest-foot{flex-wrap:wrap;padding:6px 8px}#quest-panel .quest-legend{gap:6px 12px}#quest-panel .quest-detail-state{display:none}#quest-panel .quest-detail-head h3{font-size:14px}#quest-detail{padding:8px}#quest-panel .quest-detail-body p{font-size:12px}}

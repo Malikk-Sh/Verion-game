@@ -14,7 +14,7 @@ function powered(){const g=fresh();g.player.x=42;g.player.z=42;const b=makeBuild
 test('Quest DAG covers every current recipe and has forward links, no fictitious recipes or cycles',()=>{
  assert.equal(new Set(QUESTS.map(q=>q.id)).size,QUEST_IDS.length);const byId=new Map(QUESTS.map(q=>[q.id,q]));
  for(const q of QUESTS){for(const p of [...q.parents,...q.context]){assert.ok(byId.has(p));assert.ok(byId.get(p)!.x<q.x);}for(const rid of q.recipes)assert.ok(rid==='upgrade'||RECIPE_BY_ID.has(rid));for(const p of q.parents)assert.ok(QUEST_ROUTES.some(r=>r.from===p&&r.to===q.id));}
- for(const rid of RECIPE_BY_ID.keys())assert.ok(QUESTS.some(q=>q.recipes.includes(rid)),rid);
+ for(const rid of RECIPE_BY_ID.keys())if(rid!=='legacy_melt')assert.ok(QUESTS.some(q=>q.recipes.includes(rid)),rid);
  assert.equal(WORKBENCH_UPGRADE.queueCapacity,5);
 });
 test('Fresh expedition has no completed spare-tool/refill achievement from starter equipment',()=>{
@@ -53,8 +53,8 @@ test('Breathable shelter checks seal, gas, purity and temperature; completed goa
 test('Final milestone checks simultaneous real work, rather than two historical checkmarks',()=>{
  const {g,b,gen}=powered();g.player.x=80;gen.energy=400000;startJob(g,'craft_wire',b.id,true);g.player.x=42;startJob(g,'craft_wire',b.id);g.player.x=80;tick(g,8000);const d=makeBuilding(g,'dome',50,0,50);d.zone.q=500000;d.zone.purity=1;d.zone.temperature=20;refreshQuestProgress(g);assert.ok(g.progress.quests.completed.includes('auto'));assert.ok(g.progress.quests.completed.includes('air'));assert.ok(!g.progress.quests.completed.includes('base'));g.player.x=42;startJob(g,'craft_wire',b.id);g.player.x=80;gen.energy=0;tick(g,50);assert.ok(!g.progress.quests.completed.includes('base'));gen.energy=400000;tick(g,50);assert.ok(g.progress.quests.completed.includes('base'));
 });
-test('v4 queues, WIP, tank gas and tracked quests survive current round trip; untrusted quest data is strict',()=>{
- const {g,b}=powered();startJob(g,'craft_wire',b.id);const old:any=structuredClone(g);old.meta.stateVersion=4;delete old.progress.quests;const migrated=sanitizeState(old);assert.deepEqual(migrated.world.base,g.world.base);assert.deepEqual(migrated.player,g.player);migrated.progress.quests.tracked='air';recordQuestFact(migrated,'item:stone');refreshQuestProgress(migrated);assert.deepEqual(decodePages(encodePages(migrated)),migrated);
+test('v4 queues, WIP, tank gas and quest evidence survive current round trip; untrusted quest data is strict',()=>{
+ const {g,b}=powered();startJob(g,'craft_wire',b.id);const old:any=structuredClone(g);old.meta.stateVersion=4;delete old.progress.quests;const migrated=sanitizeState(old);assert.deepEqual(migrated.world.base,g.world.base);assert.deepEqual(migrated.player,g.player);recordQuestFact(migrated,'item:stone');refreshQuestProgress(migrated);assert.deepEqual(decodePages(encodePages(migrated)),migrated);
  for(const patch of [{tracked:'constructor'},{completed:['air','air']},{facts:['system:free_power']},{facts:['item:stone','item:stone']},{facts:Array(QUEST_FACTS.size+1).fill('item:stone')}]){const bad:any=structuredClone(migrated);Object.assign(bad.progress.quests,patch);assert.throws(()=>sanitizeState(bad),/quests/);}
  const bad:any=structuredClone(migrated);delete bad.progress.quests;assert.throws(()=>sanitizeState(bad),/quests/);
 });

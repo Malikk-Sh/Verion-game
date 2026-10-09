@@ -54,7 +54,6 @@
  <button id="objective" aria-expanded="false" aria-controls="quest-panel"><svg class="obj-arrow"><use href="#i-arrow"/></svg><span id="objective-text">Дерево развития</span><svg class="obj-chevron"><use href="#i-chevron"/></svg></button>
  <div id="compass-wrap"><canvas id="compass" aria-hidden="true"></canvas><div id="navigation"><span class="nav-arrow"><svg><use href="#i-arrow"/></svg></span><span id="target-name">Железо</span><span id="target-distance"></span></div></div>
  <nav id="hud-buttons" aria-label="Меню">
-  <button id="suit-button" class="tile" title="Костюм [C]" aria-label="Костюм"><svg><use href="#i-helmet"/></svg><span>Костюм</span></button>
   <button id="inventory-button" class="tile" title="Рюкзак [I]" aria-label="Рюкзак"><svg><use href="#i-pack"/></svg><span>Рюкзак</span></button>
   <button id="map-button" class="tile" title="Карта [M]" aria-label="Карта"><svg><use href="#i-map"/></svg><span>Карта</span></button>
   <button id="day" class="tile" title="Сменить день и ночь [N]" aria-label="Сменить день и ночь"><span id="light-icon"><svg><use href="#i-sun"/></svg></span><span id="light-text">День</span></button>
@@ -63,6 +62,7 @@
  <div id="toast" aria-live="polite" hidden><span class="mono tiny" id="toast-kind">ОБНАРУЖЕНО</span><strong id="toast-text"></strong></div>
  <div id="target-marker" aria-hidden="true"><i></i><span id="marker-distance"></span></div>
  <div id="reticle" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+ <button id="retrieve-station" hidden aria-label="Забрать станцию [R]">Забрать · R</button>
  <div id="aim" hidden aria-live="polite"><span id="aim-name"></span><span id="aim-meta"></span><i id="aim-bar"><b></b></i></div>
  <div id="hotbar" role="group" aria-label="Быстрый доступ — первая строка рюкзака"><div id="hotbar-title"><b id="hotbar-name"></b><span id="hotbar-meta"></span></div><div id="hotbar-slots"></div></div>
  <div id="joystick" role="group" aria-label="Джойстик движения"><div class="stick-ring"><span class="stick-ticks"></span><i class="stick-dir up"></i><i class="stick-dir down"></i><i class="stick-dir left"></i><i class="stick-dir right"></i><div id="stick"></div></div></div>
@@ -79,7 +79,6 @@
    <div class="title-actions"><button id="continue" class="primary" hidden>Продолжить <span aria-hidden="true">→</span></button><button id="start" class="primary">Новая экспедиция <span aria-hidden="true">→</span></button><button id="title-saves" class="secondary" aria-label="Сохранения"><svg><use href="#i-save"/></svg><span>Сохранения</span></button><button id="title-settings" class="secondary" aria-label="Настройки"><svg><use href="#i-gear"/></svg><span>Настройки</span></button></div>
    <p id="title-continue-info" class="help mono" hidden></p><p class="help">Телефон: джойстик и свайп, основная кнопка справа — действие (удерживайте «Добыть»). Компьютер: WASD, обзор мышью, Space — прыжок, F — действие, 1–6 — быстрый доступ, I — рюкзак, C — костюм, J — дерево развития, N — день/ночь.<br>Лучше всего — в горизонтальном режиме, со звуком.</p>
   </div>
-  <div class="title-foot mono tiny"><span class="build-tag">S2.5</span> Выживание, крафт, кислородная линия и герметичный купол. Мастерская: B или инвентарь. Дерево развития: J. Сохранение в браузере и экспорт/импорт файла.</div>
  </section>
  <section id="paused" class="panel pause-panel" hidden><div class="mono tiny kicker">VIREON / МЕНЮ ЭКСПЕДИЦИИ</div><h2 id="pause-title">Пауза</h2><div class="menu-grid"><button id="resume" class="primary">Продолжить <span aria-hidden="true">→</span></button><button id="save-now" class="secondary"><svg><use href="#i-save"/></svg><span>Сохранить</span></button><button id="saves-button" class="secondary"><svg><use href="#i-download"/></svg><span>Сохранения</span></button><button id="quests-button" class="secondary"><svg><use href="#i-split"/></svg><span>Дерево развития</span></button><button id="settings-button" class="secondary"><svg><use href="#i-gear"/></svg><span>Настройки</span></button><button id="reset" class="secondary"><svg><use href="#i-home"/></svg><span>К капсуле</span></button></div><p id="pause-save-info" class="help mono"></p><p class="help">Мир сохраняется сам каждые 30 активных секунд, при паузе и сворачивании. «К капсуле» — служебный возврат, не телепортация будущей игры.</p></section>
  <section id="death-panel" class="panel pause-panel" hidden aria-label="Возрождение">
@@ -128,7 +127,6 @@
  </section>
  <section id="production-panel" class="panel ui-panel production-panel" hidden aria-label="Крафт и строительство">
   <div class="ui-head"><h2>Мастерская</h2><button id="close-production" class="ui-close" aria-label="Закрыть мастерскую">×</button></div>
-  <div class="production-tabs"><button id="production-recipes" class="ui-btn">Рецепты</button><button id="production-build" class="ui-btn">Строительство</button><button id="production-links" class="ui-btn">Соединения</button></div>
   <p id="production-message" class="production-message" aria-live="polite"></p><div id="production-content" class="production-content"></div>
  </section>
  <section id="suit-panel" class="panel ui-panel suit-panel" hidden aria-label="Костюм">

@@ -14,7 +14,7 @@ export const NODES: ResourceNode[] = [
  { id: 'stone-a', name: 'Каменная осыпь', material: 'stone', itemId: 'stone', x: 30, z: 52, amount: 48, radius: 1.5, height: 1.1, outcrop: 'stone' },
  { id: 'ice-a', name: 'Ледяная глыба', material: 'ice', itemId: 'ice', x: 33, z: 76.5, amount: 24, radius: 1.2, height: 1.2, outcrop: 'ice' },
  { id: 'sand-a', name: 'Песчаная осыпь', material: 'sand', itemId: 'sand', x: 49, z: 59, amount: 32, radius: 1.4, height: .6, outcrop: 'sand' },
- { id: 'grass-a', name: 'Съедобная трава', material: 'grass', itemId: 'grass', x: 52, z: 67, amount: 50, radius: 1.7, height: .8, outcrop: 'grass' },
- { id: 'grass-b', name: 'Съедобная трава', material: 'grass', itemId: 'grass', x: 54, z: 70, amount: 50, radius: 1.7, height: .8, outcrop: 'grass' },
+ { id: 'grass-a', name: 'Местная трава', material: 'grass', itemId: 'grass', x: 42, z: 56, amount: 50, radius: 1.7, height: .8, outcrop: 'grass' },
+ { id: 'grass-b', name: 'Местная трава', material: 'grass', itemId: 'grass', x: 46, z: 58, amount: 50, radius: 1.7, height: .8, outcrop: 'grass' },
 ];
 export const NODE_BY_ID = new Map(NODES.map(n => [n.id, n]));

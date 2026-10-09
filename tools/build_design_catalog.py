@@ -12,7 +12,7 @@ soil_a|Грунт Верданы
 soil_b|Реголит Нивы
 soil_c|Пепельный грунт Пирры
 soil_asteroid|Астероидная крошка
-grass|Съедобная трава
+grass|Местная трава
 fiber|Растительные волокна
 pulp|Пищевая масса
 ice|Кусок льда
@@ -79,6 +79,7 @@ for metal in ['iron','copper','gold','velite','astrite']:
  item(metal+'_dust',items[metal]['name'].replace('слиток','пыль'))
  item(metal+'_speck',items[metal]['name'].replace('слиток','пылинка'))
 for i,n in [('water','Вода'),('oxygen','Кислород'),('hydrogen','Водород'),('co2','Газ CO₂'),('buffer_gas','Фоновый газ'),('oil','Нефть'),('fuel','Нефтяное горючее')]:item(i,n,'fluid',0)
+items['water']['stack']=64
 base_sources={'stone':['verdana','niva','asteroid','pyra'],'sand':['verdana','niva','pyra'],'grass':['verdana'],'ice':['verdana','niva'],'carbon':['verdana','niva','asteroid','pyra'],'carbonate':['verdana','niva','pyra'],'volatile_rock':['verdana','niva','pyra'],'hydrocarbon_rock':['niva','pyra'],'oil':['verdana'],'soil_a':['verdana'],'soil_b':['niva'],'soil_c':['pyra'],'soil_asteroid':['asteroid'],'iron_raw':['verdana','niva','asteroid','pyra'],'copper_raw':['verdana','niva','asteroid','pyra'],'gold_raw':['verdana','niva','asteroid','pyra'],'velite_raw':['niva','asteroid'],'astrite_raw':['pyra'],'seed_reed':['verdana'],'seed_tuber':['verdana'],'seed_bean':['verdana'],'seed_tree':['verdana'],'seed_potato':['niva'],'fragment_a':['verdana'],'fragment_b':['niva','asteroid'],'fragment_c':['pyra'],'blueprint_rocket':['verdana'],'blueprint_industry':['niva'],'blueprint_station':['asteroid'],'blueprint_heat':['pyra'],'ore_core':['asteroid'],'research_sample':['pyra']}
 base_sources['fiber']=['niva','pyra']
 for i,worlds in base_sources.items():items[i]['source']={'worlds':worlds,'method':'See WORLD and SYSTEMS; source does not imply a free spawn'}
@@ -308,7 +309,7 @@ C('oil_pump','fabricator',{'steel':4,'motor':1,'copper':2},tech='steel')
 C('oil_generator','fabricator',{'steel':6,'motor':2,'circuit':1},tech='steel')
 C('hydrogen_collector','fabricator',{'steel':4,'velite':4,'gas_tank':1,'circuit_adv':1},tech='velite')
 R('electrolysis','electrolyzer',{'water':1},{'oxygen':240,'hydrogen':480},10,12,'power',note='H₂ автоматически сбрасывается до установки модуля сбора; воду и газы учитывать разными игровыми единицами.')
-R('melt_in_generator','electrolyzer',{'ice':1},{'water':1},2,6,'power')
+R('melt_in_generator','kiln',{'ice':1,'fiber':1},{'water':1},2,0,'start',note='1 переносимая единица воды = 1 WU; слот сырья и слот топлива.')
 R('melt_bulk','ice_melter',{'ice':4},{'water':4},4,20,'steel')
 R('extract_co2','gas_extractor',{'carbonate':1},{'co2':40,'mineral_residue':1},10,30,'steel')
 R('extract_buffer','gas_extractor',{'volatile_rock':1},{'buffer_gas':40,'mineral_residue':1},10,30,'steel')

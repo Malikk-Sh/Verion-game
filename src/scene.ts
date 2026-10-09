@@ -339,8 +339,9 @@ export function createWorld(scene:THREE.Scene){
    for(let i=0;i<5;i++){const g=chiseledRock(330+i,{detail:2,base:'#ffffff',dust:'#f4fbff',dark:'#6f98a8',cuts:7,flatTop:.7,lumpy:.1}),a=i*1.3,d=i?.55:0,s=i?.45+pr()*.2:.9;b.add(g,ice,Math.cos(a)*d,-.15,Math.sin(a)*d,s,s*(i?1.1:1.25),s*.9,(pr()-.5)*.3,pr()*6,(pr()-.5)*.3);}});
  }
  deposit('sand-a',49,59,b=>{b.add(boulders[2],rock,0,-.12,0,1.5,.45,1.3,0,.2,0,'#d3bb82');});
- for(const [id,x,z] of [['grass-a',52,67],['grass-b',54,70]] as const)deposit(id,x,z,b=>{const pr=random(x*100+z);for(let i=0;i<24;i++){const a=pr()*6.28,r=pr()*1.3;b.add(boulders[0],rock,Math.cos(a)*r,.28,Math.sin(a)*r,.12,.45+pr()*.3,.12,0,a,0,i%2?'#879a4f':'#abb95a');}});
- const setNodeAmount=(id:string,left:number,amount:number)=>{const g=nodeGroups.get(id);if(!g)return;g.visible=left>0;g.scale.setScalar(.42+.58*Math.max(0,left)/amount);};
+ const grassHarvest=new Map<string,()=>void>();
+ const grassRemaining=new Map<string,number>();
+ const setNodeAmount=(id:string,left:number,amount:number)=>{grassRemaining.set(id,left/amount);grassHarvest.get(id)?.();const g=nodeGroups.get(id);if(g){g.visible=left>0;g.scale.setScalar(.42+.58*Math.max(0,left)/amount);}};
  {
  // Loose weathered pieces resting on the ground (sunk slightly, never hovering).
   for(const [ox,oz,m] of [[67,65,iron],[83,55,copper]] as const)for(let i=0;i<7;i++){const a=rng()*6.28,d=1.6+rng()*1.8,px=ox+Math.cos(a)*d,pz=oz+Math.sin(a)*d,s=.1+rng()*.14;
@@ -370,6 +371,8 @@ export function createWorld(scene:THREE.Scene){
   useBakedShade(grassMat,bakeUniforms,grassMat.onBeforeCompile);
   const inst=new THREE.InstancedMesh(g,m,GRASS.length);
   GRASS.forEach((p,i)=>{dummy.position.set(p.x,heightAt(p.x,p.z)-.02,p.z);dummy.scale.setScalar(p.s*1.35);dummy.rotation.set(0,p.rotation,0);dummy.updateMatrix();inst.setMatrixAt(i,dummy.matrix);inst.setColorAt(i,color.setHSL(.2+rng()*.06,.12+rng()*.1,.62+rng()*.3));});
+  const originals=GRASS.map((_,i)=>{const matrix=new THREE.Matrix4();inst.getMatrixAt(i,matrix);return matrix;});
+  for(const id of ['grass-a','grass-b']){const indices=GRASS.flatMap((p,i)=>p.patch===0&&(p.x<44)===(id==='grass-a')?[i]:[]);grassHarvest.set(id,()=>{const visible=Math.ceil(indices.length*(grassRemaining.get(id)??1));indices.forEach((i,j)=>inst.setMatrixAt(i,j<visible?originals[i]:new THREE.Matrix4().makeScale(0,0,0)));inst.instanceMatrix.needsUpdate=true;});}
   inst.receiveShadow=true;inst.castShadow=true;scene.add(inst);
  }
  const meshes=batch.finish(scene,m=>({cast:!noShadow.has(m)&&m!==caveInner&&m!==cliffRock,receive:!noShadow.has(m)}));

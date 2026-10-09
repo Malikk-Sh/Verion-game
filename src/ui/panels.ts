@@ -1,7 +1,7 @@
 import { CATEGORY_LABEL, ITEMS, SUIT_PARTS, SUIT_PART_LABEL, TANKS, TOOLS, type SuitPart } from '../game/defs';
 import { INVENTORY_SIZE, stateful, type Slot } from '../game/inventory';
 import { HOTBAR_SIZE, type GameState } from '../game/state';
-import { dropSlot, equipPart, installTank, moveSlot, removeTank, sortRest, splitSlot, unequipPart, wornParts, type Result } from '../game/backpack';
+import { dropSlot, equipPart, installTank, moveSlot, readyWorldItem, removeTank, sortRest, splitSlot, unequipPart, wornParts, type Result } from '../game/backpack';
 import { figureArt, ghostArt, itemArt } from './art';
 /**
  * Inventory and suit screens (approved mock-ups «Инвентарь» and «Костюм»). Pure DOM over the
@@ -35,13 +35,14 @@ export function cellContent(cell: HTMLElement, s: Slot, index: number, opts: { l
  cell.classList.remove('broken');
  if (!s) { cell.classList.add('empty'); return; }
  cell.classList.remove('empty');
- cell.append(itemArt(s.itemId));
+ cell.append(itemArt(s.packed?.kind==='workbench'&&s.packed.level===2?'workbench_2':s.itemId));
+ if(s.packed)cell.append(h('b','cell-count',s.packed.level===2?'II':'I'));
  if (s.durability !== undefined) { const bar = h('i', 'cell-bar'); bar.style.setProperty('--r', String(s.durability / TOOLS[s.itemId].durability)); if (!s.durability) cell.classList.add('broken'); cell.append(bar); }
  else if (s.milliGU !== undefined) { const bar = h('i', 'cell-bar gas'); bar.style.setProperty('--r', String(s.milliGU / TANKS[s.itemId].capacity)); cell.append(bar); }
- else if (s.count > 1 || ITEMS[s.itemId].stack > 1) cell.append(h('b', 'cell-count', String(s.count)));
+ else if (!s.packed && (s.count > 1 || ITEMS[s.itemId].stack > 1)) cell.append(h('b', 'cell-count', String(s.count)));
  if (opts.label) cell.append(h('span', 'cell-label', ITEMS[s.itemId].short));
 }
-export const cellAria = (s: Slot, i: number) => !s ? `Ячейка ${i + 1}: пусто` : `Ячейка ${i + 1}: ${ITEMS[s.itemId].name}${s.durability !== undefined ? `, прочность ${s.durability} из ${TOOLS[s.itemId].durability}` : s.milliGU !== undefined ? `, ${gu(s.milliGU)} GU` : `, ${s.count} шт.`}`;
+export const cellAria = (s: Slot, i: number) => !s ? `Ячейка ${i + 1}: пусто` : `Ячейка ${i + 1}: ${ITEMS[s.itemId].name}${s.packed?', упакована, уровень '+s.packed.level:''}${s.durability !== undefined ? `, прочность ${s.durability} из ${TOOLS[s.itemId].durability}` : s.milliGU !== undefined ? `, ${gu(s.milliGU)} GU` : `, ${s.count} шт.`}`;
 
 export function createPanels(host: PanelHost) {
  let sel: Sel | null = null, moveFrom: number | null = null, part: SuitPart = 'helmet', replacing = false, message = '', suitMessage = '';
@@ -107,6 +108,10 @@ export function createPanels(host: PanelHost) {
    const b = sel.b, rm = button('Снять в рюкзак', 'i-download'); rm.onclick = () => { const r = removeTank(g, b); say(r, 'Баллон перенесён в рюкзак'); if (r.ok) host.changed('inventory'); drawInventory(); }; acts.append(rm);
   } else if (sel?.kind === 'cell') {
    const i = sel.i;
+   if(d.category==='building'||s.itemId==='cable'||s.itemId==='gas_pipe'){
+    const use=button(d.category==='building'?'Разместить':'Соединить','i-plug');use.id='act-world';
+    use.onclick=()=>{const r=readyWorldItem(g,i);say(r);if(r.ok){moveFrom=null;host.changed('inventory');host.close();}else drawInventory();};acts.append(use);
+   }
    if (moveFrom === i) { const cancel = button('Отмена', 'i-close'); cancel.onclick = () => { moveFrom = null; message = 'Перемещение отменено'; host.tone('ui'); drawInventory(); }; acts.append(cancel); }
    else { const mv = button('Переместить', 'i-swap'); mv.id = 'act-move'; mv.onclick = () => { moveFrom = i; message = ''; host.tone('ui'); drawInventory(); }; acts.append(mv); }
    if (!stateful(s) && s.count > 1) { const sp = button('Разделить', 'i-split'); sp.id = 'act-split'; sp.onclick = () => { const r = splitSlot(g.player.inventory, i); say(r, 'Стак разделён'); if (r.ok) host.changed('inventory'); drawInventory(); }; acts.append(sp); }

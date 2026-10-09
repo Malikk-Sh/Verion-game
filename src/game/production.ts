@@ -8,6 +8,8 @@ import type { GameState, ItemStack } from './state';
 export type Recipe = { id: string; station: string; inputs: Record<string, number>; outputs: Record<string, number>; seconds: number; EU_per_second: number };
 export const RECIPES: Recipe[] = catalog.recipes as unknown as Recipe[];
 export const RECIPE_BY_ID = new Map(RECIPES.map(r => [r.id, r]));
+// Import-only recipe: finish old paid melts without giving the old operation a new UI entry.
+RECIPE_BY_ID.set('legacy_melt',{id:'legacy_melt',station:'electrolyzer',inputs:{ice:1},outputs:{water:1},seconds:2,EU_per_second:6});
 export type Job = { recipeId: string; workMs: number; reserved: ItemStack[]; water: number };
 export type Building = { id: string; kind: BuildingKind; level: 1 | 2; x: number; y: number; z: number; input: Slot[]; output: Slot[]; job: Job | null; queue: string[]; enabled: boolean; lowPriority: boolean; energy: number; fuel: number; water: number; oxygen: number; zone: { q: number; temperature: number; purity: number; lossRemainder: number; breachMs: number; shell: number[] } };
 export type Link = { id: string; kind: 'cable' | 'gas_pipe'; from: string; to: string };
@@ -85,7 +87,7 @@ export function loadRecipeInputs(g: GameState, recipeId: string, id: string): st
  if(!b || !r || r.station!==b.kind)return 'Нужна подходящая станция';
  if(!nearby(g,b))return 'Подойдите к станции';
  const inv=structuredClone(g.player.inventory),input=structuredClone(b.input);
- for(const [item,n] of Object.entries(r.inputs))if(item!=='water'){
+ for(const [item,n] of Object.entries(r.inputs))if(item!=='water'||b.water<n*1000){
   const missing=Math.max(0,n-countItem(input,item));if(countItem(inv,item)<missing)return 'Не хватает: '+ITEMS[item].name;
   if(addItems(input,item,missing))return 'Входной буфер полон';removeItems(inv,item,missing);
  }
@@ -98,13 +100,20 @@ export function startJob(g: GameState, recipeId: string, id = 'hand', buffered =
  if (g.player.vitals.health <= 0) return 'Персонаж погиб';
  if (id === 'hand' ? g.world.base.hand : b!.job) return 'Сначала завершите или отмените текущую работу';
  if (b && (!buffered || (b.kind==='workbench' && b.level===1)) && !nearby(g,b)) return 'Подойдите к станции';
- const inv = buffered && b ? b.input : g.player.inventory;
- for (const [item,n] of Object.entries(r.inputs)) if (item === 'water' ? (b?.water ?? 0)<n*1000 : countItem(inv,item)<n) return 'Не хватает: '+(ITEMS[item]?.name ?? 'Вода');
- if (r.id === 'melt_in_generator' && b!.water > 19000) return 'Буфер воды полон';
+ const dedicated=buffered&&b&&(b.kind==='kiln'||b.kind==='electrolyzer');
+ const inv = buffered && b ? dedicated?b.input.slice(0,2):b.input : g.player.inventory;
+ if(dedicated)for(const [item,n] of Object.entries(r.inputs)){
+  if(item==='water'&&b!.water>=n*1000)continue;
+  const s=inv[b!.kind==='kiln'&&item==='fiber'?1:0];
+  if(!s||s.itemId!==item||s.count<n)return 'Не хватает: '+(ITEMS[item]?.name??'Вода');
+ }
+ for (const [item,n] of Object.entries(r.inputs)) if (item === 'water' && (b?.water??0)>=n*1000 ? false : countItem(inv,item)<n) return 'Не хватает: '+(ITEMS[item]?.name ?? 'Вода');
+ if (r.id === 'legacy_melt' && b!.water > 19000) return 'Буфер воды полон';
  if (r.id === 'electrolysis' && b!.oxygen > 240000) return 'Буфер O₂ полон';
  const reserved: ItemStack[] = [];
- for (const [item,n] of Object.entries(r.inputs)) if (item !== 'water') { removeItems(inv,item,n); reserved.push({itemId:item,count:n}); } else b!.water-=n*1000;
- const job: Job = {recipeId,workMs:0,reserved,water:(r.inputs.water??0)*1000};
+ for (const [item,n] of Object.entries(r.inputs)) if (item !== 'water'||(b?.water??0)<n*1000) { removeItems(inv,item,n); reserved.push({itemId:item,count:n}); } else b!.water-=n*1000;
+ if(dedicated)b!.input.splice(0,2,...inv);
+ const job: Job = {recipeId,workMs:0,reserved,water:reserved.some(s=>s.itemId==='water')?0:(r.inputs.water??0)*1000};
  if(id==='hand')g.world.base.hand=job;else b!.job=job;
  return '';
 }
@@ -164,7 +173,7 @@ export function connect(g: GameState, kind: Link['kind'], from: string, to: stri
  if(!removeItems(g.player.inventory,kind,1))return 'Нужен '+ITEMS[kind].name;
  g.world.base.links.push({id:'link-'+g.world.base.nextId++,kind,from,to});return '';
 }
-function poweredComponent(g: GameState, id: string) {
+export function poweredComponent(g: GameState, id: string) {
  const seen=new Set([id]),q=[id];while(q.length){const v=q.shift()!;for(const l of g.world.base.links)if(l.kind==='cable'){const n=l.from===v?l.to:l.to===v?l.from:null;if(n&&!seen.has(n)){seen.add(n);q.push(n);}}}return seen;
 }
 export function beginPassage(g: GameState, id: string): string {
@@ -179,12 +188,16 @@ export type ProductionTick = { changed: boolean; passage: {x:number;y:number;z:n
 /** Finite sources, explicit paid links, one shared budget per component. No wall-clock catch-up. */
 export function productionTick(g: GameState, ms: number, refillId: string | null = null, outside = 10): ProductionTick {
  const base=g.world.base;let changed=false;
+
+ const bottleNeed=(b:Building)=>b.kind==='electrolyzer'&&b.enabled&&b.input[1]&&TANKS[b.input[1].itemId]?Math.min(b.oxygen,20*ms,TANKS[b.input[1].itemId].capacity-(b.input[1].milliGU??0))/10:0;
  for(const b of base.buildings)if(hasQueue(b)&&b.enabled&&!b.job&&b.queue.length&&!startJob(g,b.queue[0],b.id,true)){b.queue.shift();changed=true;}const power=new Map<string,number>();
+ for(const b of base.buildings)if(b.enabled&&!b.job){const r=b.kind==='kiln'?RECIPES.find(r=>r.station==='kiln'&&Object.entries(r.inputs).every(([id,n])=>{const s=b.input[id==='fiber'?1:0];return s?.itemId===id&&s.count>=n;})):b.kind==='electrolyzer'?RECIPE_BY_ID.get('electrolysis'):undefined;if(r&&!startJob(g,r.id,b.id,true))changed=true;}
  // A running outside generator may charge its finite 400 EU buffer. Fiber is paid per 200 EU.
  for(const b of base.buildings)if(b.kind==='biogenerator'&&b.enabled&&!base.buildings.some(d=>insideDome(d,b.x,b.y,b.z))){
   let demand=Math.min(40*ms,400000-b.energy);
   while(demand>0){if(!b.fuel){if(!removeItems(b.input,'fiber',1))break;b.fuel=200000;}const n=Math.min(demand,b.fuel);b.fuel-=n;b.energy+=n;demand-=n;}
  }
+ const tankDemand=new Map(base.buildings.map(b=>[b.id,Math.ceil(bottleNeed(b))]));
  const seen=new Set<string>();
  for(const root of base.buildings){if(seen.has(root.id))continue;const ids=poweredComponent(g,root.id);ids.forEach(id=>seen.add(id));const group=base.buildings.filter(b=>ids.has(b.id));
   for(const e of group)if(e.kind==='electrolyzer'){
@@ -193,19 +206,20 @@ export function productionTick(g: GameState, ms: number, refillId: string | null
    for(const id of rooms){reserve+=machine(g,id)!.zone.q;capacity+=DOME_CAPACITY;}
    if(reserve/capacity>=.8)e.lowPriority=true;else if(reserve/capacity<.5)e.lowPriority=false;
   }
-  const requests=group.map(b=>{let need=0;if(b.enabled){if(b.job && b.job.workMs < RECIPE_BY_ID.get(b.job.recipeId)!.seconds*1000)need=Math.ceil(energyRate(b,RECIPE_BY_ID.get(b.job.recipeId)!)*Math.min(ms,RECIPE_BY_ID.get(b.job.recipeId)!.seconds*1000-b.job.workMs));if(b.kind==='distributor'&&base.buildings.some(d=>insideDome(d,b.x,b.y,b.z)))need=Math.round((10+Math.min(8,Math.abs(outside-20)/20))*ms);if(b.id===refillId&&b.kind==='refill'&&b.oxygen>0&&g.player.bottles.some(t=>t&&(t.milliGU??0)<TANKS[t.itemId].capacity))need=Math.ceil(Math.min(b.oxygen,20*ms,g.player.bottles.reduce((n,t)=>n+(t?TANKS[t.itemId].capacity-(t.milliGU??0):0),0))/10);}return {b,need,priority:b.kind==='electrolyzer'&&b.lowPriority?2:0};}).filter(r=>r.need>0);
+  const requests=group.map(b=>{let need=0;if(b.enabled){if(b.job && b.job.workMs < RECIPE_BY_ID.get(b.job.recipeId)!.seconds*1000)need=Math.ceil(energyRate(b,RECIPE_BY_ID.get(b.job.recipeId)!)*Math.min(ms,RECIPE_BY_ID.get(b.job.recipeId)!.seconds*1000-b.job.workMs));if(b.kind==='distributor'&&base.buildings.some(d=>insideDome(d,b.x,b.y,b.z)))need=Math.round((10+Math.min(8,Math.abs(outside-20)/20))*ms);if(b.id===refillId&&b.kind==='refill'&&b.oxygen>0&&g.player.bottles.some(t=>t&&(t.milliGU??0)<TANKS[t.itemId].capacity))need=Math.ceil(Math.min(b.oxygen,20*ms,g.player.bottles.reduce((n,t)=>n+(t?TANKS[t.itemId].capacity-(t.milliGU??0):0),0))/10);}need+=(tankDemand.get(b.id)??0);return {b,need,priority:b.kind==='electrolyzer'&&b.lowPriority?2:0};}).filter(r=>r.need>0);
   const supply=group.filter(b=>b.kind==='biogenerator'&&b.enabled),available=Math.min(120*ms,supply.reduce((n,b)=>n+Math.min(b.energy,40*ms),0));let remaining=available;
   for(const priority of [0,1,2]){const rs=requests.filter(r=>r.priority===priority),total=rs.reduce((n,r)=>n+r.need,0),accepted=Math.min(remaining,total);let allocated=0;rs.forEach((r,i)=>{const n=i===rs.length-1?accepted-allocated:Math.floor(accepted*r.need/total);power.set(r.b.id,n);allocated+=n;});remaining-=accepted;}
   let left=available-remaining;for(const b of supply){const n=Math.min(left,b.energy,40*ms);b.energy-=n;left-=n;}
 
  }
  if([...power.values()].some(n=>n>0))changed=recordQuestFact(g,'system:power')||changed;
- const finish=(job:Job,slots:Slot[],b?:Building)=>{const r=RECIPE_BY_ID.get(job.recipeId)!;if(job.workMs<r.seconds*1000)return false;if(r.id==='melt_in_generator'){if(b!.water>19000)return false;b!.water+=1000;}else if(r.id==='electrolysis'){if(b!.oxygen>240000)return false;b!.oxygen+=240000;}else if(!insert(slots,outputSlots(r)))return false;recordQuestFact(g,'craft:'+r.id);for(const id of Object.keys(r.outputs))if(Object.hasOwn(ITEMS,id))recordQuestFact(g,'item:'+id);if(b?.kind==='workbench'&&b.level===2&&!nearby(g,b))recordQuestFact(g,'system:auto');changed=true;return true;};
+ const finish=(job:Job,slots:Slot[],b?:Building)=>{const r=RECIPE_BY_ID.get(job.recipeId)!;if(job.workMs<r.seconds*1000)return false;if(r.id==='legacy_melt'){if(b!.water>19000)return false;b!.water+=1000;}else if(r.id==='electrolysis'){if(b!.oxygen>240000)return false;b!.oxygen+=240000;}else if(b?.kind==='kiln'){const output=[b.output[0]];if(!insert(output,outputSlots(r)))return false;b.output[0]=output[0];}else if(!insert(slots,outputSlots(r)))return false;recordQuestFact(g,'craft:'+(r.id==='legacy_melt'?'melt_in_generator':r.id));for(const id of Object.keys(r.outputs))if(Object.hasOwn(ITEMS,id))recordQuestFact(g,'item:'+id);if(b?.kind==='workbench'&&b.level===2&&!nearby(g,b))recordQuestFact(g,'system:auto');changed=true;return true;};
  if(base.hand){base.hand.workMs=Math.min(base.hand.workMs+ms,RECIPE_BY_ID.get(base.hand.recipeId)!.seconds*1000);if(finish(base.hand,g.player.inventory))base.hand=null;}
  const manual=base.hand?undefined:manualWork(g);
  let automaticWork=false;
- for(const b of base.buildings)if(b.job&&b.enabled){const r=RECIPE_BY_ID.get(b.job.recipeId)!,rate=energyRate(b,r);if(b.kind==='workbench'&&b.level===1&&b!==manual)continue;const before=b.job.workMs;b.job.workMs=Math.min(r.seconds*1000,b.job.workMs+(rate?(power.get(b.id)??0)/rate:ms));if(b.kind==='workbench'&&b.level===2&&b.job.workMs>before)automaticWork=true;if(finish(b.job,b.output,b))b.job=null;}
- for(const l of base.links)if(l.kind==='gas_pipe'){const a=machine(g,l.from)!,b=machine(g,l.to),cap=b?480000:2400000,stored=b?b.oxygen:g.world.capsuleMilliGU;const n=Math.min(a.oxygen,cap-stored,40*ms);a.oxygen-=n;if(b)b.oxygen+=n;else g.world.capsuleMilliGU+=n;}
+ for(const b of base.buildings)if(b.job&&b.enabled){const r=RECIPE_BY_ID.get(b.job.recipeId)!,rate=energyRate(b,r);if(b.kind==='workbench'&&b.level===1&&b!==manual)continue;const before=b.job.workMs;b.job.workMs=Math.min(r.seconds*1000,b.job.workMs+(rate?Math.max(0,(power.get(b.id)??0)-(tankDemand.get(b.id)??0))/rate:ms));if(b.kind==='workbench'&&b.level===2&&b.job.workMs>before)automaticWork=true;if(finish(b.job,b.output,b))b.job=null;}
+ for(const b of base.buildings){const t=b.input[1],need=(tankDemand.get(b.id)??0);if(need>0&&t){const n=Math.min(need*10,(power.get(b.id)??0)*10,b.oxygen,TANKS[t.itemId].capacity-(t.milliGU??0));b.oxygen-=n;t.milliGU=(t.milliGU??0)+n;if(n>0){changed=recordQuestFact(g,'system:refill')||changed;}}}
+ for(const l of base.links)if(l.kind==='gas_pipe'){const a=machine(g,l.from)!,b=machine(g,l.to),cap=b?480000:2400000,stored=b?b.oxygen:g.world.capsuleMilliGU;const mounted=a.input[1],reserved=mounted&&TANKS[mounted.itemId]?TANKS[mounted.itemId].capacity-(mounted.milliGU??0):0;const n=Math.min(Math.max(0,a.oxygen-reserved),cap-stored,40*ms);a.oxygen-=n;if(b)b.oxygen+=n;else g.world.capsuleMilliGU+=n;}
  for(const b of base.buildings)if(b.kind==='dome'){
   const sealed=sealCheck(b.zone.shell).sealed,occupied=insideDome(b,g.player.x,g.player.y,g.player.z);
   const installed=base.buildings.filter(d=>d.kind==='distributor'&&insideDome(b,d.x,d.y,d.z)),distributors=installed.filter(d=>d.enabled);
@@ -224,6 +238,6 @@ export function productionTick(g: GameState, ms: number, refillId: string | null
 /** Death preserves WIP: incomplete hand inputs, or a finished output, join the cargo. */
 export function releaseHandOnDeath(g:GameState) {
  const job=g.world.base.hand;g.world.base.handQueue=[];if(!job)return;const r=RECIPE_BY_ID.get(job.recipeId)!;
- if(job.workMs>=r.seconds*1000)recordQuestFact(g,'craft:'+r.id);
+ if(job.workMs>=r.seconds*1000)recordQuestFact(g,'craft:'+(r.id==='legacy_melt'?'melt_in_generator':r.id));
  dropItems(g,g.player.x,g.player.z,job.workMs>=r.seconds*1000?outputSlots(r):job.reserved);g.world.base.hand=null;g.world.base.handQueue=[];g.world.base.passage=null;
 }

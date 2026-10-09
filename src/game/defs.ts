@@ -15,7 +15,7 @@ export type SuitPart = typeof SUIT_PARTS[number];
 export const SUIT_PART_LABEL: Record<SuitPart, string> = { helmet: 'Шлем', chest: 'Нагрудник', legs: 'Поножи', boots: 'Ботинки' };
 export type Category = 'tool' | 'tank' | 'suit' | 'food' | 'resource' | 'building';
 export const CATEGORY_LABEL: Record<Category, string> = { tool: 'Инструмент', tank: 'Баллон', suit: 'Часть костюма', food: 'Пища', resource: 'Ресурс', building: 'Постройка' };
-export type ItemDef = { id: string; name: string; short: string; stack: number; kind: 'item' | 'equipment' | 'placeable'; category: Category; description: string; part?: SuitPart; tier?: string };
+export type ItemDef = { id: string; name: string; short: string; stack: number; kind: 'item' | 'equipment' | 'placeable' | 'fluid'; category: Category; description: string; part?: SuitPart; tier?: string };
 const def = (d: ItemDef) => d;
 export const ITEMS: Record<string, ItemDef> = {
  tool_stone: def({ id: 'tool_stone', name: 'Каменный мультитул', short: 'Мультитул', stack: 1, kind: 'equipment', category: 'tool', description: 'Для добычи камня, руды и льда.' }),
@@ -27,15 +27,15 @@ export const ITEMS: Record<string, ItemDef> = {
  pulp: def({ id: 'pulp', name: 'Пищевая масса', short: 'Пища', stack: 64, kind: 'item', category: 'food', description: 'Простая пища из растительной массы. +8 сытости и +1 HP; перерыв между порциями 5 с.' }),
  iron_raw: def({ id: 'iron_raw', name: 'Железная руда', short: 'Железо', stack: 64, kind: 'item', category: 'resource', description: 'Сырьё для плавки железа.' }),
  copper_raw: def({ id: 'copper_raw', name: 'Медная руда', short: 'Медь', stack: 64, kind: 'item', category: 'resource', description: 'Сырьё для плавки меди.' }),
- ice: def({ id: 'ice', name: 'Кусок льда', short: 'Лёд', stack: 64, kind: 'item', category: 'resource', description: 'В электролизёре: 2 с × 6 EU/с → 1 WU воды.' }),
+ ice: def({ id: 'ice', name: 'Кусок льда', short: 'Лёд', stack: 64, kind: 'item', category: 'resource', description: 'В печи с волокном: 2 с → 1 WU переносимой воды.' }),
  stone: def({ id: 'stone', name: 'Камень', short: 'Камень', stack: 64, kind: 'item', category: 'resource', description: 'Строительное сырьё.' }),
 };
 /** Early production items use the canonical design catalog directly. */
 export const BUILDABLE = ['workbench', 'kiln', 'biogenerator', 'electrolyzer', 'refill', 'distributor', 'dome'] as const;
 export type BuildingKind = typeof BUILDABLE[number];
-for (const id of ['wrench','grass', 'fiber', 'sand', 'iron', 'copper', 'glass', 'wire', 'circuit', ...BUILDABLE, 'cable', 'gas_pipe']) {
+for (const id of ['water','wrench','grass', 'fiber', 'sand', 'iron', 'copper', 'glass', 'wire', 'circuit', ...BUILDABLE, 'cable', 'gas_pipe']) {
  const d = catalog.items[id as keyof typeof catalog.items];
- ITEMS[id] = def({ id, name: d.name, short: d.name, stack: d.stack, kind: d.kind as ItemDef['kind'], category: id === 'wrench' ? 'tool' : d.kind === 'placeable' ? 'building' : 'resource', description: id === 'wrench' ? 'Многоразовый ключ: выберите в быстром доступе и взаимодействуйте с верстаком для улучшения.' : d.kind === 'placeable' ? 'Размещение и соединение — в панели строительства. Новый корпус не содержит топлива, воды или кислорода.' : 'Материал для ранних рецептов производства.' });
+ ITEMS[id] = def({ id, name: d.name, short: d.name, stack: d.stack, kind: d.kind as ItemDef['kind'], category: id === 'wrench' ? 'tool' : d.kind === 'placeable' ? 'building' : 'resource', description: id === 'wrench' ? 'Многоразовый ключ: выберите в быстром доступе и взаимодействуйте с верстаком для улучшения.' : d.kind === 'placeable' ? 'Выберите в быстром доступе и разместите перед собой. Новый корпус не содержит топлива, воды или кислорода.' : 'Материал для ранних рецептов производства.' });
 }
 /** Basic suit set worn at start (SYSTEMS §1). */
 export const BASIC_SUIT: Record<SuitPart, string> = { helmet: 'suit_helmet', chest: 'suit_chest', legs: 'suit_legs', boots: 'suit_boots' };

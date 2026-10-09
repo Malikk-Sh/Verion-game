@@ -64,15 +64,15 @@ try{
   return{sameFrame:l.width===r.width&&l.height===r.height,controls:[...document.querySelectorAll('#hud-buttons button')].map(e=>({name:e.getAttribute('aria-label'),width:e.getBoundingClientRect().width})),rails:document.querySelectorAll('.visor-rail').length};
  });
  assert.ok(wings.sameFrame&&wings.controls.length===5&&wings.controls.every(c=>c.name&&c.width>=32)&&wings.rails===2);report.wings=wings;check('Mirrored visor frames have equal dimensions and five named controls; resizing does not duplicate artwork');
- const art=await page.evaluate(()=>({buttonBlur:getComputedStyle(document.querySelector('#suit-button')).backdropFilter,glassStroke:getComputedStyle(document.querySelector('.visor-glass')).stroke,segmentStroke:getComputedStyle(document.querySelector('.vital-fill path')).stroke,food:getComputedStyle(document.querySelector('#g-satiety .vital-fill path')).fill,oxygen:getComputedStyle(document.querySelector('#g-oxygen .vital-fill path')).fill}));
+ const art=await page.evaluate(()=>({buttonBlur:getComputedStyle(document.querySelector('#inventory-button')).backdropFilter,glassStroke:getComputedStyle(document.querySelector('.visor-glass')).stroke,segmentStroke:getComputedStyle(document.querySelector('.vital-fill path')).stroke,food:getComputedStyle(document.querySelector('#g-satiety .vital-fill path')).fill,oxygen:getComputedStyle(document.querySelector('#g-oxygen .vital-fill path')).fill}));
  assert.equal(art.buttonBlur,'none');assert.equal(art.glassStroke,'none');assert.equal(art.segmentStroke,'none');assert.notEqual(art.food,art.oxygen);report.art=art;check('Native visor artwork keeps translucent glass and distinct segment colors without inherited white strokes');
  const fills=await page.evaluate(()=>{
   const g=document.querySelector('#g-oxygen'),f=g.querySelector('.vital-fill');
   return[0,.5,1].map(ratio=>{g.style.setProperty('--v',String(ratio));f.style.transition='none';return getComputedStyle(f).clipPath});
  });
  assert.match(fills[0],/100%/);assert.match(fills[1],/50%/);assert.match(fills[2],/0%/);report.fills=fills;check('Segmented oxygen bar renders empty, half-full and full values');
- const menu=await page.evaluate(()=>({seams:document.querySelectorAll('.menu-seam').length,closed:document.querySelector('.menu-outline').getAttribute('d').endsWith('Z'),oldBrackets:document.querySelectorAll('#hud-buttons .tile').length&&getComputedStyle(document.querySelector('#suit-button'),'::after').content}));
- assert.equal(menu.seams,4);assert.ok(menu.closed);assert.equal(menu.oldBrackets,'none');check('Five fitted menu bays share a closed curved housing without hanging brackets');
+ const menu=await page.evaluate(()=>({seams:document.querySelectorAll('.menu-seam').length,closed:document.querySelector('.menu-outline').getAttribute('d').endsWith('Z'),oldBrackets:document.querySelectorAll('#hud-buttons .tile').length&&getComputedStyle(document.querySelector('#inventory-button'),'::after').content}));
+ assert.equal(menu.seams,3);assert.ok(menu.closed);assert.equal(menu.oldBrackets,'none');check('Five fitted menu bays share a closed curved housing without hanging brackets');
  await page.evaluate(()=>{document.querySelector('#world').style.background='#b0b0b0';window.hudTest.visor({strength:0,spread:100})});
  await page.waitForFunction(()=>getComputedStyle(document.querySelector('#visor')).opacity==='1');
  await page.screenshot({path:'artifacts/vignette-fixture-off.png'});
@@ -118,7 +118,7 @@ print(json.dumps({n:{k:list(im.getpixel(p)) for k,p in points.items()} for n,im 
  });
  await game.reload();await ready();await continueAfterReload();await game.waitForFunction(()=>!document.body.classList.contains('booting'));
  assert.equal(await game.locator('#g-health').getAttribute('data-low'),'true');assert.equal(await game.locator('#g-health b').textContent(),'18');assert.equal(await game.locator('#g-satiety b').textContent(),'80');
- await game.locator('#suit-button').tap();assert.equal(await game.locator('#suit-panel').isVisible(),true);await click('#close-suit');
+ await game.locator('#inventory-button').tap();await game.locator('#open-suit').tap();assert.equal(await game.locator('#suit-panel').isVisible(),true);await click('#close-suit');
  await game.locator('#map-button').tap();assert.equal(await game.locator('#map-panel').isVisible(),true);await click('#close-map');
  const dayBefore=await game.evaluate(()=>window.__vireon.getState().dayOffsetTicks);await game.locator('#day').tap();assert.notEqual(await game.evaluate(()=>window.__vireon.getState().dayOffsetTicks),dayBefore);await game.locator('#day').tap();
  check('Live vital numbers and low-health warning; curved suit/map/day buttons respond to touch');
@@ -166,7 +166,7 @@ print(json.dumps({n:{k:list(im.getpixel(p)) for k,p in points.items()} for n,im 
  // Use the real suit controls: no helmet means no decorative visor; other parts must not affect it.
  await game.evaluate(()=>window.__vireon.teleport(40,40,-.2,-.08));await game.waitForTimeout(400);
  const prefsBeforeHelmet=await game.evaluate(()=>JSON.parse(localStorage.getItem('vireon.settings')).visor);
- await click('#suit-button');await click('#part-grid [data-part="boots"]');await click('#suit-remove');
+ await click('#inventory-button');await click('#open-suit');await click('#part-grid [data-part="boots"]');await click('#suit-remove');
  assert.equal(await game.locator('#visor').evaluate(e=>e.hidden),false);
  await click('#suit-replace');await click('#suit-detail .option');
  await click('#part-grid [data-part="helmet"]');await click('#suit-remove');
@@ -174,7 +174,7 @@ print(json.dumps({n:{k:list(im.getpixel(p)) for k,p in points.items()} for n,im 
  await click('#close-suit');await game.evaluate(()=>window.__vireon.teleport(44,46,-.2,-.08));await shot('without-helmet');
  await game.evaluate(()=>window.__vireon.save());await game.reload();await ready();await continueAfterReload();
  assert.equal(await game.locator('#visor').evaluate(e=>e.hidden),true);assert.equal(await game.evaluate(()=>window.__vireon.getState().suit.helmet),null);
- await click('#suit-button');await click('#part-grid [data-part="helmet"]');await click('#suit-replace');await click('#suit-detail .option');
+ await click('#inventory-button');await click('#open-suit');await click('#part-grid [data-part="helmet"]');await click('#suit-replace');await click('#suit-detail .option');
  assert.ok(await game.evaluate(()=>window.__vireon.getState().suit.helmet));assert.equal(await game.locator('#visor').evaluate(e=>e.hidden),false);
  await click('#close-suit');await shot('helmet-restored');
  assert.deepEqual(await game.evaluate(()=>JSON.parse(localStorage.getItem('vireon.settings')).visor),prefsBeforeHelmet);

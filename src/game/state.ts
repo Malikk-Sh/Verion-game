@@ -11,13 +11,14 @@ import { QUEST_IDS, type QuestId } from './questCatalog';
  * Complete persistent game state. Plain JSON only: no class instances, GPU objects or
  * functions (TECHNICAL §2). Revision numbers live in save manifests.
  *
+ * State version 6 adds crates, packed bodies and portable water; paid legacy jobs survive.
  * State version 5 adds bounded quest facts and milestones. Version 4 adds workstation levels.
  * State version 3 adds persistent production and construction. Version 2 introduced four suit
  * parts, hotbar selection (an index into
  * the first inventory row — not a separate container), display-only vitals and the day-phase
  * offset. Version 1/2 saves (including content 1.0.0) are migrated by sanitizeState() without loss.
  */
-export const STATE_VERSION = 5;
+export const STATE_VERSION = 6;
 export const HOTBAR_SIZE = 6;
 export type ItemStack = NonNullable<Slot>;
 export type Drop = { id: string; x: number; z: number; items: ItemStack[] };
@@ -35,7 +36,7 @@ export type GameState = {
   /** Selected cell of the first inventory row (0…5). */
   hotbar: number;
  };
- world: { base: BaseState; capsuleMilliGU: number; nodes: Record<string, number>; drops: Drop[]; nextDropId: number; dayOffsetTicks: number };
+ world: { crates: Record<string,Slot[]>; base: BaseState; capsuleMilliGU: number; nodes: Record<string, number>; drops: Drop[]; nextDropId: number; dayOffsetTicks: number };
  progress: { visited: string[]; discovered: string[]; selected: string; quests: QuestProgress };
 };
 export const SPAWN_POSE = { x: 40, z: 42, yaw: .38, pitch: -.035 };
@@ -47,7 +48,7 @@ export function newGame(worldId: string, seed: number, createdAt: number, y: num
  return {
   meta: { worldId, name, seed: seed >>> 0, planetId: 'verdana', generatorVersion: GENERATOR_VERSION, contentVersion: CONTENT_VERSION, stateVersion: STATE_VERSION, createdAt, activeTicks: 0 },
   player: { x: SPAWN_POSE.x, y, z: SPAWN_POSE.z, yaw: SPAWN_POSE.yaw, pitch: SPAWN_POSE.pitch, vitals: { health: 100, satiety: 100 }, survival: freshSurvival(), suit: basicSuit(), bottles: [{ itemId: 'bottle_1', count: 1, milliGU: TANKS.bottle_1.capacity }, null], inventory, hotbar: 0 },
-  world: { base: freshBase(), capsuleMilliGU: 2400000, nodes: Object.fromEntries(NODES.map(n => [n.id, n.amount])), drops: [], nextDropId: 1, dayOffsetTicks: START_OFFSET_TICKS },
+  world: { crates: {'crate-a':emptyInventory(),'crate-b':emptyInventory()}, base: freshBase(), capsuleMilliGU: 2400000, nodes: Object.fromEntries(NODES.map(n => [n.id, n.amount])), drops: [], nextDropId: 1, dayOffsetTicks: START_OFFSET_TICKS },
   progress: { visited: [], discovered: [], selected: 'iron', quests: freshQuestProgress() },
  };
 }
@@ -64,7 +65,7 @@ function str(v: unknown, p: string, max = 64, re = /^[\p{L}\p{N} _.·:\-]*$/u) {
 function arr(v: unknown, p: string, max: number) { if (!Array.isArray(v) || v.length > max) throw new InvalidState(p, `ожидался массив ≤${max}`); return v; }
 const ID = /^[a-z0-9_\-]+$/;
 /** One item entry. Stateful items (tools with durability, tanks with gas) always have count 1. */
-function entry(v: unknown, p: string, maxCount?: number): ItemStack {
+function entry(v: unknown, p: string, maxCount?: number,allowPacked=true): ItemStack {
  const o = obj(v, p), itemId = str(o.itemId, p + '.itemId', 40, ID);
  if (!Object.hasOwn(ITEMS, itemId)) throw new InvalidState(p + '.itemId', `неизвестный предмет ${itemId}`);
  const def = ITEMS[itemId], tool = Object.hasOwn(TOOLS, itemId) ? TOOLS[itemId] : undefined, tank = Object.hasOwn(TANKS, itemId) ? TANKS[itemId] : undefined;
@@ -73,9 +74,10 @@ function entry(v: unknown, p: string, maxCount?: number): ItemStack {
  if (o.milliGU !== undefined) { if (!tank) throw new InvalidState(p, 'газ у не-баллона'); s.milliGU = int(o.milliGU, p + '.milliGU', 0, tank.capacity); }
  if (tool && s.durability === undefined) throw new InvalidState(p, 'нет прочности инструмента');
  if (tank && s.milliGU === undefined) throw new InvalidState(p, 'нет остатка газа');
+ if(o.packed!==undefined){if(!allowPacked||!(BUILDABLE as readonly string[]).includes(itemId)||s.count!==1)throw new InvalidState(p,'неверный упакованный корпус');const body=obj(o.packed,p+'.packed');if(body.kind!==itemId)throw new InvalidState(p,'корпус не совпадает с предметом');const parsed=validateBase({buildings:[{...body,id:'build-1',x:0,y:0,z:0}],links:[],nextId:2,hand:null,handQueue:[],passage:null}).buildings[0];const {id,x,y,z,...packed}=parsed;s.packed=packed;}
  return s;
 }
-const slot = (v: unknown, p: string): Slot => v === null ? null : entry(v, p);
+const slot = (v: unknown, p: string,allowPacked=true): Slot => v === null ? null : entry(v, p,undefined,allowPacked);
 function suitSlot(v: unknown, part: SuitPart): Slot {
  const s = slot(v, `player.suit.${part}`);
  if (s && ITEMS[s.itemId].part !== part) throw new InvalidState(`player.suit.${part}`, 'предмет не подходит к этому слоту');
@@ -88,7 +90,7 @@ function bottleSlot(v: unknown, p: string): Slot { const s = slot(v, p); if (s &
  * inventory, tool durability and tank gas are copied untouched; new fields get start values. v3 manual queues retire with all paid stock/WIP intact.
  * Works on a copy; the original object is never modified.
  */
-export function migrateRaw(raw: unknown): unknown {
+function migratePrevious(raw: unknown): unknown {
  if (!isObj(raw) || !isObj(raw.meta)) return raw;
  const version = raw.meta.contentVersion;
  if (version === CONTENT_VERSION) {
@@ -107,6 +109,7 @@ export function migrateRaw(raw: unknown): unknown {
   if (!('capsuleMilliGU' in world)) world.capsuleMilliGU = 2400000;
   }
   // v3 already required survival, capsule and base fields; never refill a corrupt v3 save.
+  for(const b of arr(obj(world.base,'world.base').buildings,'buildings',64)){const body=obj(b,'building');if(body.kind==='electrolyzer'&&isObj(body.job)&&body.job.recipeId==='melt_in_generator')body.job.recipeId='legacy_melt';if(body.kind==='electrolyzer')body.queue=arr(body.queue,'queue',5).filter(v=>v!=='melt_in_generator');}
   const base=validateBase(world.base,true);
   base.handQueue=[];for(const b of base.buildings)if(b.kind==='workbench')b.queue=[];
   world.base=base;
@@ -126,6 +129,29 @@ export function migrateRaw(raw: unknown): unknown {
  obj(r.progress,'progress').quests=freshQuestProgress();
  for (const n of NODES) if (!(n.id in obj(w.nodes, 'world.nodes')) && ['sand-a','grass-a','grass-b'].includes(n.id)) (w.nodes as Obj)[n.id] = n.amount;
  return r;
+}
+export function migrateRaw(raw:unknown):unknown{
+ const r=migratePrevious(raw);if(isObj(raw)&&isObj(raw.meta)&&raw.meta.stateVersion===STATE_VERSION)return r;if(!isObj(r)||!isObj(r.meta)||![5,6].includes(Number(r.meta.stateVersion)))return r;
+ const next=structuredClone(r),world=obj(next.world,'world');
+ if(!('crates' in world))world.crates={'crate-a':emptyInventory(),'crate-b':emptyInventory()};
+ const base=obj(world.base,'world.base');for(const b of arr(base.buildings,'buildings',64)){
+  const body=obj(b,'building');
+  if(body.kind==='kiln'||body.kind==='electrolyzer'){
+   // Old unpaid recipe lists retire. Preserve paid WIP and every loaded stack;
+   // only the two visible inputs feed the new dedicated machine interface.
+   arr(body.queue,'queue',5);body.queue=[];
+   const pool=arr(body.input,'building.input',4).slice();
+   if(pool.length===4){
+    const types=body.kind==='kiln'?[['iron_raw','copper_raw','sand','ice'],['fiber']]:[['water'],Object.keys(TANKS)];
+    const slots:unknown[]=Array(4).fill(null);
+    types.forEach((ids,i)=>{const at=pool.findIndex(s=>isObj(s)&&ids.includes(String(s.itemId)));if(at>=0){slots[i]=pool[at];pool[at]=null;}});
+    for(const s of pool)if(s!==null){const at=slots.findIndex(s=>s===null);slots[at]=s;}
+    body.input=slots;
+   }
+  }
+  if(body.kind==='electrolyzer'){const j=body.job;if(isObj(j)&&j.recipeId==='melt_in_generator')j.recipeId='legacy_melt';}
+ }
+ obj(obj(next.progress,'progress').quests,'quests').tracked=null;obj(next.meta,'meta').stateVersion=STATE_VERSION;return next;
 }
 /** Rebuilds a fresh GameState from untrusted JSON (migrating older versions); unknown keys are dropped, bad values throw. */
 export function sanitizeState(input: unknown): GameState {
@@ -165,7 +191,7 @@ export function sanitizeState(input: unknown): GameState {
    survival, suit: Object.fromEntries(SUIT_PARTS.map(p => [p, suitSlot(suitRaw[p], p)])) as Suit,
    bottles: [bottleSlot(bottles[0], 'player.bottles[0]'), bottleSlot(bottles[1], 'player.bottles[1]')], inventory: inv.map((s, i) => slot(s, `player.inventory[${i}]`)),
    hotbar: int(pl.hotbar, 'player.hotbar', 0, HOTBAR_SIZE - 1) },
-  world: { base: validateBase(w.base), capsuleMilliGU: int(w.capsuleMilliGU, 'world.capsuleMilliGU', 0, 2400000), nodes, drops, nextDropId, dayOffsetTicks: int(w.dayOffsetTicks, 'world.dayOffsetTicks', 0, CYCLE_TICKS - 1) },
+  world: { crates:Object.fromEntries(['crate-a','crate-b'].map(id=>{const a=arr(obj(w.crates,'world.crates')[id],'crate.'+id,24);if(a.length!==24)throw new InvalidState('crate','нужно 24 слота');return [id,a.map((v,i)=>slot(v,'crate.'+id+'.'+i))];})), base: validateBase(w.base), capsuleMilliGU: int(w.capsuleMilliGU, 'world.capsuleMilliGU', 0, 2400000), nodes, drops, nextDropId, dayOffsetTicks: int(w.dayOffsetTicks, 'world.dayOffsetTicks', 0, CYCLE_TICKS - 1) },
   progress: { visited: ids(pr.visited, 'progress.visited'), discovered: ids(pr.discovered, 'progress.discovered'), selected: str(pr.selected, 'progress.selected', 32, ID), quests:{facts,completed,tracked:qp.tracked as QuestId|null} },
  };
 }
@@ -174,13 +200,13 @@ export function sanitizeState(input: unknown): GameState {
 function validateBase(value: unknown, legacy = false): BaseState {
  const raw=obj(value,'world.base'), seen=new Set<string>(), generationIds:number[]=[];
  const register=(v:unknown,p:string,prefix:string)=>{const id=str(v,p,32,ID);if(!new RegExp('^'+prefix+'-[1-9][0-9]*$').test(id)||seen.has(id))throw new InvalidState(p,'неверный или повторный ID');seen.add(id);generationIds.push(Number(id.split('-')[1]));return id;};
- const container=(v:unknown,p:string)=>{const a=arr(v,p,4);if(a.length!==4)throw new InvalidState(p,'нужно 4 слота');return a.map((s,i)=>slot(s,p+'.'+i));};
+ const container=(v:unknown,p:string)=>{const a=arr(v,p,4);if(a.length!==4)throw new InvalidState(p,'нужно 4 слота');return a.map((s,i)=>slot(s,p+'.'+i,false));};
  const job=(v:unknown,station:string):Job|null=>{
   if(v===null)return null;const o=obj(v,'job'),id=str(o.recipeId,'job.recipeId',40,ID),r=RECIPE_BY_ID.get(id);
   if(!r||r.station!==station)throw new InvalidState('job.recipeId','неподходящий рецепт');
-  const reserved=arr(o.reserved,'job.reserved',8).map((s,i)=>entry(s,'job.reserved.'+i)),expected=Object.entries(r.inputs).filter(([id])=>id!=='water');
+  const reserved=arr(o.reserved,'job.reserved',8).map((s,i)=>entry(s,'job.reserved.'+i,undefined,false)),water=int(o.water,'job.water',0,1000),expected=Object.entries(r.inputs).filter(([id])=>id!=='water'||water===0);
   if(reserved.length!==expected.length||reserved.some(s=>s.durability!==undefined||s.milliGU!==undefined)||expected.some(([id,n])=>reserved.filter(s=>s.itemId===id&&s.count===n).length!==1))throw new InvalidState('job.reserved','входы не совпадают с рецептом');
-  const water=int(o.water,'job.water',0,1000);if(water!==(r.inputs.water??0)*1000)throw new InvalidState('job.water','неверный резерв воды');
+  if(water!==0&&water!==(r.inputs.water??0)*1000)throw new InvalidState('job.water','неверный резерв воды');
   return {recipeId:id,workMs:num(o.workMs,'job.workMs',0,r.seconds*1000),reserved,water};
  };
  const queue=(v:unknown,station:string)=>arr(v,'queue',5).map(v=>{const id=str(v,'queue.recipe',40,ID);if(RECIPE_BY_ID.get(id)?.station!==station)throw new InvalidState('queue.recipe','неподходящий рецепт');return id;});

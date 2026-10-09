@@ -94,7 +94,7 @@
       }
     },
     "grass": {
-      "name": "Съедобная трава",
+      "name": "Местная трава",
       "kind": "item",
       "stack": 64,
       "source": {
@@ -633,7 +633,7 @@
     "water": {
       "name": "Вода",
       "kind": "fluid",
-      "stack": 0
+      "stack": 64
     },
     "oxygen": {
       "name": "Кислород",
@@ -3993,18 +3993,19 @@
     },
     {
       "id": "melt_in_generator",
-      "station": "electrolyzer",
+      "station": "kiln",
       "inputs": {
-        "ice": 1
+        "ice": 1,
+        "fiber": 1
       },
       "outputs": {
         "water": 1
       },
       "seconds": 2,
-      "EU_per_second": 6,
-      "tech": "power",
+      "EU_per_second": 0,
+      "tech": "start",
       "scope": "core",
-      "note": ""
+      "note": "1 переносимая единица воды = 1 WU; слот сырья и слот топлива."
     },
     {
       "id": "melt_bulk",

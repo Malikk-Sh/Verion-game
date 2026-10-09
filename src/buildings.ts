@@ -24,9 +24,11 @@ export function placementProblem(g: GameState, kind: BuildingKind, x: number, z:
 }
 export function place(g: GameState, kind: BuildingKind, x: number, z: number): string {
  const problem=placementProblem(g,kind,x,z);if(problem)return problem;
- if(!removeItems(g.player.inventory,kind,1))return 'В рюкзаке нет: '+ITEMS[kind].name;
+ const inv=g.player.inventory,index=inv[g.player.hotbar]?.itemId===kind?g.player.hotbar:inv.findIndex(s=>s?.itemId===kind&&!s.packed);
+ const selected=inv[index];if(!selected)return 'В рюкзаке нет: '+ITEMS[kind].name;
+ const packed=selected.packed;if(--selected.count===0)inv[index]=null;
  const dome=g.world.base.buildings.find(b=>insideDome(b,x,b.y+.1,z)),y=dome?dome.y:Math.max(...[-2.5,0,2.5].flatMap(dx=>[-2.5,0,2.5].map(dz=>heightAt(x+(kind==='dome'?dx:dx*.2),z+(kind==='dome'?dz:dz*.2)))))+.12;
- makeBuilding(g,kind,x,y,z);return '';
+ const body=makeBuilding(g,kind,x,y,z);if(packed)Object.assign(body,structuredClone(packed));return '';
 }
 /** Procedural low-poly shells and visible explicit links; shared materials. */
 export function createBuildings(scene: THREE.Scene) {

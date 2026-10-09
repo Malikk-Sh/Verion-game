@@ -89,7 +89,7 @@ const legacy = () => ({
 test('migration 1.0.0 → 1.1.0: old saves keep inventory, durability, gas, deposits; the suit becomes four worn parts', () => {
  const old = legacy(), before = JSON.stringify(old), s = sanitizeState(old);
  assert.equal(JSON.stringify(old), before, 'input object untouched');
- assert.equal(s.meta.contentVersion, '1.1.0'); assert.equal(s.meta.stateVersion, 5);
+ assert.equal(s.meta.contentVersion, '1.1.0'); assert.equal(s.meta.stateVersion, 6);
  assert.deepEqual(Object.values(s.player.suit).map(p => p?.itemId), ['suit_helmet', 'suit_chest', 'suit_legs', 'suit_boots']);
  assert.equal(s.player.inventory[0]!.durability, 101); assert.equal(s.player.bottles[0]!.milliGU, 199000); assert.deepEqual(s.player.inventory[23], { itemId: 'ice', count: 7 });
  assert.equal(s.world.nodes['iron-a'], 19); assert.equal(s.meta.activeTicks, 9000); assert.equal(s.player.hotbar, 0); assert.deepEqual(s.player.vitals, { health: 100, satiety: 100 });

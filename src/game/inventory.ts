@@ -1,10 +1,11 @@
+import type { Building } from './production';
 import { ITEMS } from './defs';
 /** One inventory slot. Items with state (tools, tanks) always have count 1 and never stack. */
-export type Slot = { itemId: string; count: number; durability?: number; milliGU?: number } | null;
+export type Slot = { itemId: string; count: number; durability?: number; milliGU?: number; packed?: Omit<Building,'id'|'x'|'y'|'z'> } | null;
 export const INVENTORY_SIZE = 24;
 export const emptyInventory = (): Slot[] => Array.from({ length: INVENTORY_SIZE }, () => null);
 export const stackOf = (id: string) => ITEMS[id]?.stack ?? 1;
-export const stateful = (s: NonNullable<Slot>) => s.durability !== undefined || s.milliGU !== undefined || stackOf(s.itemId) === 1;
+export const stateful = (s: NonNullable<Slot>) => s.packed !== undefined || s.durability !== undefined || s.milliGU !== undefined || stackOf(s.itemId) === 1;
 /** How many of `itemId` would fit. */
 export function capacityFor(slots: Slot[], itemId: string) {
  const max = stackOf(itemId); let n = 0;
@@ -30,3 +31,10 @@ export function removeItems(slots: Slot[], itemId: string, count: number): numbe
 }
 export const countItem = (slots: Slot[], itemId: string) => slots.reduce((n, s) => n + (s && s.itemId === itemId ? s.count : 0), 0);
 export const firstEmpty = (slots: Slot[], from = 0) => { for (let i = from; i < slots.length; i++) if (!slots[i]) return i; for (let i = 0; i < from; i++) if (!slots[i]) return i; return -1; };
+
+/** Moves an actual stack between containers, preserving all item state. */
+export function transferSlot(from:Slot[],index:number,to:Slot[]):boolean{
+ const s=from[index];if(!s)return false;
+ if(stateful(s)){const at=firstEmpty(to);if(at<0)return false;to[at]=structuredClone(s);from[index]=null;return true;}
+ const left=addItems(to,s.itemId,s.count);if(left===s.count)return false;s.count=left;if(!left)from[index]=null;return true;
+}

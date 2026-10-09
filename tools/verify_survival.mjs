@@ -46,7 +46,7 @@ try {
  report.webgl = await page.evaluate(() => { const gl = document.getElementById('world').getContext('webgl2'), ext = gl.getExtension('WEBGL_debug_renderer_info'); return ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER); });
  assert.match(report.webgl, /SwiftShader/i);
  await click('#start'); await page.waitForFunction(() => window.__vireon.getState().running);
- assert.equal((await state()).version, 'S2.5'); check('S2.2 starts with real WebGL rendering and a saved starting kit');
+ assert.equal((await state()).version, 'S2.6'); check('S2.2 starts with real WebGL rendering and a saved starting kit');
 
  await configure(() => { const s = window.__vireon.snapshot(); s.player.vitals = { health: 80, satiety: 50 }; s.player.hotbar = 1; window.__vireon.setState(s); });
  await page.waitForFunction(() => window.__vireon.getState().action === 'eat');
@@ -55,15 +55,15 @@ try {
  assert.equal(eaten.player.vitals.health, 81); check('Selected pulp is edible inside the capsule; landmark scanning cannot override food');
 
  await configure(() => { const s = window.__vireon.snapshot(); s.player.hotbar = 0; s.world.capsuleMilliGU = 1000000; window.__vireon.setState(s); });
- await page.waitForFunction(() => window.__vireon.getState().action === 'refill');
- const before = await snapshot(); await page.keyboard.down('KeyF');
+ await page.waitForFunction(() => window.__vireon.getState().action === 'capsule');
+ const before = await snapshot(); await page.keyboard.press('KeyF');await page.locator('.machine-process summary').click();await page.getByRole('button',{name:'Баллоны → капсула',exact:true}).click();
  await page.waitForFunction(n => window.__vireon.getState().capsuleMilliGU > n + 15000, before.world.capsuleMilliGU);
- await page.keyboard.up('KeyF'); await click('#pause-button'); await page.evaluate(() => window.__vireon.save());
+ await click('#close-production'); await click('#pause-button'); await page.evaluate(() => window.__vireon.save());
  const after = await snapshot();
  const total = s => s.world.capsuleMilliGU + s.player.bottles.reduce((n, b) => n + (b?.milliGU ?? 0), 0);
  assert.ok(after.world.capsuleMilliGU > before.world.capsuleMilliGU);
  assert.equal(total(before) - total(after), (after.meta.activeTicks - before.meta.activeTicks) * 50);
- check('Holding F manually transfers installed bottle gas into capsule; total oxygen only decreases by breathing');
+ check('Explicit capsule port transfers installed bottle gas into capsule; total oxygen only decreases by breathing');
  await click('#resume');
 
  await page.evaluate(() => window.__vireon.teleport(67, 61.6, 0, -.28));

@@ -4,9 +4,9 @@ const SNAP=.45;
 export type Input = { forward: number; right: number; run: boolean; jump: boolean };
 export class Character {
  x=SPAWN.x; z=SPAWN.z; y=heightAt(this.x,this.z)+.14; yaw=SPAWN.yaw; pitch=-.035;
- vy=0; grounded=true; previous={x:this.x,y:this.y,z:this.z}; radius=.3; height=1.8;
+ vy=0; vx=0; vz=0; airSpeed=0; grounded=true; previous={x:this.x,y:this.y,z:this.z}; radius=.3; height=1.8;
  constructor(public colliders:Box[]){}
- reset(){this.x=SPAWN.x;this.z=SPAWN.z;this.y=heightAt(this.x,this.z)+.14;this.yaw=SPAWN.yaw;this.pitch=-.035;this.vy=0;this.grounded=true;this.previous={x:this.x,y:this.y,z:this.z};}
+ reset(){this.x=SPAWN.x;this.z=SPAWN.z;this.y=heightAt(this.x,this.z)+.14;this.yaw=SPAWN.yaw;this.pitch=-.035;this.vy=this.vx=this.vz=this.airSpeed=0;this.grounded=true;this.previous={x:this.x,y:this.y,z:this.z};}
  private overlaps(x:number,z:number,b:Box){const cx=Math.max(b.minX,Math.min(b.maxX,x)),cz=Math.max(b.minZ,Math.min(b.maxZ,z));return (x-cx)**2+(z-cz)**2<this.radius**2;}
  private moveAxis(dx:number,dz:number){
   const x=Math.max(MIN+2,Math.min(MAX-2,this.x+dx)),z=Math.max(MIN+2,Math.min(MAX-2,this.z+dz));
@@ -27,9 +27,10 @@ export class Character {
  step(dt:number,input:Input,speedMultiplier=1){
   this.previous={x:this.x,y:this.y,z:this.z};
   const length=Math.hypot(input.forward,input.right),scale=length>1?1/length:1;
-  const speed=(input.run?5:3.5)*speedMultiplier,f=input.forward*scale,r=input.right*scale;
-  const dx=(Math.sin(this.yaw)*f-Math.cos(this.yaw)*r)*speed*dt;
-  const dz=(Math.cos(this.yaw)*f+Math.sin(this.yaw)*r)*speed*dt;
+  const speed=this.grounded?(input.run?5:3.5)*speedMultiplier:this.airSpeed,f=input.forward*scale,r=input.right*scale;
+  if(this.grounded||length>.01){this.vx=(Math.sin(this.yaw)*f-Math.cos(this.yaw)*r)*speed;this.vz=(Math.cos(this.yaw)*f+Math.sin(this.yaw)*r)*speed;}
+  if(this.grounded)this.airSpeed=speed;
+  const dx=this.vx*dt,dz=this.vz*dt;
   // Substeps avoid tunnelling even when moving diagonally past a narrow jamb.
   const n=Math.max(1,Math.ceil(Math.hypot(dx,dz)/.12));
   for(let i=0;i<n;i++){this.moveAxis(dx/n,0);this.moveAxis(0,dz/n);}

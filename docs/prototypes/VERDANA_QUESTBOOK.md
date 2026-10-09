@@ -1,5 +1,7 @@
 # Вердана S2.5 — дерево развития
 
+> Актуализация S2.6: ресурсные цены, закрепление цели и высокая карточка заменены компактным попапом. Текущие правила и кадры: [VERDANA_S26.md](VERDANA_S26.md). Описания прежней карточки ниже относятся к S2.5.
+
 8 октября 2026. `stage2-survival` / [PR #4](https://github.com/Malikk-Sh/Verion-game/pull/4). [Игровое превью](https://verion-game-git-stage2-survival-malikk-shs-projects.vercel.app/).
 
 ## Что реализовано

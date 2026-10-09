@@ -32,7 +32,7 @@ try {
  report.webgl=await page.evaluate(()=>{const gl=document.getElementById('world').getContext('webgl2'),ext=gl.getExtension('WEBGL_debug_renderer_info');return{version:gl.getParameter(gl.VERSION),renderer:ext?gl.getParameter(ext.UNMASKED_RENDERER_WEBGL):gl.getParameter(gl.RENDERER)};});assert.match(report.webgl.renderer,/SwiftShader/i,'CI uses the pinned software renderer');
  assert.equal(await page.locator('vite-error-overlay').count(),0);await page.waitForTimeout(1500);assert.ok((await state()).drawCalls>0,'Gameplay must perform real WebGL draw calls');await page.screenshot({path:'artifacts/b4-welcome.png'});check('Development page loads, WebGL2 initializes, no error overlay');
  await page.click('#title-settings');assert.equal((await state()).dialog,'settings');assert.equal(await page.locator('#settings').isVisible(),true);await page.screenshot({path:'artifacts/b4-title-settings.png'});await page.click('#settings-back');assert.equal((await state()).dialog,'welcome');check('Settings open from the title screen and return to it');
- await page.click('#start');await page.waitForFunction(()=>window.__vireon.getState().running);assert.equal((await state()).version,'S2.5');
+ await page.click('#start');await page.waitForFunction(()=>window.__vireon.getState().running);assert.equal((await state()).version,'S2.6');
  await page.keyboard.press('KeyE');assert.equal((await state()).dialog,'info-panel');assert.ok((await state()).visited.includes('capsule'));await page.click('#close-info');check('Inspection opens a real landmark card and records visit');
  assert.equal((await state()).grassCount,244);check('Scene contains 244 tufts, versus 1218 in B1');
  const before=await state();await page.keyboard.down('KeyW');await page.waitForFunction(z=>window.__vireon.getState().position.z>z+5,before.position.z,{timeout:240000});await page.keyboard.up('KeyW');
@@ -85,7 +85,7 @@ try {
  await page.click('#visor-settings-button');await checkButtonTargets('667×320 visor settings');await page.click('#visor-settings-back');
  await page.click('#settings-back');await page.click('#saves-button');await checkButtonTargets('667×320 saves');await page.click('#close-saves');await page.click('#resume');
  await page.click('#inventory-button');await checkButtonTargets('667×320 inventory');await page.click('#close-inventory');
- await page.click('#suit-button');await checkButtonTargets('667×320 suit');await page.click('#close-suit');
+ await page.keyboard.press('c');await checkButtonTargets('667×320 suit');await page.click('#close-suit');
  // Vercel serves the Vite production build; standalone HTML is no longer maintained.
  production=await preview({preview:{host:'127.0.0.1',port:5174,strictPort:true}});
  await page.goto('http://127.0.0.1:5174');await page.waitForFunction(()=>document.body.dataset.ready==='true');await page.click('#start');await page.waitForFunction(()=>window.__vireon.getState().running);check('Production Vite build initializes and starts (Vercel deployment format)');

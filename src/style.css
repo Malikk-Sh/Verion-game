@@ -354,3 +354,5 @@ input[type=range]::-moz-range-track{height:3px;background:var(--line)}input[type
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation-duration:.01s!important}}
 @media(max-height:340px){.settings-panel{padding:14px 18px}.settings-panel h2{margin:4px 0 8px}.settings-grid{grid-template-columns:1fr 1fr 1fr;gap:6px}.settings-grid button{min-height:48px}.settings-grid .range-row{grid-column:1/3;min-height:48px}.settings-grid .ghost{grid-column:3/4}.settings-panel .help{margin-top:6px}}
+
+#retrieve-station{position:absolute;left:50%;top:calc(50% + 60px);transform:translateX(-50%);min-width:96px;min-height:32px;font-size:11px;pointer-events:auto;z-index:5;background:#12303bc9;border:1px solid #446474;border-radius:3px;clip-path:none}

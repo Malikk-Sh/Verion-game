@@ -54,6 +54,15 @@ export function dropSlot(state: GameState, i: number, count?: number): Result {
  return { ok: true };
 }
 export const selectHotbar = (state: GameState, i: number) => { if (inRange(i, HOTBAR_SIZE)) state.player.hotbar = i; };
+/** Ready the exact selected body/line for a world action, using a free quick-access cell first. */
+export function readyWorldItem(state: GameState, from: number): Result {
+ const inv=state.player.inventory;
+ if(!inRange(from,inv.length)||!inv[from])return fail('Ячейка пуста');
+ const free=inv.slice(0,HOTBAR_SIZE).findIndex(s=>!s),to=from<HOTBAR_SIZE?from:free>=0?free:state.player.hotbar;
+ const result=moveSlot(inv,from,to);
+ if(result.ok)selectHotbar(state,to);
+ return result;
+}
 /** The tool in the selected hotbar cell, or null — the active tool is defined by the selection, not by search. */
 export function selectedTool(state: GameState) {
  const s = state.player.inventory[state.player.hotbar];
