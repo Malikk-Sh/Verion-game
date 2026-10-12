@@ -1,61 +1,128 @@
 import './quests.css';
-import { QUESTS, QUEST_BY_ID, QUEST_ROUTES, QUEST_HUBS, QUEST_MAP, type QuestId } from '../game/questCatalog';
-import { questStatus, questParents, refreshQuestProgress } from '../game/quests';
+import { refreshQuestProgress, questStatus, questParents } from '../game/quests';
+import { QUEST_BY_ID, type QuestId } from '../game/questCatalog';
+import { CHAPTERS, GUIDE_ORDER, guideStep, currentStep, progressCount, type GuideStep, type GuideTask, type GuideTarget } from '../game/guide';
+import { RECIPE_BY_ID, WORKBENCH_UPGRADE } from '../game/production';
+import { countItem } from '../game/inventory';
+import { ITEMS } from '../game/defs';
 import type { GameState } from '../game/state';
 import { itemArt } from './art';
 
-type Host={game:()=>GameState|null;show:()=>void;close:()=>void;changed:()=>void;tone:()=>void};
-const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
-const text=(tag:string,value:string,cls='')=>{const e=document.createElement(tag);e.className=cls;e.textContent=value;return e;};
-const ns='http://www.w3.org/2000/svg';
-const svg=(tag:string,attrs:Record<string,string|number>)=>{const e=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))e.setAttribute(k,String(v));return e;};
-const label=(id:QuestId)=>QUEST_BY_ID.get(id)!.label.replace(/\n/g,' ');
-const states={done:'Выполнено',ready:'Доступная цель',locked:'Позже'};
+type Host = { game: () => GameState | null; show: () => void; close: () => void; changed: () => void; tone: () => void; craft?: (recipeId: string) => void; navigate?: (target: GuideTarget | null) => void };
+const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+const h = <K extends keyof HTMLElementTagNameMap>(tag: K, text = '', cls = '') => { const e = document.createElement(tag); if (text) e.textContent = text; if (cls) e.className = cls; return e; };
+const STATUS = { done: 'Выполнено', ready: 'Доступно', locked: 'Позже' } as const;
+const name = (id: string) => ITEMS[id]?.name ?? ({ water: 'Вода', oxygen: 'Кислород', hydrogen: 'Водород' } as Record<string, string>)[id] ?? id;
+const plain = (id: QuestId) => QUEST_BY_ID.get(id)!.label.replace(/\n/g, ' ');
 
-export function createQuestBook(host:Host){
- const panel=el('quest-panel'),viewport=el('quest-viewport'),extent=el('quest-extent'),canvas=el('quest-canvas'),detail=el('quest-detail');
- const routeLayer=document.getElementById('quest-route-layer')!,hubLayer=document.getElementById('quest-hub-layer')!;
- const nodeLayer=el('quest-nodes');
- let selected:QuestId|null=null,zoom=1,initialized=false,autoFit=false,offsetX=0;
- const buttons=new Map<QuestId,HTMLButtonElement>();
- const paths=QUEST_ROUTES.map(r=>{const e=svg('path',{d:r.d,class:'quest-path','data-from':r.from,'data-to':r.to});if(r.arrow)e.setAttribute('marker-end','url(#quest-arrow)');routeLayer.append(e);return {e,...r};});
- for(const h of QUEST_HUBS){const g=svg('g',{class:'quest-hub','data-to':h.id});g.append(svg('circle',{cx:h.x,cy:h.y,r:8}));const t=svg('text',{x:h.x,y:h.y});t.textContent='И';g.append(t);hubLayer.append(g);}
- for(const q of QUESTS){const b=document.createElement('button');b.type='button';b.className='quest-node';b.dataset.quest=q.id;b.style.left=(q.x-50)+'px';b.style.top=(q.y-27)+'px';const disc=text('span','','quest-disc');disc.append(itemArt(q.item));disc.append(text('span','','quest-status'));b.append(disc,text('span',q.label,'quest-label'));b.onclick=()=>select(q.id);nodeLayer.append(b);buttons.set(q.id,b);}
- function applyZoom(next:number,anchor={x:(viewport.scrollLeft+viewport.clientWidth/2-offsetX)/zoom,y:(viewport.scrollTop+viewport.clientHeight/2)/zoom}){
-  zoom=Math.max(.4,Math.min(1.5,next));canvas.style.transform=`scale(${zoom})`;canvas.style.setProperty('--quest-label-size',`${12/zoom}px`);canvas.style.setProperty('--quest-badge-size',`${10/zoom}px`);panel.classList.toggle('quest-overview',zoom<.72);
-  offsetX=Math.max(0,(viewport.clientWidth-QUEST_MAP.width*zoom)/2);canvas.style.left=offsetX+'px';
-  extent.style.width=QUEST_MAP.width*zoom+'px';extent.style.height=(QUEST_MAP.height*zoom)+'px';
-  viewport.scrollLeft=anchor.x*zoom+offsetX-viewport.clientWidth/2;viewport.scrollTop=anchor.y*zoom-viewport.clientHeight/2;
-  el<HTMLButtonElement>('quest-zoom-out').disabled=zoom<=.4;el<HTMLButtonElement>('quest-zoom-in').disabled=zoom>=1.5;positionDetail();
- }
- function focusNode(id:QuestId){const q=QUEST_BY_ID.get(id)!;const available=viewport.clientHeight;viewport.scrollLeft=q.x*zoom+offsetX-viewport.clientWidth/2;viewport.scrollTop=q.y*zoom-available/2;}
- function fit(){autoFit=true;applyZoom(Math.min(viewport.clientWidth/QUEST_MAP.width,viewport.clientHeight/QUEST_MAP.height));viewport.scrollLeft=viewport.scrollTop=0;}
- function select(id:QuestId){selected=id;host.tone();draw();positionDetail();el('quest-announcement').textContent=label(id)+'. '+states[questStatus(host.game()!,id)];}
- function closeDetail(){const focus=selected;selected=null;draw();if(focus)buttons.get(focus)?.focus({preventScroll:true});}
- function draw(){
-  const g=host.game();if(!g)return;
-  const parents=new Set(selected?questParents(selected):[]),children=new Set(selected?QUESTS.filter(q=>questParents(q.id).includes(selected!)).map(q=>q.id):[]);
-  for(const q of QUESTS){const b=buttons.get(q.id)!,status=questStatus(g,q.id);b.dataset.status=status;b.setAttribute('aria-pressed',String(q.id===selected));b.setAttribute('aria-label',label(q.id)+', '+states[status]);b.title=label(q.id)+' · '+states[status];b.classList.toggle('quest-parent',parents.has(q.id));b.classList.toggle('quest-unrelated',!!selected&&q.id!==selected&&!parents.has(q.id)&&!children.has(q.id));const badge=b.querySelector('.quest-status')!;badge.textContent=status==='done'?'✓':status==='locked'?questParents(q.id).filter(p=>g.progress.quests.completed.includes(p)).length+'/'+questParents(q.id).length:'';}
-  for(const r of paths){const incoming=!!selected&&r.to===selected&&(parents.has(r.from as QuestId)||r.from==='join'),outgoing=r.from===selected&&children.has(r.to as QuestId),station=r.context&&(selected==='bench'||parents.has('bench'));const relevant=incoming||outgoing||station;r.e.classList.toggle('quest-met',g.progress.quests.completed.includes(r.from as QuestId));r.e.classList.toggle('quest-context',r.context);r.e.classList.toggle('quest-focus',relevant);r.e.classList.toggle('quest-missing',relevant&&r.from!=='join'&&!g.progress.quests.completed.includes(r.from as QuestId));r.e.classList.toggle('quest-dim',!!selected&&!relevant);if(relevant)routeLayer.append(r.e);}
-  for(const e of hubLayer.children){e.classList.toggle('quest-hub-focus',e.getAttribute('data-to')===selected);e.classList.toggle('quest-hub-dim',!!selected&&e.getAttribute('data-to')!==selected&&!children.has(e.getAttribute('data-to') as QuestId));}
-  const benchDone=g.progress.quests.completed.includes('bench');el('quest-station').textContent=(benchDone?'✓ ':'')+'Верстак I';
-  detail.replaceChildren();detail.hidden=!selected;
-  if(selected){const q=QUEST_BY_ID.get(selected)!;const head=text('div','','quest-detail-head'),title=text('h3',label(selected));title.id='quest-detail-title';head.append(itemArt(q.item),title,text('span',states[questStatus(g,selected)],'quest-detail-state'));const close=document.createElement('button');close.type='button';close.className='ui-close';close.textContent='×';close.setAttribute('aria-label','Закрыть карточку цели');close.onclick=closeDetail;head.append(close);detail.append(head);
-   const body=text('div','','quest-detail-body');body.append(text('p',q.objective));
-   if(parents.size){const row=text('div','','quest-conditions');row.append(text('span','Нужно всё:'));for(const id of parents){const b=document.createElement('button');b.type='button';b.className='quest-condition';b.textContent=(g.progress.quests.completed.includes(id)?'✓ ':'○ ')+label(id);b.onclick=()=>select(id);row.append(b);}body.append(row);}
-   detail.append(body);
-
+/**
+ * Expedition journal (S3): chapters of concrete steps instead of a node graph. The list shows
+ * what is done, current and later; the card explains why, what exactly to collect (live counters),
+ * how to do it, the recipes involved, and can point the compass at the next place to go.
+ */
+export function createQuestBook(host: Host) {
+ const list = el('journal-list'), detail = el('journal-detail');
+ let selected: QuestId | null = null, signature = '';
+ function taskRow(g: GameState, t: GuideTask) {
+  const row = h('li', '', 'journal-task' + (t.done ? ' done' : ''));
+  row.append(h('i', t.done ? '✓' : '', 'journal-check'));
+  const body = h('div', '', 'journal-task-body');
+  const head = h('div', '', 'journal-task-head'); head.append(h('span', t.label, 'journal-task-label'));
+  if (t.need > 1) head.append(h('b', `${t.have} / ${t.need}${t.unit ? ' ' + t.unit : ''}`, 'journal-count'));
+  body.append(head);
+  if (t.need > 1) { const bar = h('i', '', 'journal-bar'); const fill = h('b'); fill.style.transform = `scaleX(${Math.min(1, t.have / t.need)})`; bar.append(fill); body.append(bar); }
+  row.append(body);
+  if (!t.done && t.target) {
+   const go = h('button', `${Math.round(Math.hypot(t.target.x - g.player.x, t.target.z - g.player.z))} м`, 'journal-go'); go.type = 'button';
+   go.title = 'Показать на компасе: ' + t.target.name; go.setAttribute('aria-label', go.title);
+   go.prepend(svgIcon('i-arrow'));
+   go.onclick = () => { host.navigate?.(t.target!); host.tone(); host.close(); };
+   row.append(go);
   }
-  extent.style.height=(QUEST_MAP.height*zoom)+'px';positionDetail();
+  return row;
  }
- function positionDetail(){if(!selected||detail.hidden)return;const workspace=detail.parentElement!,area=workspace.getBoundingClientRect(),node=buttons.get(selected)!.getBoundingClientRect();
-  const width=Math.min(280,area.width-16);detail.style.width=width+'px';const x=node.left-area.left+node.width/2,y=node.top-area.top;
-  const right=x+node.width/2+12;detail.style.left=Math.max(8,Math.min(area.width-width-8,right+width<=area.width?right:x-node.width/2-width-12))+'px';detail.style.top=Math.max(8,Math.min(area.height-detail.offsetHeight-8,y))+'px';
+ function recipeCard(g: GameState, recipeId: string) {
+  const card = h('div', '', 'journal-recipe');
+  if (recipeId === 'upgrade') {
+   card.append(itemArt('workbench_2', 'art journal-recipe-art'));
+   const ins = h('div', '', 'journal-ingredients');
+   for (const [id, n] of Object.entries(WORKBENCH_UPGRADE.inputs)) ins.append(ingredient(g, id, n));
+   card.append(h('span', 'Улучшение верстака', 'journal-recipe-name'), ins);
+   return card;
+  }
+  const r = RECIPE_BY_ID.get(recipeId); if (!r) return card;
+  const out = Object.keys(r.outputs)[0];
+  card.append(itemArt(out, 'art journal-recipe-art'));
+  const info = h('div', '', 'journal-recipe-info');
+  info.append(h('span', `${name(out)}${r.outputs[out] > 1 ? ' ×' + r.outputs[out] : ''}`, 'journal-recipe-name'), h('small', r.station === 'hand' ? 'В кармане' : r.station === 'kiln' ? 'Плавильная печь' : r.station === 'electrolyzer' ? 'Генератор кислорода' : 'Верстак', 'journal-recipe-station'));
+  const ins = h('div', '', 'journal-ingredients');
+  for (const [id, n] of Object.entries(r.inputs)) ins.append(ingredient(g, id, n));
+  info.append(ins); card.append(info);
+  if (host.craft && (r.station === 'hand' || r.station === 'workbench')) { const b = h('button', 'Крафт', 'journal-craft'); b.type = 'button'; b.onclick = () => { host.tone(); host.craft!(recipeId); }; card.append(b); }
+  return card;
  }
- viewport.addEventListener('scroll',positionDetail);viewport.addEventListener('pointerdown',e=>{if(e.target===viewport||e.target===extent)closeDetail();});
- function open(){const g=host.game();if(!g)return;if(refreshQuestProgress(g))host.changed();host.show();draw();if(!initialized){initialized=true;autoFit=false;applyZoom(Math.max(.8,Math.min(1,viewport.clientWidth/QUEST_MAP.width,viewport.clientHeight/QUEST_MAP.height)),{x:QUEST_MAP.width/2,y:QUEST_MAP.height/2});focusNode(QUESTS.find(q=>questStatus(g,q.id)==='ready')?.id??'materials');}}
- el('quest-close').onclick=()=>{host.tone();host.close();};el('quest-fit').onclick=()=>{selected=null;draw();fit();};
- el('quest-zoom-out').onclick=()=>{autoFit=false;applyZoom(zoom-.15);};el('quest-zoom-in').onclick=()=>{autoFit=false;applyZoom(zoom+.15);};
- new ResizeObserver(()=>{if(panel.hidden||!initialized)return;if(autoFit)fit();else applyZoom(zoom);}).observe(viewport);
- return {open,draw,escape:()=>{if(selected)closeDetail();else host.close();},reset:()=>{selected=null;initialized=false;detail.hidden=true;},debug:()=>({selected,zoom,overview:zoom<.72})};
+ function ingredient(g: GameState, id: string, n: number) {
+  const have = id === 'water' ? countItem(g.player.inventory, 'water') : countItem(g.player.inventory, id), chip = h('span', '', 'journal-ingredient' + (have >= n ? ' ok' : ''));
+  chip.append(itemArt(id), h('b', `${Math.min(have, 999)}/${n}`)); chip.title = name(id); return chip;
+ }
+ function svgIcon(id: string) { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('aria-hidden', 'true'); const u = document.createElementNS('http://www.w3.org/2000/svg', 'use'); u.setAttribute('href', '#' + id); s.append(u); return s; }
+ function drawList(g: GameState, current: QuestId | null) {
+  list.replaceChildren();
+  CHAPTERS.forEach((title, chapter) => {
+   const ids = GUIDE_ORDER.filter(id => guideStep(g, id).chapter === chapter); if (!ids.length) return;
+   const group = h('section', '', 'journal-chapter');
+   const doneCount = ids.filter(id => questStatus(g, id) === 'done').length;
+   const head = h('header', '', 'journal-chapter-head'); head.append(h('span', chapter < 5 ? `${chapter + 1}. ${title}` : title), h('small', `${doneCount}/${ids.length}`)); group.append(head);
+   for (const id of ids) {
+    const status = questStatus(g, id), step = guideStep(g, id), b = h('button', '', 'journal-step');
+    b.type = 'button'; b.dataset.quest = id; b.dataset.status = status; b.classList.toggle('current', id === current); b.setAttribute('aria-pressed', String(id === selected));
+    const tasks = step.tasks.filter(t => t.done).length;
+    b.append(h('i', status === 'done' ? '✓' : id === current ? '●' : '', 'journal-step-mark'), itemArt(step.item, 'art journal-step-art'));
+    const text = h('span', '', 'journal-step-text'); text.append(h('b', step.title), h('small', status === 'done' ? 'Выполнено' : status === 'locked' ? 'Сначала: ' + questParents(id).filter(p => !g.progress.quests.completed.includes(p)).map(plain).join(', ') : `${tasks} / ${step.tasks.length}`));
+    b.append(text);
+    b.onclick = () => { selected = id; host.tone(); draw(true); detail.scrollTop = 0; };
+    group.append(b);
+   }
+   list.append(group);
+  });
+ }
+ function drawDetail(g: GameState, step: GuideStep, current: QuestId | null) {
+  detail.replaceChildren();
+  const status = questStatus(g, step.id);
+  const head = h('header', '', 'journal-detail-head');
+  head.append(itemArt(step.item, 'art journal-hero'));
+  const titles = h('div'); titles.append(h('span', (step.chapter < 5 ? `Глава ${step.chapter + 1} · ` : '') + CHAPTERS[step.chapter], 'mono tiny kicker'), h('h3', step.title));
+  const chip = h('span', step.id === current && status !== 'done' ? 'Текущая цель' : STATUS[status], 'journal-chip ' + (step.id === current && status !== 'done' ? 'current' : status));
+  head.append(titles, chip); detail.append(head);
+  detail.append(h('p', step.why, 'journal-why'));
+  const tasks = h('ul', '', 'journal-tasks'); for (const t of step.tasks) tasks.append(taskRow(g, t)); detail.append(h('h4', 'Что нужно'), tasks);
+  const how = h('ol', '', 'journal-how'); for (const line of step.how) how.append(h('li', line)); detail.append(h('h4', 'Как сделать'), how);
+  if (step.recipes.length) { const recipes = h('div', '', 'journal-recipes'); for (const r of step.recipes) recipes.append(recipeCard(g, r)); detail.append(h('h4', 'Рецепты'), recipes); }
+  const actions = h('div', '', 'journal-actions');
+  if (status !== 'done') {
+   const pinned = g.progress.quests.tracked === step.id;
+   const pin = h('button', pinned ? 'Следовать рекомендации' : 'Сделать текущей', 'journal-pin'); pin.type = 'button';
+   pin.onclick = () => { g.progress.quests.tracked = pinned ? null : step.id; host.tone(); host.changed(); draw(true); };
+   actions.append(pin);
+  }
+  detail.append(actions);
+ }
+ function draw(force = false) {
+  const g = host.game(); if (!g) return;
+  const current = currentStep(g), sel = selected ?? current ?? GUIDE_ORDER[0];
+  const sig = JSON.stringify([g.progress.quests, sel, g.player.inventory, g.world.base.buildings.length, g.world.base.links.length, Math.round(g.player.x / 4), Math.round(g.player.z / 4)]);
+  if (!force && sig === signature) return; signature = sig;
+  const { done, total } = progressCount(g);
+  el('journal-count').textContent = String(done); el('journal-total').textContent = String(total); el('journal-fill').style.transform = `scaleX(${done / total})`;
+  drawList(g, current); drawDetail(g, guideStep(g, sel), current);
+  list.querySelector(`[data-quest="${sel}"]`)?.setAttribute('aria-pressed', 'true');
+  el('quest-announcement').textContent = guideStep(g, sel).title + '. ' + STATUS[questStatus(g, sel)];
+ }
+ function open(id?: QuestId) {
+  const g = host.game(); if (!g) return; if (refreshQuestProgress(g)) host.changed();
+  selected = id ?? null; host.show(); draw(true);
+  requestAnimationFrame(() => list.querySelector<HTMLElement>('.journal-step[aria-pressed=true], .journal-step.current')?.scrollIntoView({ block: 'center' }));
+ }
+ el('quest-close').onclick = () => { host.tone(); host.close(); };
+ return { open, draw: () => draw(true), refresh: () => draw(false), escape: () => host.close(), reset: () => { selected = null; signature = ''; }, debug: () => ({ selected, current: host.game() ? currentStep(host.game()!) : null }) };
 }

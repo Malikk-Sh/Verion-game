@@ -183,6 +183,25 @@ export function connect(g: GameState, kind: Link['kind'], from: string, to: stri
  removeItems(g.player.inventory,kind,cost);
  g.world.base.links.push({id:'link-'+g.world.base.nextId++,kind,from,to});return '';
 }
+/** Removes one line and returns every paid segment; refused (nothing changes) without backpack room. */
+export function disconnect(g: GameState, linkId: string): string {
+ const l=g.world.base.links.find(v=>v.id===linkId);if(!l)return 'Нет такой линии';
+ const inv=structuredClone(g.player.inventory);if(addItems(inv,l.kind,linkSegments(linkLength(g,l))))return 'Освободите место в рюкзаке';
+ g.player.inventory=inv;g.world.base.links=g.world.base.links.filter(v=>v!==l);return '';
+}
+/** Valid new lines from a station to its neighbours within range, cheapest first. */
+export function linkOptions(g: GameState, id: string) {
+ const out:{kind:Link['kind'];from:string;to:string;peer:string;distance:number;cost:number}[]=[];
+ const self=endpoint(g,id);if(!self)return out;
+ const peers=[...g.world.base.buildings.map(b=>b.id),'capsule'].filter(p=>p!==id);
+ for(const peer of peers){const p=endpoint(g,peer)!;const d=Math.hypot(p.x-self.x,p.y-self.y,p.z-self.z);if(d>LINK_RANGE+.001)continue;
+  const a=id==='capsule'?null:machine(g,id),b=peer==='capsule'?null:machine(g,peer);
+  if(a&&b&&electricPort(a)&&electricPort(b)&&!g.world.base.links.some(l=>l.kind==='cable'&&((l.from===id&&l.to===peer)||(l.to===id&&l.from===peer))))out.push({kind:'cable',from:id,to:peer,peer,distance:d,cost:linkSegments(d)});
+  const [from,to]=gasDirection(g,id,peer),src=machine(g,from),dst=to==='capsule'?{kind:'capsule'}:machine(g,to);
+  if(src?.kind==='electrolyzer'&&dst&&['capsule','refill','distributor'].includes(dst.kind)&&!g.world.base.links.some(l=>l.kind==='gas_pipe'&&l.from===from&&l.to===to))out.push({kind:'gas_pipe',from,to,peer,distance:d,cost:linkSegments(d)});
+ }
+ return out.sort((x,y)=>x.distance-y.distance);
+}
 export function poweredComponent(g: GameState, id: string) {
  const seen=new Set([id]),q=[id];while(q.length){const v=q.shift()!;for(const l of g.world.base.links)if(l.kind==='cable'){const n=l.from===v?l.to:l.to===v?l.from:null;if(n&&!seen.has(n)){seen.add(n);q.push(n);}}}return seen;
 }

@@ -1,110 +1,246 @@
 import { ITEMS } from '../game/defs';
-import { countItem, type Slot } from '../game/inventory';
-import { RECIPES, RECIPE_BY_ID, WORKBENCH_UPGRADE, cancelJob, clearQueue, collectInput, collectOutput, energyRate, loadRecipeInputs, machine, nearby, queueJob, removeQueuedJob, startJob, upgradeBuilding, type Recipe, type Job, type Building } from '../game/production';
+import { countItem } from '../game/inventory';
+import { RECIPES, RECIPE_BY_ID, WORKBENCH_UPGRADE, cancelJob, clearQueue, collectOutput, energyRate, loadRecipeInputs, machine, nearby, queueJob, removeQueuedJob, startJob, upgradeBuilding, powerRate, MAX_REPEAT, type Recipe, type Building } from '../game/production';
+import { readyWorldItem } from '../game/backpack';
+import { nearestNode, nearestStation, type GuideTarget } from '../game/guide';
 import type { GameState } from '../game/state';
 import { itemArt } from './art';
 import { captureTokens, transferCraft, pulseCraft } from './craftMotion';
-const h=<K extends keyof HTMLElementTagNameMap>(tag:K,text='',cls='')=>{const e=document.createElement(tag);e.textContent=text;e.className=cls;return e;};
-const button=(text:string,fn:()=>void,cls='',disabled=false)=>{const b=h('button',text,'craft-button '+cls);b.type='button';b.onclick=fn;b.disabled=disabled;return b;};
-const name=(id:string)=>ITEMS[id]?.name??({water:'Вода',oxygen:'Кислород',hydrogen:'Водород'} as Record<string,string>)[id]??id;
-const itemCell=(id?:string,count?:string,cls='')=>{const c=h('div','','craft-cell '+cls);if(id){c.append(itemArt(id));c.title=name(id);if(count)c.append(h('span',count,'craft-count'));}return c;};
-function power(g:GameState,b:Building){
- const ids=new Set([b.id]);for(let i=0;i<g.world.base.buildings.length;i++)for(const l of g.world.base.links)if(l.kind==='cable'&&(ids.has(l.from)||ids.has(l.to))){ids.add(l.from);ids.add(l.to);}
- const generators=g.world.base.buildings.filter(v=>ids.has(v.id)&&v.kind==='biogenerator');
- return {connected:generators.length>0,available:generators.some(v=>v.enabled&&(v.energy>0||v.fuel>0||countItem(v.input,'fiber')>0))};
+
+const h = <K extends keyof HTMLElementTagNameMap>(tag: K, text = '', cls = '') => { const e = document.createElement(tag); if (text) e.textContent = text; if (cls) e.className = cls; return e; };
+const button = (text: string, fn: () => void, cls = '', disabled = false) => { const b = h('button', text, cls); b.type = 'button'; b.onclick = fn; b.disabled = disabled; return b; };
+const name = (id: string) => ITEMS[id]?.name ?? ({ water: 'Вода', oxygen: 'Кислород', hydrogen: 'Водород' } as Record<string, string>)[id] ?? id;
+export const STATION_NAME: Record<string, string> = { hand: 'В кармане', workbench: 'Верстак', kiln: 'Плавильная печь', electrolyzer: 'Генератор кислорода' };
+const RAW = new Set(['stone', 'iron_raw', 'copper_raw', 'sand', 'ice', 'grass']);
+/** Stable progression order; the list never jumps around while the player crafts. */
+const ORDER = ['grass_parts', 'craft_tool_stone', 'craft_workbench', 'craft_kiln', 'smelt_iron_raw', 'smelt_copper_raw', 'glass', 'melt_in_generator', 'craft_wire', 'craft_cable', 'craft_circuit', 'craft_biogenerator', 'craft_electrolyzer', 'craft_gas_pipe', 'craft_bottle_1', 'craft_refill', 'craft_dome', 'craft_distributor', 'craft_wrench', 'electrolysis'];
+const rank = (id: string) => { const i = ORDER.indexOf(id); return i < 0 ? 99 : i; };
+export type CraftCategory = 'all' | 'material' | 'gear' | 'station' | 'line';
+const CATEGORIES: [CraftCategory, string][] = [['all', 'Все'], ['material', 'Материалы'], ['gear', 'Снаряжение'], ['station', 'Станции'], ['line', 'Линии']];
+export function recipeCategory(r: Recipe): CraftCategory {
+ const out = Object.keys(r.outputs)[0];
+ if (out === 'cable' || out === 'gas_pipe') return 'line';
+ const c = ITEMS[out]?.category;
+ return c === 'building' ? 'station' : c === 'tool' || c === 'tank' || c === 'suit' ? 'gear' : 'material';
 }
-/** Persistent selection and filters; station jobs remain independent of the view. */
-export function createCraftingView(){
- let selected='grass_parts',query='',category='all',available=false,material='',quantity=1,upgrade=false,lastStation='',inventoryView='assembly';
- let progress:HTMLElement|null=null,status:HTMLElement|null=null,bar:HTMLElement|null=null,powerBadge:HTMLElement|null=null;
- let viewRoot:HTMLElement|null=null;
- let previousJob:Job|null|undefined,outputSignature:string|undefined,queueExpanded:boolean|undefined;
- function open(id:string,isUpgrade=false){if(id!==lastStation){lastStation=id;selected=id==='hand'?'grass_parts':'craft_wrench';material='';quantity=1;}previousJob=undefined;outputSignature=undefined;queueExpanded=undefined;inventoryView='assembly';upgrade=isUpgrade;}
- function draw(g:GameState,id:string,notify:(reason:string,success?:string)=>void,changed:()=>void,redraw:()=>void){
-  const b=machine(g,id),station=b?.kind??'hand',auto=b?.level===2,near=!b||nearby(g,b),job=b?b.job:g.world.base.hand;
-  const root=h('div','','craft-layout');viewRoot=root;root.dataset.mode=upgrade?'upgrade':auto?'auto':b?'bench':'pocket';powerBadge=null;progress=null;bar=null;status=null;
-  function action(fn:()=>string,success:string,from:Element[],target:string){const tokens=captureTokens(from,root.querySelector('[data-craft-view="bag"]'));const reason=fn();notify(reason,success);if(!reason)transferCraft(tokens,target);}
-  function inventorySwitch(holder:HTMLElement,label='Сборка'){
-   holder.dataset.view=inventoryView;const tabs=h('div','','craft-inventory-switch');
-   for(const [view,text] of [['assembly',label],['bag','Рюкзак '+g.player.inventory.filter(Boolean).length+'/24']]){
-    const tab=button(text,()=>{inventoryView=view;redraw();document.querySelector<HTMLButtonElement>(`[data-craft-view="${view}"]`)?.focus({preventScroll:true});});
-    tab.dataset.craftView=view;tab.setAttribute('aria-pressed',String(inventoryView===view));tabs.append(tab);
-   }holder.append(tabs);
-  }
-  function backpack(){const pack=h('section','','craft-backpack');pack.append(h('b','Рюкзак '+g.player.inventory.filter(Boolean).length+' / 24','craft-section-title'));const notice=h('p','Освободите место для готового предмета.','craft-bag-notice');notice.hidden=true;pack.append(notice);const grid=h('div','','craft-inventory');g.player.inventory.forEach((s:Slot,i:number)=>{const cell=button('',()=>{if(s?.itemId==='wrench'){if(i>=6){const old=g.player.inventory[g.player.hotbar];g.player.inventory[g.player.hotbar]=s;g.player.inventory[i]=old;}else g.player.hotbar=i;changed();}else material=material===s?.itemId?'':s?.itemId??'';redraw();},'craft-inventory-cell'+(i<6?' quick':'')+(i===g.player.hotbar?' active':''));cell.dataset.inventory=String(i);cell.setAttribute('aria-label',s?name(s.itemId)+' ×'+s.count:'Пустой слот '+(i+1));if(s){cell.append(itemArt(s.itemId),h('span',String(s.count),'craft-count'));cell.title=name(s.itemId)+(s.itemId==='wrench'?' · выбрать в быстром доступе':' · найти рецепты');}grid.append(cell);});pack.append(grid);return pack;}
-  if(upgrade&&b){
-   const preview=h('aside','','craft-upgrade-preview'),comparison=h('div','','craft-station-comparison');
-   for(const level of [1,2]){const card=h('div','','craft-station-card');card.append(itemArt(level===1?'workbench':'workbench_2'),h('b','Верстак '+(level===1?'I':'II')));comparison.append(card);if(level===1)comparison.append(h('span','→','craft-arrow'));}
-   inventorySwitch(preview,'Верстаки');preview.append(comparison,backpack());root.append(preview);
-   const center=h('main','','craft-center'),assembly=h('section','','craft-assembly');center.append(assembly);root.append(center);
-   const complete=b.level===2;assembly.append(h('b',complete?'Улучшение завершено':'Улучшение до уровня II','craft-section-title'));
-   if(complete)assembly.append(h('p','Потрачено','craft-upgrade-paid'));
-   const cost=h('div','','craft-upgrade-cost');for(const [item,n] of Object.entries(WORKBENCH_UPGRADE.inputs)){const group=h('div');group.append(itemCell(item,complete?'−'+n:countItem(g.player.inventory,item)+' / '+n,!complete&&countItem(g.player.inventory,item)<n?'missing':''),h('small',name(item)));cost.append(group);}assembly.append(cost);
-   const hasKey=g.player.inventory[g.player.hotbar]?.itemId==='wrench',key=h('div','','craft-tool-check '+(complete||hasKey?'ready':'missing'));key.append(itemArt('wrench'),h('span',complete?'Ключ сохранён':hasKey?'Ключ выбран · сохранится':'Выберите ключ в быстром доступе'));assembly.append(key);
-   const lack=Object.entries(WORKBENCH_UPGRADE.inputs).filter(([item,n])=>countItem(g.player.inventory,item)<n);
-   const reason=b.level===2?'':!near?'Подойдите к верстаку':!hasKey?'Нужен ключ в руке':job?'Завершите текущую работу':lack.length?'Не хватает: '+lack.map(([item,n])=>name(item)+' ×'+(n-countItem(g.player.inventory,item))).join(', '):'';
-   const back=()=>{upgrade=false;inventoryView='assembly';redraw();};
-   if(complete)assembly.append(h('p','Верстак II готов. Подключите питание и начните сборку.','craft-hint'),button('К сборке',back,'craft-primary craft-upgrade-action'));
-   else assembly.append(h('p',reason||'Материалы будут списаны из рюкзака.','craft-hint'),button('Улучшить',()=>action(()=>{const error=upgradeBuilding(g,id);if(!error)inventoryView='assembly';return error;},'Улучшение завершено',[...cost.querySelectorAll('.craft-cell')],'.craft-station-card:last-child'),'craft-primary craft-upgrade-action',!!reason),button('К сборке',back,'craft-upgrade-back'));
-   const benefits=h('aside','','craft-upgrade-benefits');benefits.append(h('b','Новые возможности','craft-section-title'));for(const [symbol,text] of [['⚙','Автоматическая сборка'],['≡','Очередь: 5 партий'],['↗','Работает без игрока'],['ϟ','Нужно питание: 4 EU/с']]){const row=h('p','','craft-benefit');row.append(h('b',symbol),h('span',text));benefits.append(row);}benefits.append(h('p','После улучшения соедините верстак с генератором кабелем.','craft-hint'));root.append(benefits);return root;
-  }
-  const catalogue=h('aside','','craft-catalogue');catalogue.append(h('b','Каталог','craft-section-title'));
-  const cats=h('div','','craft-categories');for(const [value,label] of [['all','Все'],['resource','Мат.'],['tool','Снар.'],['building','База']]){const c=button(label,()=>{category=value;redraw();});c.setAttribute('aria-pressed',String(category===value));cats.append(c);}catalogue.append(cats);
-  const searchRow=h('div','','craft-search-row'),search=h('input');search.type='search';search.id='craft-search';search.placeholder='Поиск…';search.value=query;search.setAttribute('aria-label','Поиск рецепта');search.oninput=()=>{query=search.value;refreshCatalogue();};
-  const filter=button('Доступные',()=>{available=!available;redraw();},'craft-filter');filter.title='Только доступные рецепты';filter.setAttribute('aria-label',filter.title);filter.setAttribute('aria-pressed',String(available));searchRow.append(search,filter);catalogue.append(searchRow);
-  const materialButton=button('Материал: '+name(material)+' ×',()=>{material='';redraw();},'craft-material-filter');materialButton.hidden=!material;catalogue.append(materialButton);if(!material)catalogue.append(h('small','Материал — нажмите в рюкзаке','craft-material-help'));
-  const legend=h('div','','craft-legend');legend.append(h('span','● Есть'),h('span','○ Не хватает'),h('span','Станция','craft-lock-label'));catalogue.append(legend);
-  const grid=h('div','','craft-recipe-grid');catalogue.append(grid);root.append(catalogue);
-  const owned=(r:Recipe)=>Object.entries(r.inputs).every(([item,n])=>countItem(g.player.inventory,item)+countItem(b?.input??[],item)>=n);
-  const matches=(r:Recipe)=>{const out=Object.keys(r.outputs)[0],cat=ITEMS[out]?.category;return (!query||name(out).toLowerCase().includes(query.toLowerCase()))&&(category==='all'||category==='tool'&&(cat==='tool'||cat==='tank'||cat==='suit')||category===cat)&&(!material||material in r.inputs)&&(!available||(r.station===station&&owned(r)));};
-  function refreshCatalogue(){grid.replaceChildren();for(const r of RECIPES.filter(matches)){const out=Object.keys(r.outputs)[0],can=r.station===station,cell=button('',()=>{selected=r.id;quantity=1;inventoryView='assembly';redraw();},'craft-recipe'+(r.id===selected?' selected':'')+(can?'':' locked'));cell.dataset.recipe=r.id;cell.title=name(out)+(can?(owned(r)?' · Есть материалы':' · Не хватает материалов'):' · '+(r.station==='hand'?'Карманный крафт':'Нужна станция: '+name(r.station)));cell.setAttribute('aria-label',cell.title);cell.setAttribute('aria-pressed',String(r.id===selected));cell.append(itemArt(out),h('i',can?(owned(r)?'●':'○'):'','craft-availability'+(can?'':' craft-lock')));grid.append(cell);}if(!grid.children.length)grid.append(h('p','Рецепты не найдены','craft-empty'));}
-  refreshCatalogue();
-  const center=h('main','','craft-center'),assembly=h('section','','craft-assembly');inventorySwitch(center);root.append(center);
-  const r=RECIPE_BY_ID.get(selected)??RECIPES[0],applicable=r.station===station;assembly.append(h('b',name(Object.keys(r.outputs)[0]),'craft-section-title'));
-  const row=h('div','','craft-assembly-row'),inputs=h('div','','craft-inputs '+(b?'bench-inputs':'pocket-inputs')),required=Object.entries(r.inputs),slots=b?4:2;
-  const missingTypes=b?required.filter(([item])=>!b.input.some(s=>s?.itemId===item)):[];let ghostIndex=0;
-  for(let i=0;i<slots;i++){const s=b?.input[i],item=b?s?.itemId:required[i]?.[0],need=item?r.inputs[item]:undefined,have=item?(b?s!.count:countItem(g.player.inventory,item)):0,cell=itemCell(item,item?have+(need?' / '+need:''):'',need&&have<need?'missing':'');if(!item&&b&&missingTypes[ghostIndex]){const [ghost,n]=missingTypes[ghostIndex++];cell.append(itemArt(ghost));cell.classList.add('ghost');cell.title=name(ghost)+' · нужно '+n;cell.append(h('span','0 / '+n,'craft-count'));}inputs.append(cell);}
-  const result=h('div','','craft-result');for(const [out,n] of Object.entries(r.outputs))result.append(itemCell(out,String(n)));row.append(inputs,h('span','→','craft-arrow'),result);assembly.append(row,h('p',required.map(([item,n])=>name(item)+' ×'+n).join(' · '),'craft-requirements'));
-  const pledged:Record<string,number>={};if(auto)for(const rid of b.queue)for(const [item,n] of Object.entries(RECIPE_BY_ID.get(rid)!.inputs))pledged[item]=(pledged[item]??0)+n;
-  const missing=required.filter(([item,n])=>countItem(g.player.inventory,item)+countItem(b?.input??[],item)<n*(auto?quantity:1)+(pledged[item]??0));
-  const loaded=!b||required.every(([item,n])=>countItem(b.input,item)>=n);
-  const full=auto&&b.queue.length+(b.job?1:0)+quantity>5;
-  const reason=!near?'Подойдите к верстаку':!applicable?'Нужна станция: '+(r.station==='hand'?'карманный крафт':name(r.station)):!auto&&job?'':full?'В очереди максимум 5 партий':missing.length?'Не хватает: '+missing.map(([item])=>name(item)).join(', '):!auto&&!loaded?'Нажмите «Дополнить»':'';
-  let bufferTools:HTMLElement|undefined;const actions=h('div','','craft-assembly-actions');
-  if(b)actions.append(button('Дополнить',()=>action(()=>loadRecipeInputs(g,r.id,id),'Недостающие материалы загружены',[...root.querySelectorAll('.craft-inventory-cell')].filter(e=>required.some(([item])=>!!e.querySelector(`[data-item="${item}"]`))),'.craft-inputs'),'',!near||!applicable||!owned(r)));
-  if(auto){const amount=h('div','','craft-quantity');amount.append(button('−',()=>{quantity=Math.max(1,quantity-1);redraw();},'',quantity<=1),h('span',String(quantity)),button('+',()=>{quantity=Math.min(5,quantity+1);redraw();},'',quantity>=5));actions.append(amount);}
-  actions.append(button(!applicable?'Нужна станция':auto?'В очередь':job?'Идёт сборка':'Создать',()=>action(()=>auto?queueJob(g,r.id,id,quantity):startJob(g,r.id,id,!!b),auto?'Добавлено в очередь':'Работа начата',[...inputs.querySelectorAll('.craft-cell')],'.craft-result'),'craft-primary',!!reason||(!auto&&!!job)));
-  const rate=b&&applicable?energyRate(b,r):r.EU_per_second;assembly.append(actions,h('small',r.seconds+' с'+(rate?' · '+rate+' EU/с':'')+' · '+(b?'4 входных слота':'2 типа материалов'),'craft-hint'));if(reason)assembly.append(h('p',reason,'craft-action-reason'));
-  if(b){const tools=h('details','','craft-buffer-tools');tools.append(h('summary','Управление верстаком'));tools.append(button('Вернуть входы',()=>notify(collectInput(g,id)?'':'Вход пуст или рюкзак полон','Материалы возвращены'),'',!near),button(b.enabled?'Выключить':'Включить',()=>{b.enabled=!b.enabled;changed();redraw();},'',!near));if(!auto)tools.append(button('Улучшить верстак',()=>{upgrade=true;redraw();},'craft-upgrade-link',!near));bufferTools=tools;}
-  center.append(assembly,backpack());
-  const context=h('aside','','craft-context'),fixed=h('div','','craft-work-status'),work=h('div','','craft-work');context.append(fixed,work);root.append(context);
-  fixed.append(h('b',auto?'Очередь '+(b.queue.length+(job?1:0))+' / 5':b?'Ручная сборка':'В кармане','craft-section-title'));
-  status=h('p','','craft-hint');status.id='production-status';fixed.append(status);
-  if(auto){powerBadge=h('p','','craft-power');powerBadge.id='craft-power';fixed.append(powerBadge);}
-  const active=h('div','','craft-active');if(job)active.append(itemArt(Object.keys(RECIPE_BY_ID.get(job.recipeId)!.outputs)[0]));const activeText=h('div');progress=h('p','','craft-progress');progress.id='craft-progress';activeText.append(progress);const track=h('div','','craft-track');bar=h('i');track.append(bar);activeText.append(track);active.append(activeText);if(job)active.append(button('×',()=>notify(cancelJob(g,id),'Материалы возвращены'),'craft-cancel',!near));if(job){active.lastElementChild!.setAttribute('aria-label','Отменить');active.lastElementChild!.setAttribute('title','Отменить текущую работу');}fixed.append(active);
-  if(auto&&b.queue.length){
-   const queue=h('section','','craft-queue'),expanded=queueExpanded??window.innerHeight>430;queue.dataset.expanded=String(expanded);
-   const toggle=button('Ожидают: '+b.queue.length,()=>{queueExpanded=!expanded;redraw();document.querySelector<HTMLButtonElement>('.craft-queue-toggle')?.focus({preventScroll:true});},'craft-queue-toggle');toggle.setAttribute('aria-expanded',String(expanded));toggle.setAttribute('aria-controls','craft-waiting');
-   const items=h('div','','craft-queue-items');items.id='craft-waiting';items.hidden=!expanded;queue.append(toggle,items);
-   b.queue.forEach((rid,i)=>{const recipe=RECIPE_BY_ID.get(rid)!,qr=h('div','','craft-queue-row');qr.dataset.queueIndex=String(i);qr.append(itemArt(Object.keys(recipe.outputs)[0]),h('small',(i+(job?2:1))+'. '+name(Object.keys(recipe.outputs)[0])));const remove=button('×',()=>notify(removeQueuedJob(g,id,i),'Партия убрана; материалы во входе'),'craft-cancel',!near);remove.setAttribute('aria-label','Убрать партию '+(i+(job?2:1)));qr.append(remove);items.append(qr);});
-   items.append(button('Очистить очередь',()=>{clearQueue(g,id);changed();redraw();},'',!near));work.append(queue);
-  }
-  if(bufferTools)work.append(bufferTools);
-  if(b){const outputPanel=h('section','','craft-output-panel'),head=h('div','','craft-output-head');head.append(h('b','Готово','craft-section-title'),button('Забрать',()=>{const tokens=captureTokens(outputPanel.querySelectorAll('.craft-cell'));const n=collectOutput(g,id);notify(n?'':'Нет места или готовых предметов','Перенесено в рюкзак');if(n)transferCraft(tokens,'.craft-inventory','[data-craft-view="bag"]');},'',!near||!b.output.some(Boolean)));const output=h('div','','craft-output');b.output.forEach(s=>output.append(itemCell(s?.itemId,s?String(s.count):undefined)));outputPanel.append(head,output);context.append(outputPanel);}
-  else work.append(h('p','Одна работа. Готовое → рюкзак.','craft-hint'));
-  tick(g,id);return root;
+const VISIBLE = RECIPES.filter(r => r.id !== 'legacy_melt').sort((a, b) => rank(a.id) - rank(b.id));
+/** How many batches the player can pay for now (backpack plus what is already loaded). */
+export function affordable(g: GameState, r: Recipe, b?: Building): number {
+ let n = Infinity;
+ for (const [id, k] of Object.entries(r.inputs)) n = Math.min(n, Math.floor((countItem(g.player.inventory, id) + countItem(b?.input ?? [], id) + (id === 'water' && b ? Math.floor(b.water / 1000) : 0)) / k));
+ return Number.isFinite(n) ? n : 0;
+}
+type Notify = (reason: string, success?: string) => void;
+type Nav = (target: GuideTarget) => void;
+/**
+ * Workshop (S3). Left: every recipe with its ingredients (have/need) and how many can be made now.
+ * Right: what the item is for, where each ingredient comes from, quantity and one big action.
+ * Pocket and workbench I take the materials straight from the backpack; the selected count runs
+ * as repeated batches. Workbench II queues batches and works unattended with power.
+ */
+export function createCraftingView() {
+ let selected = 'grass_parts', query = '', category: CraftCategory = 'all', onlyReady = false, quantity = 1, upgrade = false, lastStation = '';
+ let listScroll = 0, detailScroll = 0, root: HTMLElement | null = null;
+ let progress: HTMLElement | null = null, bar: HTMLElement | null = null, status: HTMLElement | null = null, previousJob: unknown = undefined, outputSig = '';
+ let navigate: Nav | null = null;
+ function open(id: string, isUpgrade = false, recipe?: string) {
+  if (id !== lastStation) { lastStation = id; quantity = 1; if (!recipe) selected = id === 'hand' ? 'grass_parts' : 'craft_wire'; }
+  if (recipe) { selected = recipe; query = ''; category = 'all'; onlyReady = false; quantity = 1; listScroll = -1; }
+  upgrade = isUpgrade; previousJob = undefined; outputSig = '';
  }
- function tick(g:GameState,id:string){if(!status||!progress||!bar)return;const b=machine(g,id),job=b?.job??(id==='hand'?g.world.base.hand:null),p=b?.level===2?power(g,b):null;
-  let text=id==='hand'?'Без очереди':b?.level===1?'Рядом с вами · без очереди':'Без присутствия игрока';
-  if(b&&!nearby(g,b))text=b.level===1?'Пауза · подойдите к верстаку':'Автоматизация работает вдали';
-  if(b?.level===1&&g.world.base.hand)text='Пауза · занят карманным крафтом';if(b&&!b.enabled)text='Пауза · верстак выключен';
-  if(b?.level===2&&!p!.available)text='Пауза · нет питания';if(status.textContent!==text)status.textContent=text;
-  if(powerBadge&&p){powerBadge.textContent=!b!.enabled?'ϟ Верстак выключен':p.available?'ϟ Питание подключено':p.connected?'ϟ Генератор: нет энергии':'ϟ Подключите генератор кабелем';powerBadge.dataset.power=p.available?'ready':'missing';}
-  const r=job?RECIPE_BY_ID.get(job.recipeId)!:null,ratio=job&&r?Math.min(1,job.workMs/(r.seconds*1000)):0;const width=ratio*100+'%';if(bar.style.width!==width)bar.style.width=width;
-  const progressText=job&&r?(b?.level===2?'1. ':'')+name(Object.keys(r.outputs)[0])+' · '+Math.floor(ratio*100)+'%'+(ratio===1?(b?' · освободите выход':' · освободите место в рюкзаке'):' · '+((r.seconds*1000-job.workMs)/1000).toFixed(1)+' с'):'Нет активной работы';if(progress.textContent!==progressText)progress.textContent=progressText;
-  const blocked=!b&&!!job&&ratio===1,pack=viewRoot?.querySelector('.craft-backpack'),bag=viewRoot?.querySelector<HTMLButtonElement>('[data-craft-view="bag"]'),notice=pack?.querySelector<HTMLElement>('.craft-bag-notice');pack?.classList.toggle('craft-bag-blocked',blocked);bag?.classList.toggle('craft-bag-blocked',blocked);if(notice)notice.hidden=!blocked;
-  if(previousJob!==undefined&&job&&previousJob!==job){queueMicrotask(()=>{pulseCraft('.craft-result');pulseCraft('.craft-active');});}previousJob=job;
-  const sig=b?JSON.stringify(b.output):JSON.stringify(g.player.inventory);if(outputSignature!==undefined&&outputSignature!==sig)queueMicrotask(()=>pulseCraft(b?'.craft-output':'.craft-backpack','[data-craft-view="bag"]'));outputSignature=sig;
+ function sourceHint(g: GameState, id: string, need: number, stationKind: string) {
+  const box = h('span', '', 'cr-source');
+  if (RAW.has(id)) {
+   const t = nearestNode(g, id);
+   if (t) { const go = button(`${t.name} · ${Math.round(Math.hypot(t.x - g.player.x, t.z - g.player.z))} м`, () => navigate?.(t), 'cr-go'); go.title = 'Показать на компасе'; box.append(go); }
+   else box.textContent = 'Запасы исчерпаны — ищите дальние залежи на карте';
+   return box;
+  }
+  const r = VISIBLE.find(v => v.outputs[id]);
+  if (r) { const go = button(`${STATION_NAME[r.station] ?? r.station}: ${name(Object.keys(r.outputs)[0])}`, () => { selected = r.id; quantity = Math.max(1, Math.ceil(need / r.outputs[id])); detailScroll = 0; listScroll = -1; redrawHook?.(); }, 'cr-link'); go.title = 'Открыть рецепт'; box.append(go); }
+  else if (id === 'water') box.textContent = 'Печь: лёд + волокно → вода';
+  void stationKind; return box;
  }
- return {open,draw,tick};
+ let redrawHook: (() => void) | null = null;
+ function jobCard(g: GameState, id: string, b: Building | undefined, notify: Notify, changed: () => void, redraw: () => void) {
+  const job = b ? b.job : g.world.base.hand, auto = b?.level === 2, near = !b || nearby(g, b);
+  const card = h('section', '', 'cr-work');
+  const r = job ? RECIPE_BY_ID.get(job.recipeId) : null;
+  const head = h('div', '', 'cr-work-head');
+  if (r) head.append(itemArt(Object.keys(r.outputs)[0], 'art cr-work-art'));
+  const text = h('div', '', 'cr-work-text');
+  progress = h('b', r ? name(Object.keys(r.outputs)[0]) : 'Нет работы'); status = h('small', '');
+  const track = h('i', '', 'cr-track'); bar = h('b'); track.append(bar); text.append(progress, status, track); head.append(text);
+  if (job) { const x = button('Отменить', () => notify(cancelJob(g, id), 'Материалы возвращены'), 'cr-cancel', !near); x.title = 'Отменить: материалы вернутся в рюкзак'; head.append(x); }
+  card.append(head);
+  if (auto && b && b.queue.length) {
+   const q = h('div', '', 'cr-queue');
+   b.queue.forEach((rid, i) => { const chip = h('span', '', 'cr-queue-item'); chip.append(itemArt(Object.keys(RECIPE_BY_ID.get(rid)!.outputs)[0])); const rm = button('×', () => notify(removeQueuedJob(g, id, i), 'Партия убрана; материалы во входе'), 'cr-queue-x', !near); rm.setAttribute('aria-label', 'Убрать партию ' + (i + 2)); chip.append(rm); q.append(chip); });
+   q.append(button('Очистить', () => { clearQueue(g, id); changed(); redraw(); }, 'cr-queue-clear', !near));
+   card.append(q);
+  }
+  if (b && b.output.some(Boolean)) {
+   const out = h('div', '', 'cr-output'); out.append(h('span', 'Готово:'));
+   b.output.forEach(s => { if (s) { const c = h('span', '', 'cr-out-cell'); c.append(itemArt(s.itemId), h('b', String(s.count))); out.append(c); } });
+   out.append(button('В рюкзак', () => { const tokens = captureTokens(out.querySelectorAll('.cr-out-cell')); const n = collectOutput(g, id); notify(n ? '' : 'Освободите место в рюкзаке', 'Перенесено в рюкзак'); if (n) transferCraft(tokens, '#production-panel .st-head'); }, 'cr-collect', !near));
+   card.append(out);
+  }
+  return card;
+ }
+ function upgradeView(g: GameState, id: string, b: Building, notify: Notify) {
+  const view = h('div', '', 'cr-upgrade'); view.dataset.mode = 'upgrade';
+  const done = b.level === 2, near = nearby(g, b);
+  const compare = h('div', '', 'cr-upgrade-compare');
+  for (const [lvl, art] of [[1, 'workbench'], [2, 'workbench_2']] as const) { const c = h('div', '', 'cr-upgrade-card' + (lvl === 2 ? ' next' : '')); c.append(itemArt(art), h('b', 'Верстак ' + (lvl === 1 ? 'I' : 'II'))); compare.append(c); if (lvl === 1) compare.append(h('span', '→', 'cr-upgrade-arrow')); }
+  const info = h('div', '', 'cr-upgrade-info');
+  info.append(h('h3', done ? 'Верстак улучшен' : 'Улучшение до уровня II'));
+  const perks = h('ul', '', 'cr-perks'); for (const t of ['Очередь до 5 партий', 'Работает без вас, если подключён кабелем', 'Потребляет 4 EU/с во время сборки']) perks.append(h('li', t)); info.append(perks);
+  const cost = h('div', '', 'cr-ings-inline');
+  for (const [item, n] of Object.entries(WORKBENCH_UPGRADE.inputs)) { const have = countItem(g.player.inventory, item), c = h('span', '', 'cr-chip' + (have >= n || done ? ' ok' : '')); c.append(itemArt(item), h('b', done ? '✓' : `${have}/${n}`)); c.title = name(item); cost.append(c); }
+  const wrench = g.player.inventory.findIndex(s => s?.itemId === 'wrench'), key = h('span', '', 'cr-chip' + (wrench >= 0 || done ? ' ok' : '')); key.append(itemArt('wrench'), h('b', done ? '✓' : wrench >= 0 ? 'Ключ есть' : 'Нужен ключ')); cost.append(key);
+  info.append(cost);
+  const lack = Object.entries(WORKBENCH_UPGRADE.inputs).filter(([item, n]) => countItem(g.player.inventory, item) < n);
+  const reason = done ? '' : !near ? 'Подойдите к верстаку' : wrench < 0 ? 'Соберите гаечный ключ (4 железа + 1 медь)' : b.job || b.queue.length ? 'Сначала завершите текущую работу' : lack.length ? 'Не хватает: ' + lack.map(([item, n]) => name(item) + ' ×' + (n - countItem(g.player.inventory, item))).join(', ') : '';
+  const act = button(done ? 'К сборке' : 'Улучшить', () => {
+   if (done) { upgrade = false; selected = 'craft_wire'; redrawHook?.(); return; }
+   if (g.player.inventory[g.player.hotbar]?.itemId !== 'wrench' && wrench >= 0) readyWorldItem(g, wrench);
+   const tokens = captureTokens(cost.querySelectorAll('.cr-chip')); const error = upgradeBuilding(g, id); notify(error, 'Верстак II готов'); if (!error) transferCraft(tokens, '.cr-upgrade-card.next');
+  }, 'cr-create', !!reason);
+  info.append(h('p', reason || (done ? 'Подключите питание кабелем и ставьте партии в очередь.' : 'Ключ не расходуется.'), 'cr-reason' + (reason ? ' warn' : '')), act);
+  if (!done) info.append(button('Назад к рецептам', () => { upgrade = false; redrawHook?.(); }, 'cr-secondary'));
+  view.append(compare, info); return view;
+ }
+ function draw(g: GameState, id: string, notify: Notify, changed: () => void, redraw: () => void, nav?: Nav): HTMLElement {
+  redrawHook = redraw; if (nav) navigate = nav;
+  if (root) { const l = root.querySelector('.cr-list'), d = root.querySelector('.cr-detail-scroll'); if (l && listScroll >= 0) listScroll = l.scrollTop; if (d) detailScroll = d.scrollTop; }
+  const b = machine(g, id), kind = b?.kind ?? 'hand', auto = b?.level === 2, near = !b || nearby(g, b);
+  if (upgrade && b) { root = upgradeView(g, id, b, notify); return root; }
+  const view = h('div', '', 'cr-layout'); view.dataset.mode = auto ? 'auto' : b ? 'bench' : 'pocket'; root = view;
+  // ---------- Catalogue ----------
+  const side = h('aside', '', 'cr-side');
+  const tools = h('div', '', 'cr-tools');
+  const search = h('input'); search.type = 'search'; search.id = 'craft-search'; search.placeholder = 'Поиск'; search.value = query; search.setAttribute('aria-label', 'Поиск рецепта');
+  search.oninput = () => { query = search.value; fill(); };
+  const ready = button('Можно', () => { onlyReady = !onlyReady; redraw(); }, 'cr-filter'); ready.setAttribute('aria-pressed', String(onlyReady)); ready.title = 'Только то, что можно собрать сейчас';
+  tools.append(search, ready);
+  const cats = h('div', '', 'cr-cats'); for (const [value, label] of CATEGORIES) { const c = button(label, () => { category = value; listScroll = 0; redraw(); }, 'cr-cat'); c.setAttribute('aria-pressed', String(category === value)); cats.append(c); }
+  const list = h('div', '', 'cr-list'); list.setAttribute('role', 'listbox'); list.setAttribute('aria-label', 'Рецепты');
+  side.append(tools, cats, list);
+  // Pocket recipes work everywhere; station recipes need that station.
+  const usable = (r: Recipe) => r.station === kind || r.station === 'hand';
+  function fill() {
+   list.replaceChildren();
+   if (b?.kind === 'workbench' && b.level === 1) { const up = button('', () => { upgrade = true; redraw(); }, 'cr-row cr-row-upgrade'); up.append(itemArt('workbench_2'), (() => { const t = h('span', '', 'cr-row-text'); t.append(h('b', 'Улучшить до Верстака II'), h('small', 'Очередь и автосборка')); return t; })(), h('span', '›', 'cr-badge')); list.append(up); }
+   for (const r of VISIBLE) {
+    const out = Object.keys(r.outputs)[0];
+    if (query && !name(out).toLowerCase().includes(query.toLowerCase())) continue;
+    if (category !== 'all' && recipeCategory(r) !== category) continue;
+    const can = affordable(g, r, b), here = usable(r);
+    if (onlyReady && (!here || can < 1)) continue;
+    const row = button('', () => { selected = r.id; quantity = 1; detailScroll = 0; redraw(); }, 'cr-row' + (r.id === selected ? ' selected' : '') + (here ? '' : ' elsewhere'));
+    row.dataset.recipe = r.id; row.setAttribute('role', 'option'); row.setAttribute('aria-selected', String(r.id === selected));
+    const text = h('span', '', 'cr-row-text'); text.append(h('b', name(out) + (r.outputs[out] > 1 ? ' ×' + r.outputs[out] : '')));
+    const chips = h('span', '', 'cr-row-chips');
+    for (const [id, k] of Object.entries(r.inputs)) { const have = countItem(g.player.inventory, id) + countItem(b?.input ?? [], id), c = h('span', '', 'cr-mini' + (have >= k ? ' ok' : '')); c.append(itemArt(id), h('i', String(k))); c.title = `${name(id)}: ${have} / ${k}`; chips.append(c); }
+    text.append(chips);
+    const canHere = r.station === 'hand' ? affordable(g, r) : can;
+    row.append(itemArt(out, 'art cr-row-art'), text, here ? h('span', canHere > 0 ? '×' + Math.min(canHere, 99) : '—', 'cr-badge' + (canHere > 0 ? ' ok' : '')) : h('span', STATION_NAME[r.station] ?? r.station, 'cr-badge station'));
+    row.title = here ? (can > 0 ? `Можно собрать: ${can}` : 'Не хватает материалов') : 'Делается: ' + (STATION_NAME[r.station] ?? r.station);
+    list.append(row);
+   }
+   if (!list.children.length) list.append(h('p', onlyReady ? 'Пока нечего собрать — проверьте журнал (J)' : 'Ничего не найдено', 'cr-empty'));
+  }
+  fill();
+  // ---------- Recipe card ----------
+  const r = RECIPE_BY_ID.get(selected) ?? VISIBLE[0], out = Object.keys(r.outputs)[0], here = usable(r), can = affordable(g, r, b);
+  const main = h('main', '', 'cr-main'), scroll = h('div', '', 'cr-detail-scroll');
+  const head = h('header', '', 'cr-card-head');
+  head.append(itemArt(out, 'art cr-hero'));
+  const titles = h('div', '', 'cr-titles'); titles.append(h('span', (STATION_NAME[r.station] ?? r.station) + ' · ' + r.seconds + ' с' + (b && here && energyRate(b, r) ? ' · ' + energyRate(b, r) + ' EU/с' : ''), 'cr-kicker'), h('h3', name(out) + (r.outputs[out] > 1 ? ' ×' + r.outputs[out] : '')));
+  head.append(titles);
+  scroll.append(head);
+  const desc = ITEMS[out]?.description ?? (out === 'water' ? 'Переносимая вода для генератора кислорода.' : out === 'oxygen' ? 'Кислород для дыхания, баллонов и купола.' : '');
+  if (desc) scroll.append(h('p', desc, 'cr-desc'));
+  // Where this is made.
+  const req = h('div', '', 'cr-req');
+  if (here) req.append(h('span', '✓', 'cr-req-mark ok'), h('span', b ? (b.level === 2 ? 'Верстак II: очередь до 5 партий, работает без вас при питании' : near ? 'Верстак рядом: работает, пока вы рядом' : 'Подойдите к верстаку ближе 3 м') : 'Собирается в кармане, где угодно'));
+  else {
+   const st = r.station === 'hand' ? null : nearestStation(g, r.station);
+   req.classList.add('warn'); req.append(h('span', '!', 'cr-req-mark'), h('span', r.station === 'hand' ? 'Это карманный рецепт: откройте крафт без станции (B вдали от верстака)' : st ? `Делается: ${STATION_NAME[r.station]} — ${Math.round(Math.hypot(st.x - g.player.x, st.z - g.player.z))} м` : `Нужна станция: ${STATION_NAME[r.station]}. Сначала создайте и установите её`));
+   if (st) req.append(button('Показать', () => navigate?.(st), 'cr-go'));
+  }
+  scroll.append(req);
+  const ings = h('ul', '', 'cr-ings');
+  for (const [id, k] of Object.entries(r.inputs)) {
+   const total = k * quantity, have = countItem(g.player.inventory, id) + countItem(b?.input ?? [], id) + (id === 'water' && b ? Math.floor(b.water / 1000) : 0);
+   const li = h('li', '', 'cr-ing' + (have >= total ? ' ok' : ''));
+   li.append(itemArt(id, 'art cr-ing-art'));
+   const t = h('div', '', 'cr-ing-text'); t.append(h('span', name(id)), sourceHint(g, id, total - have, kind)); li.append(t, h('b', `${Math.min(have, 9999)} / ${total}`, 'cr-ing-count'));
+   ings.append(li);
+  }
+  scroll.append(h('h4', 'Ингредиенты' + (quantity > 1 ? ` на ${quantity} партии` : '')), ings);
+  const outs = Object.entries(r.outputs).filter(([id]) => id !== 'hydrogen');
+  if (outs.length > 1 || r.outputs[out] > 1) { const res = h('div', '', 'cr-ings-inline'); for (const [id, k] of outs) { const c = h('span', '', 'cr-chip ok'); c.append(itemArt(id), h('b', '×' + k * quantity)); c.title = name(id); res.append(c); } scroll.append(h('h4', 'Результат'), res); }
+  main.append(scroll);
+  // ---------- Action bar ----------
+  const pocket = r.station === 'hand', owner = pocket ? 'hand' : id, ob = pocket ? undefined : b, obAuto = !pocket && auto;
+  const job = ob ? ob.job : g.world.base.hand, queueFree = obAuto ? 5 - ob!.queue.length - (ob!.job ? 1 : 0) : MAX_REPEAT + 1;
+  const max = Math.max(1, Math.min(can, queueFree));
+  quantity = Math.max(1, Math.min(quantity, obAuto ? Math.max(1, queueFree) : 99));
+  const make = h('footer', '', 'cr-make');
+  if (here) {
+   const qty = h('div', '', 'cr-qty');
+   const out2 = h('output', String(quantity)); out2.setAttribute('aria-label', 'Количество партий');
+   qty.append(button('−', () => { quantity = Math.max(1, quantity - 1); redraw(); }, 'cr-step', quantity <= 1), out2, button('+', () => { quantity = Math.min(obAuto ? queueFree : 99, quantity + 1); redraw(); }, 'cr-step', quantity >= (obAuto ? queueFree : 99)), button('Макс', () => { quantity = max; redraw(); }, 'cr-max', can < 2));
+   const missing = Object.entries(r.inputs).filter(([id, k]) => countItem(g.player.inventory, id) + countItem(ob?.input ?? [], id) < k);
+   const reason = ob && !near ? 'Подойдите к верстаку' : !obAuto && job ? 'Идёт работа — дождитесь или отмените' : obAuto && queueFree < 1 ? 'Очередь заполнена' : missing.length ? 'Не хватает: ' + missing.map(([id]) => name(id)).join(', ') : '';
+   const create = button(obAuto ? `В очередь ×${quantity}` : quantity > 1 ? `Создать ×${quantity}` : 'Создать', () => {
+    const ins = [...ings.querySelectorAll('.cr-ing-art')];
+    const tokens = captureTokens(ins, root?.querySelector('.cr-hero'));
+    let error = '';
+    if (obAuto) error = queueJob(g, r.id, owner, Math.min(quantity, queueFree));
+    else {
+     if (ob) error = loadRecipeInputs(g, r.id, owner);
+     if (!error) error = startJob(g, r.id, owner, !!ob);
+     if (!error) { const j = ob ? ob.job : g.world.base.hand; if (j) j.repeat = Math.max(0, Math.min(MAX_REPEAT, quantity - 1, affordable(g, r, ob))); }
+    }
+    notify(error, obAuto ? 'Добавлено в очередь' : 'Сборка начата');
+    if (!error) transferCraft(tokens, '.cr-work');
+   }, 'cr-create', !!reason);
+   make.append(qty, create);
+   if (reason) make.append(h('p', reason, 'cr-reason warn'));
+  } else make.append(h('p', r.station === 'kiln' ? 'Откройте печь: положите сырьё в верхний слот и волокно в слот топлива — плавка пойдёт сама.' : r.station === 'electrolyzer' ? 'Положите воду в генератор кислорода и подайте питание.' : 'Этот рецепт собирается в другом месте.', 'cr-reason'));
+  main.append(make);
+  // Show the work that matters for this recipe: the pocket job, or the bench (with its queue and output).
+  const showHand = pocket || (!!g.world.base.hand && !b?.job), card = showHand ? (g.world.base.hand ? jobCard(g, 'hand', undefined, notify, changed, redraw) : null) : (b && (b.job || b.queue.length || b.output.some(Boolean)) ? jobCard(g, id, b, notify, changed, redraw) : null);
+  if (card) main.append(card); else { progress = bar = status = null; }
+  tickOwner = card ? (showHand ? 'hand' : id) : '';
+  view.append(side, main);
+  queueMicrotask(() => { const l = view.querySelector('.cr-list'), d = view.querySelector('.cr-detail-scroll'); if (l) { if (listScroll < 0) { view.querySelector('.cr-row.selected')?.scrollIntoView({ block: 'center' }); listScroll = l.scrollTop; } else l.scrollTop = listScroll; } if (d) d.scrollTop = detailScroll; });
+  tick(g, id);
+  return view;
+ }
+ let tickOwner = '';
+ function tick(g: GameState, stationId: string) {
+  const bench = machine(g, stationId);
+  // Finished workbench batches go straight to the backpack while the player stands at the bench.
+  if (bench && nearby(g, bench) && bench.output.some(Boolean)) { const sig = JSON.stringify(bench.output); if (sig !== outputSig) { outputSig = sig; const n = collectOutput(g, stationId); if (n) queueMicrotask(() => { pulseCraft('#production-panel .st-head'); redrawHook?.(); }); } }
+  if (!progress || !bar || !status || !tickOwner) return;
+  const id = tickOwner, b = machine(g, id), job = b ? b.job : g.world.base.hand, r = job ? RECIPE_BY_ID.get(job.recipeId) : null;
+  const ratio = job && r ? Math.min(1, job.workMs / (r.seconds * 1000)) : 0;
+  bar.style.transform = `scaleX(${ratio})`;
+  let text = '';
+  if (job && r) {
+   const left = Math.max(0, (r.seconds * 1000 - job.workMs) / 1000);
+   text = ratio >= 1 ? (b ? 'Готово — освободите выход' : 'Готово — освободите место в рюкзаке') : `${Math.floor(ratio * 100)}% · ${left.toFixed(1)} с` + (job.repeat ? ` · ещё ${job.repeat}` : '') + (b?.level === 2 ? ` · очередь ${b.queue.length}` : '');
+   if (b && !nearby(g, b) && b.level === 1) text = 'Пауза — подойдите к верстаку';
+   if (b?.level === 2 && energyRate(b, r) && powerRate(b.id) <= 0 && ratio < 1) text = 'Пауза — нет питания (подключите кабель к генератору)';
+   if (!b && g.world.base.hand && ratio < 1 && job.repeat) text += '';
+  } else text = b ? (b.level === 2 ? 'Очередь пуста' : 'Выберите рецепт и нажмите «Создать»') : 'Выберите рецепт и нажмите «Создать»';
+  if (status.textContent !== text) status.textContent = text;
+  if (previousJob !== undefined && job && previousJob !== job) queueMicrotask(() => pulseCraft('.cr-work'));
+  if (previousJob && !job) queueMicrotask(() => redrawHook?.());
+  previousJob = job;
+ }
+ return { open, draw, tick, select: (id: string) => { selected = id; }, get mode() { return upgrade ? 'upgrade' : 'craft'; } };
 }

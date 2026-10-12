@@ -52,7 +52,7 @@ export function newGame(worldId: string, seed: number, createdAt: number, y: num
   meta: { worldId, name, seed: seed >>> 0, planetId: 'verdana', generatorVersion: GENERATOR_VERSION, contentVersion: CONTENT_VERSION, stateVersion: STATE_VERSION, createdAt, activeTicks: 0 },
   player: { x: SPAWN_POSE.x, y, z: SPAWN_POSE.z, yaw: SPAWN_POSE.yaw, pitch: SPAWN_POSE.pitch, vitals: { health: 100, satiety: 100 }, survival: freshSurvival(), suit: basicSuit(), bottles: [{ itemId: 'bottle_1', count: 1, milliGU: TANKS.bottle_1.capacity }, null], inventory, hotbar: 0 },
   world: { crates: {'crate-a':emptyInventory(),'crate-b':emptyInventory()}, base: freshBase(), capsuleMilliGU: 2400000, nodes: Object.fromEntries(NODES.map(n => [n.id, n.amount])), regrow: {}, drops: [], nextDropId: 1, dayOffsetTicks: START_OFFSET_TICKS },
-  progress: { visited: [], discovered: [], selected: 'iron', quests: freshQuestProgress() },
+  progress: { visited: [], discovered: [], selected: 'guide', quests: freshQuestProgress() },
  };
 }
 export const cloneState = (s: GameState): GameState => structuredClone(s);

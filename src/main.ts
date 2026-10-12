@@ -1,11 +1,14 @@
 import { Diagnostics, observeDiagnostics } from './diagnostics';
 import { sceneInterval } from './renderPolicy';
 import { createWorldInteraction } from './worldInteraction';
+import { stationStatus } from './game/stationStatus';
 import { packStation } from './game/worldActions';
 import { countItem } from './game/inventory';
 import { createQuestBook } from './ui/quests';
 import { refreshQuestProgress } from './game/quests';
-import { QUEST_BY_ID } from './game/questCatalog';
+import { QUEST_BY_ID, type QuestId } from './game/questCatalog';
+import { currentStep, guideStep, stepTarget, progressCount, type GuideTarget } from './game/guide';
+import { itemArt } from './ui/art';
 import { createProductionPanel } from './ui/production';
 import { createBuildings } from './buildings';
 import { productionTick, manualWork, releaseHandOnDeath, breathingDome, machine } from './game/production';
@@ -64,7 +67,7 @@ function boot(){
  const viewDirection=new THREE.Vector3(),viewPos=new THREE.Vector3(),shadowAnchor=new THREE.Vector3(),tmp=new THREE.Vector3();
  const keys=new Set<string>(),input:Input={forward:0,right:0,run:false,jump:false};
  let joyX=0,joyY=0,runToggle=false,joyPointer:number|null=null,lookPointer:number|null=null,lastX=0,lastY=0;
- let started=false,running=false,selected='iron',nearest:Landmark|undefined,last=performance.now(),lastDiagnosticFrame=last,lastUI=0;
+ let started=false,running=false,selected='guide',nearest:Landmark|undefined,last=performance.now(),lastDiagnosticFrame=last,lastUI=0;
  // ---------- S1 game state: one clock, finite deposits, inventory, saves ----------
  const clock=new SimClock(),mining:Mining={nodeId:null,ticks:0};
  let lastSurvivalEvent='none';
@@ -153,10 +156,13 @@ function boot(){
  el('inventory-button').onclick=()=>openPanel('inventory-panel');
  el('close-inventory').onclick=()=>{audio.tone('ui');void saver?.save();resume();};
  let questReturn:string|null=null;
- const questBook=createQuestBook({game:()=>game,show:()=>{questReturn=dialog==='paused'?'paused':null;setDialog('quest-panel');},close:()=>{void saver?.save();if(questReturn)setDialog(questReturn);else resume();},changed:()=>{lastObjective='';updateUI();void saver?.save();},tone:()=>audio.tone('ui')});
+ const questBook=createQuestBook({game:()=>game,show:()=>{questReturn=dialog==='paused'?'paused':null;setDialog('quest-panel');},close:()=>{void saver?.save();if(questReturn)setDialog(questReturn);else resume();},changed:()=>{lastObjective='';updateUI();void saver?.save();},tone:()=>audio.tone('ui'),
+  craft:recipeId=>{production.openRecipe(recipeId);},
+  navigate:target=>{guideOverride=target;selected='guide';updateUI();}});
  const openQuests=()=>{if(!started||!game||game.player.vitals.health<=0||saver?.halted)return;if(dialog==='quest-panel'){questBook.escape();return;}if(running||liveDialogs.has(dialog)||dialog==='paused')questBook.open();};
  el('quests-button').onclick=openQuests;
- const production=createProductionPanel({game:()=>game,show:()=>setDialog('production-panel'),close:()=>{void saver?.save();resume();},changed:()=>{if(game)built.sync(game);world.invalidateShadows();syncDrops();hudKey='';updateHotbar();void saver?.save();},measure:(name,ms)=>{diagnostics.span(name,ms);diagnostics.event(name,ms,{dialog,quality:settings.quality});},refill:id=>{const wasRefilling=refillMachine!==null;refillMachine=id;if(wasRefilling&&!id)void saver?.save();},tone:ok=>audio.tone(ok?'item':'warn')});
+ const production=createProductionPanel({game:()=>game,show:()=>setDialog('production-panel'),close:()=>{void saver?.save();resume();},changed:()=>{if(game)built.sync(game);world.invalidateShadows();syncDrops();hudKey='';updateHotbar();void saver?.save();},measure:(name,ms)=>{diagnostics.span(name,ms);diagnostics.event(name,ms,{dialog,quality:settings.quality});},refill:id=>{const wasRefilling=refillMachine!==null;refillMachine=id;if(wasRefilling&&!id)void saver?.save();},tone:ok=>audio.tone(ok?'item':'warn'),
+  navigate:t=>{guideOverride=t;selected='guide';audio.tone('ui');void saver?.save();resume();updateUI();}});
  el('craft-button').onclick=()=>production.open();
 
  // ---------- Context action: mine (hold) / pick up / scan, decided by the aim and the selected item ----------
@@ -271,7 +277,7 @@ function boot(){
   const y=heightAt(nearest.x,nearest.z),fromCapsule=Math.hypot(nearest.x-40,nearest.z-40);
   const rows:[string,string][]=[['Координаты',`${Math.round(nearest.x)} · ${Math.round(nearest.z)}`],['Высота',`${y>=0?'+':''}${y.toFixed(1)} м`],['От капсулы',`${Math.round(fromCapsule)} м`]];
   el('info-data').replaceChildren(...rows.map(([k,v])=>{const d=document.createElement('div'),dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=k;dd.textContent=v;d.append(dt,dd);return d;}));
-  if(nearest.id===selected)selected=ROUTE.find(id=>!visited.has(id))??'capsule';
+  if(nearest.id===selected)selected='guide';
   setDialog('info-panel');updateUI();
  }
  addEventListener('keydown',event=>{
@@ -387,7 +393,7 @@ function boot(){
  function startGame(state:GameState,id:string|null,revision:number,baseRevision=revision){
   game=state;refreshQuestProgress(state);questBook.reset();slotId=id;clock.stop();clock.activeTicks=state.meta.activeTicks;mining.nodeId=null;mining.ticks=0;
   actor.reset();Object.assign(actor,{x:state.player.x,y:state.player.y,z:state.player.z,yaw:state.player.yaw,pitch:state.player.pitch});actor.previous={x:actor.x,y:actor.y,z:actor.z};lastSurvivalEvent='none';holdMine=holdRefill=false;
-  visited.clear();discovered.clear();state.progress.visited.forEach(v=>visited.add(v));state.progress.discovered.forEach(v=>discovered.add(v));selected=LANDMARKS.some(l=>l.id===state.progress.selected)?state.progress.selected:'iron';
+  visited.clear();discovered.clear();state.progress.visited.forEach(v=>visited.add(v));state.progress.discovered.forEach(v=>discovered.add(v));selected=LANDMARKS.some(l=>l.id===state.progress.selected)?state.progress.selected:'guide';guideOverride=null;lastCompleted=-1;lastStep=null;lastTaskKey='';
   applyNodes();built.reset();built.sync(state);world.invalidateShadows();syncDrops();hudKey='';updateHotbar();shownDay=null;world.setTime(phaseSeconds(state.meta.activeTicks,state.world.dayOffsetTicks),true);updateDayButton();panels.reset();
   if(id&&store){saver=new Saver(store,id,token,revision,state.meta.activeTicks,snapshot,setSaveStatus,baseRevision,(name,ms)=>diagnostics.span(name,ms));saver.startHeartbeat();setSaveStatus(saver.status);}else{saver=null;setSaveStatus({kind:'none'});}
   updateUI();
@@ -453,7 +459,7 @@ function boot(){
    (el('aim-bar').firstElementChild as HTMLElement).style.transform=`scaleX(${mineRatio})`;
    kind='mine';label='Добыть';iconId='i-pick';
   }else if(nearDrop){kind='pickup';label='Поднять';iconId='i-pack';}
-  else if(kind!=='eat'&&nearMachine){kind='machine';label='Открыть станцию';iconId='i-plug';const b=game&&machine(game,nearMachine);if(b){if(selected?.itemId==='wrench'&&b.kind==='workbench'&&b.level===1){kind='upgrade';label='Улучшить';iconId='i-gear';}box.hidden=!running;el('aim-name').textContent=ITEMS[b.kind].name;el('aim-meta').textContent=kind==='upgrade'?'Ключ · улучшение до II':b.kind==='workbench'?'Уровень '+b.level+' · Мастерская · B':'Мастерская · B';box.classList.remove('blocked');(el('aim-bar').firstElementChild as HTMLElement).style.transform='scaleX(0)';document.body.dataset.aim='true';}}
+  else if(kind!=='eat'&&nearMachine){kind='machine';label='Открыть станцию';iconId='i-plug';const b=game&&machine(game,nearMachine);if(b){if(selected?.itemId==='wrench'&&b.kind==='workbench'&&b.level===1){kind='upgrade';label='Улучшить';iconId='i-gear';}box.hidden=!running;const st=stationStatus(game!,b);el('aim-name').textContent=b.kind==='workbench'?'Верстак '+(b.level===2?'II':'I'):ITEMS[b.kind].name;el('aim-meta').textContent=kind==='upgrade'?'Ключ · улучшение до II · F':st.title+' · F';box.classList.toggle('blocked',st.tone==='warn');(el('aim-bar').firstElementChild as HTMLElement).style.transform='scaleX(0)';document.body.dataset.aim='true';}}
   else if(kind==='eat'){blocked=game!.player.survival.foodCooldownMs>0?'Подождите перед следующей порцией':'';}
   else if(nearest){kind='scan';label='Сканировать';iconId='i-scan';}
   if(game&&interaction.building){kind='place';label='Установить';iconId='i-pack';el('aim-name').textContent=selected?ITEMS[selected.itemId].name:'';el('aim-meta').textContent=interaction.problem||'Установить · F';blocked=interaction.problem;}
@@ -509,7 +515,12 @@ function boot(){
   ctx.font='600 10px ui-monospace,monospace';ctx.fillStyle='rgba(215,236,230,.75)';ctx.textAlign='left';ctx.fillText('С ↑',MARGIN+2,MARGIN+10);
   // Scale bar: 100 m.
   ctx.fillRect(MAP-MARGIN-100*MS,MAP-MARGIN+6,100*MS,2);ctx.textAlign='right';ctx.fillText('100 м',MAP-MARGIN,MAP-MARGIN+2);
-  el('landmark-list').replaceChildren(...LANDMARKS.map(p=>{const button=document.createElement('button');const d=Math.round(Math.hypot(p.x-actor.x,p.z-actor.z));button.innerHTML='';const name=document.createElement('b');name.textContent=p.name;const meta=document.createElement('small');meta.textContent=`${d} м`;button.append(name,meta);button.setAttribute('aria-label',p.name);button.setAttribute('aria-pressed',String(p.id===selected));const span=document.createElement('span');span.textContent=visited.has(p.id)?'✓':'◇';button.append(span);button.onclick=()=>{selected=p.id;audio.tone('ui');resume();updateUI();};return button;}));
+  const guide=navTarget(),follow=selected==='guide';
+  if(follow&&guide){ctx.save();ctx.translate(mpx(guide.x),mpy(guide.z));ctx.rotate(Math.PI/4);ctx.fillStyle='#ffb43c';ctx.fillRect(-5,-5,10,10);ctx.restore();ctx.strokeStyle='rgba(255,180,60,.6)';ctx.beginPath();ctx.arc(mpx(guide.x),mpy(guide.z),12,0,Math.PI*2);ctx.stroke();ctx.fillStyle='#ffb43c';ctx.textAlign='center';ctx.fillText(guide.name.toUpperCase(),mpx(guide.x),mpy(guide.z)-15);}
+  const journal=document.createElement('button');journal.setAttribute('aria-pressed',String(follow));journal.className='landmark-guide';
+  {const b=document.createElement('b');b.textContent='Цель журнала';const m=document.createElement('small');m.textContent=guide&&follow?`${guide.name} · ${Math.round(Math.hypot(guide.x-actor.x,guide.z-actor.z))} м`:'Вести по текущему шагу';const sp=document.createElement('span');sp.textContent='◆';journal.append(b,m,sp);}
+  journal.onclick=()=>{selected='guide';guideOverride=null;audio.tone('ui');resume();updateUI();};
+  el('landmark-list').replaceChildren(journal,...LANDMARKS.map(p=>{const button=document.createElement('button');const d=Math.round(Math.hypot(p.x-actor.x,p.z-actor.z));button.innerHTML='';const name=document.createElement('b');name.textContent=p.name;const meta=document.createElement('small');meta.textContent=`${d} м`;button.append(name,meta);button.setAttribute('aria-label',p.name);button.setAttribute('aria-pressed',String(p.id===selected));const span=document.createElement('span');span.textContent=visited.has(p.id)?'✓':'◇';button.append(span);button.onclick=()=>{selected=p.id;audio.tone('ui');resume();updateUI();};return button;}));
  }
  // ---------- Compass strip ----------
  const compass=el<HTMLCanvasElement>('compass'),cctx=compass.getContext('2d')!;
@@ -524,6 +535,7 @@ function boot(){
    if(major){cctx.font=`600 ${Math.max(10,11*scale)*dpr}px system-ui,sans-serif`;cctx.textAlign='center';cctx.fillText(DIRS[d/45],x,h*.36);}}
   for(const p of LANDMARKS){const a=bearing(p.x-actor.x,p.z-actor.z),rel=wrap(a-heading);if(Math.abs(rel)>span/2)continue;const x=X(a),sel=p.id===selected;
    cctx.save();cctx.translate(x,h*.82);cctx.rotate(Math.PI/4);cctx.fillStyle=sel?'#f2b460':visited.has(p.id)?'rgba(127,230,218,.45)':'rgba(191,238,230,.9)';const r=(sel?4:2.5)*dpr*scale;cctx.fillRect(-r,-r,r*2,r*2);cctx.restore();}
+  {const t=navTarget();if(t&&!t.landmark){const a=bearing(t.x-actor.x,t.z-actor.z),rel=wrap(a-heading);if(Math.abs(rel)<span/2){const x=X(a);cctx.save();cctx.translate(x,h*.82);cctx.rotate(Math.PI/4);cctx.fillStyle='#ffb43c';const r=4.5*dpr*scale;cctx.fillRect(-r,-r,r*2,r*2);cctx.restore();}}}
   // Sun (day) or moon (night) on the strip at its real bearing — the light moves with the game clock.
   {const sd=world.sunDirection,day=sd.y>-.02,a=day?bearing(sd.x,sd.z):bearing(-sd.x,-sd.z),rel=wrap(a-heading);
    if(Math.abs(rel)<span/2){const x=X(a),y=h*.36,r=5*dpr*scale;cctx.save();cctx.strokeStyle=cctx.fillStyle=day?'#ffb43c':'#cfe3ff';cctx.lineWidth=1.4*dpr;cctx.beginPath();cctx.arc(x,y,r*.7,0,Math.PI*2);if(day){cctx.stroke();for(let i=0;i<8;i++){const q=i*Math.PI/4;cctx.beginPath();cctx.moveTo(x+Math.cos(q)*r*1.05,y+Math.sin(q)*r*1.05);cctx.lineTo(x+Math.cos(q)*r*1.5,y+Math.sin(q)*r*1.5);cctx.stroke();}}else cctx.fill();cctx.restore();}}
@@ -531,15 +543,40 @@ function boot(){
  }
  const marker=el('target-marker');
  function updateMarker(){
-  const t=LANDMARKS.find(p=>p.id===selected)!;const d=Math.hypot(actor.x-t.x,actor.z-t.z);
+  const t=navTarget();if(!t){marker.hidden=true;return;}const d=Math.hypot(actor.x-t.x,actor.z-t.z);
   tmp.set(t.x,heightAt(t.x,t.z)+2.4,t.z).project(camera);
   const visible=started&&running&&d>t.radius*.6&&tmp.z<1&&Math.abs(tmp.x)<1.1&&Math.abs(tmp.y)<1.1;
   marker.hidden=!visible;marker.style.opacity=visible?'1':'0';
   if(visible){marker.style.transform=`translate(${Math.max(26,Math.min(innerWidth-26,(tmp.x*.5+.5)*innerWidth))}px,${Math.max(innerHeight<500?92:118,Math.min(innerHeight-30,(-tmp.y*.5+.5)*innerHeight))}px) translate(-50%,-50%)`;el('marker-distance').textContent=`${Math.round(d)} м`;}
  }
- /** Neutral entry to the development map. */
+ /** Guide target the player chose in the journal; cleared when reached or when the step changes. */
+ let guideOverride:GuideTarget|null=null,lastStep:QuestId|null=null,lastCompleted=-1,lastTaskKey='',guideCache:{at:number;target:GuideTarget|null}={at:-1,target:null};
+ /** Where the compass and world marker lead: a landmark chosen on the map, or the current guide target. */
+ function navTarget():{name:string;x:number;z:number;radius:number;landmark:boolean}|null{
+  const l=LANDMARKS.find(p=>p.id===selected);if(l)return {name:l.name,x:l.x,z:l.z,radius:l.radius,landmark:true};
+  if(!game)return null;
+  if(guideOverride)return {...guideOverride,radius:3,landmark:false};
+  const now=performance.now();if(now-guideCache.at>500){const id=currentStep(game);guideCache={at:now,target:id?stepTarget(game,guideStep(game,id)):null};}
+  const t=guideCache.target;return t?{...t,radius:t.kind==='area'?8:3,landmark:false}:null;
+ }
+ function showBanner(title:string,next:string){const b=el('step-banner');b.hidden=true;void b.offsetWidth;el('step-banner-title').textContent=title;el('step-banner-next').textContent=next;b.hidden=false;audio.tone('discover');setTimeout(()=>{if(el('step-banner-title').textContent===title)b.hidden=true;},3700);}
+ /** HUD tracker: current step, its next unfinished task with a counter, and overall progress. */
  function objective():string{
-  return 'Дерево развития';
+  if(!game)return '';
+  const done=game.progress.quests.completed;
+  if(lastCompleted>=0&&done.length>lastCompleted){const id=done[done.length-1],step=guideStep(game,id),next=currentStep(game);showBanner(step.title,next?'Дальше: '+guideStep(game,next).title:'Глава завершена');guideOverride=null;}
+  lastCompleted=done.length;
+  const id=currentStep(game);
+  if(id!==lastStep){lastStep=id;guideOverride=null;guideCache.at=-1;}
+  if(!id){el('objective-kicker').textContent='Глава завершена';el('objective-task').textContent='Исследуйте Вердану';el('objective-icon').replaceChildren(itemArt('dome'));return 'База работает';}
+  const step=guideStep(game,id),task=step.tasks.find(t=>!t.done),{done:n,total}=progressCount(game);
+  el('objective-kicker').textContent=(game.progress.quests.tracked===id?'Выбрано · ':'Цель ')+(n+1)+' / '+total;
+  const taskEl=el('objective-task'),key=task?task.label+task.have:'';
+  if(task){taskEl.replaceChildren(document.createTextNode(task.label+(task.need>1?' ':'')));if(task.need>1){const b=document.createElement('b');b.textContent=`${task.have}/${task.need}`;taskEl.append(b);}}else taskEl.textContent='Готово — проверьте журнал';
+  if(key!==lastTaskKey){if(lastTaskKey){const ob=el('objective');ob.classList.remove('tick');void ob.offsetWidth;ob.classList.add('tick');}lastTaskKey=key;}
+  const ratio=step.tasks.filter(t=>t.done).length/Math.max(1,step.tasks.length);el('objective').style.setProperty('--p',String(ratio));
+  const icon=el('objective-icon');if(icon.dataset.item!==step.item){icon.dataset.item=step.item;icon.replaceChildren(itemArt(step.item));}
+  return step.title;
  }
  function updateVitals(){
   if(!game)return;const g=game,inCapsule=insideCapsule(actor.x,actor.z);
@@ -560,13 +597,14 @@ function boot(){
   updateVisor();
   nearMachine=game&&interaction.target&&machine(game,interaction.target)?interaction.target:null;
   nearDrop=null;if(game)for(const d of game.world.drops)if(Math.hypot(d.x-actor.x,d.z-actor.z)<2.2){nearDrop=d.id;break;}
-  const target=LANDMARKS.find(p=>p.id===selected)!;
-  const d=Math.hypot(actor.x-target.x,actor.z-target.z);el('target-name').textContent=target.name;el('target-distance').textContent=`${Math.round(d)} м`;
-  const angle=Math.atan2(target.x-actor.x,target.z-actor.z)-actor.yaw;(document.querySelector('.nav-arrow') as HTMLElement).style.transform=`rotate(${-angle}rad)`;
+  const target=navTarget();el('navigation').hidden=!target;
+  if(target){const d=Math.hypot(actor.x-target.x,actor.z-target.z);el('target-name').textContent=target.name;el('target-distance').textContent=`${Math.round(d)} м`;
+   const angle=Math.atan2(target.x-actor.x,target.z-actor.z)-actor.yaw;(document.querySelector('.nav-arrow') as HTMLElement).style.transform=`rotate(${-angle}rad)`;
+   if(!target.landmark&&guideOverride&&d<target.radius)guideOverride=null;}
   nearest=LANDMARKS.filter(p=>Math.hypot(actor.x-p.x,actor.z-p.z)<=p.radius).sort((a,b)=>Math.hypot(actor.x-a.x,actor.z-a.z)-Math.hypot(actor.x-b.x,actor.z-b.z))[0];
   document.body.dataset.near=String(!!nearest);
   if(nearest&&started&&!discovered.has(nearest.id)){discovered.add(nearest.id);if(nearest.id!=='capsule'){toast('Новое место',nearest.name);audio.tone('discover');}}
-  const o=objective();if(o!==lastObjective){lastObjective=o;el('objective-text').textContent=o;const ob=el('objective');ob.classList.remove('pulse');void ob.offsetWidth;ob.classList.add('pulse');}
+  const o=objective();if(o!==lastObjective){lastObjective=o;el('objective-text').textContent=o;const ob=el('objective');ob.classList.remove('advance');void ob.offsetWidth;ob.classList.add('advance');}
   updateVitals();updateHotbar();updateDayButton();
  }
  function state(){const sorted=[...frames].sort((a,b)=>a-b);return {ready:true,version:'S2.7',worldTarget:interaction.target,quests:game?structuredClone(game.progress.quests):null,questBook:questBook.debug(),vitals:game?{...game.player.vitals}:null,survival:game?{...game.player.survival}:null,capsuleMilliGU:game?.world.capsuleMilliGU??0,base:game?structuredClone(game.world.base):null,visibleDrops:dropGroup.children.length,slotId,revision:saver?.revision??0,saveStatus:saver?.status.kind??(game?'none':'idle'),halted:!!saver?.halted,activeTicks:clock.activeTicks,clockRunning:clock.running,hotbar:game?.player.hotbar??0,cells:game?game.player.inventory.map(s=>s?{...s}:null):[],suit:game?Object.fromEntries(Object.entries(game.player.suit).map(([k,v])=>[k,v?.itemId??null])):null,worn:game?wornParts(game):0,bottles:game?game.player.bottles.map(b=>b?{...b}:null):[],oxygenGU:game?oxygenGU(game):0,dayPhase:dayPhase(),dayOffsetTicks:game?.world.dayOffsetTicks??0,nightValue:world.nightValue,action:actionKind,handItem:hand.visible,panel:panels.debug,aimNode,mineRatio,nodes:game?{...game.world.nodes}:null,inventory:game?game.player.inventory.filter(Boolean).map(s=>({...s})):[],drops:game?game.world.drops.length:0,storage:!!store,grassCount:world.grassCount,fullscreen:!!document.fullscreenElement,running,dialog,night:!isDay(dayPhase()),selected,visited:[...visited],activeTime:clock.activeSeconds,position:{x:actor.x,y:actor.y,z:actor.z},yaw:actor.yaw,pitch:actor.pitch,grounded:actor.grounded,input:{...input,joyX,joyY,joyPointer,lookPointer},quality:settings.quality,sound:settings.sound,bob:settings.bob,fov:settings.fov,fineTerrainBlocks:world.terrain.fineBlocks,drawCalls:renderCalls,triangles:renderTriangles,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0,viewport:{width:innerWidth,height:innerHeight},renderer:rendererVersion,diagnostics:diagnostics.enabled,shadowTarget:world.sunLight.target.position.toArray(),shadowBias:world.sunLight.shadow.bias};}
