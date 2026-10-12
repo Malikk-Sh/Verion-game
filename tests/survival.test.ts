@@ -83,7 +83,7 @@ test('removing any suit part stops bottle breathing, but capsule air still prote
   for (const part of ['helmet', 'chest', 'legs', 'boots'] as const) {
     const s = newGame('unsealed', 1, 1, .5); s.player.suit[part] = null;
     assert.equal(survivalTick(s, 1, false), 'warning');
-    assert.equal(oxygenGU(s), 240);
+    assert.equal(oxygenGU(s), 600);
     survivalTick(s, 2, true);
     assert.equal(s.player.survival.suffocationMs, 0);
     assert.equal(s.world.capsuleMilliGU, 2398000);
@@ -112,7 +112,7 @@ test('running costs 1.5 times hunger while breathing stays at 1 GU/s', () => {
   const walking = newGame('walk-food', 1, 1, .5), running = newGame('run-food', 1, 1, .5);
   survivalTick(walking, 40, false); survivalTick(running, 40, false, true);
   assert.equal(walking.player.vitals.satiety, 98); assert.equal(running.player.vitals.satiety, 97);
-  assert.equal(oxygenGU(walking), 200); assert.equal(oxygenGU(running), 200);
+  assert.equal(oxygenGU(walking), 560); assert.equal(oxygenGU(running), 560);
 });
 
 test('manual refill shares one 20 GU/s rate across two bottles and never creates gas', () => {
@@ -164,14 +164,14 @@ test('personal emergency air takes priority and leaves transferable gas untouche
   const s = newGame('reserve-priority', 1, 1, .5);
   s.player.survival.emergencyMs = 1000;
   survivalTick(s, 1, true);
-  assert.equal(oxygenGU(s), 240); assert.equal(s.world.capsuleMilliGU, 2400000);
+  assert.equal(oxygenGU(s), 600); assert.equal(s.world.capsuleMilliGU, 2400000);
   survivalTick(s, .05, true); assert.equal(s.world.capsuleMilliGU, 2399950);
 });
 
 test('HUD uses nominal capacity and only breathable sources, including personal reserve seconds', () => {
   const s = newGame('hud-air', 1, 1, .5); s.player.bottles[0]!.milliGU = 24000;
-  assert.deepEqual(accessibleOxygen(s, false), { amount: 24, capacity: 240, unit: 'GU', emergency: false });
-  assert.deepEqual(accessibleOxygen(s, true), { amount: 2424, capacity: 2640, unit: 'GU', emergency: false });
+  assert.deepEqual(accessibleOxygen(s, false), { amount: 24, capacity: 600, unit: 'GU', emergency: false });
+  assert.deepEqual(accessibleOxygen(s, true), { amount: 2424, capacity: 3000, unit: 'GU', emergency: false });
   s.player.suit.helmet = null;
   assert.equal(accessibleOxygen(s, false).amount, 0); assert.equal(accessibleOxygen(s, true).amount, 2400);
   s.player.survival.emergencyMs = 17000;

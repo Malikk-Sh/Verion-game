@@ -1,5 +1,5 @@
 import { addItems, firstEmpty, type Slot } from './inventory';
-import { insideDome, machine, type Building } from './production';
+import { insideDome, linkLength, linkSegments, machine, type Building } from './production';
 import type { GameState } from './state';
 /** Packing and all link refunds are atomic: a full backpack leaves the world unchanged. */
 export function packStation(g:GameState,id:string):string{
@@ -8,7 +8,7 @@ export function packStation(g:GameState,id:string):string{
  if(b.kind==='dome'&&g.world.base.buildings.some(v=>v!==b&&insideDome(b,v.x,v.y,v.z)))return 'Сначала заберите станции внутри купола';
  const inv=structuredClone(g.player.inventory),at=firstEmpty(inv);if(at<0)return 'Освободите ячейку в рюкзаке';
  const {id:oldId,x,y,z,...packed}=structuredClone(b);inv[at]={itemId:b.kind,count:1,packed};
- const links=g.world.base.links.filter(l=>l.from===id||l.to===id);for(const l of links)if(addItems(inv,l.kind,1))return 'Нет места для кабелей и труб';
+ const links=g.world.base.links.filter(l=>l.from===id||l.to===id);for(const l of links)if(addItems(inv,l.kind,linkSegments(linkLength(g,l))))return 'Нет места для кабелей и труб';
  g.player.inventory=inv;g.world.base.links=g.world.base.links.filter(l=>!links.includes(l));g.world.base.buildings=g.world.base.buildings.filter(v=>v!==b);return '';
 }
 /** Loading a dedicated machine transfers a real stack, never makes an extra bottle. */

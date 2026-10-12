@@ -17,10 +17,15 @@ test('item definitions match docs/data/catalog.json', () => {
  for (const p of ['suit_helmet', 'suit_chest', 'suit_legs', 'suit_boots']) assert.equal(cat.items[p].kind, 'equipment', p);
  assert.equal(cat.items.suit, undefined, 'single suit item replaced by four parts (D30)'); assert.equal(cat.version, '1.1.0');
 });
-test('valley deposits match the WORLD §2 guarantee (48 Fe, 32 Cu, 48 stone, 24 ice)', () => {
- const sum = (id: string) => NODES.filter(n => n.itemId === id).reduce((a, n) => a + n.amount, 0);
- assert.deepEqual([sum('iron_raw'), sum('copper_raw'), sum('stone'), sum('ice')], [48, 32, 48, 24]);
- for (const n of NODES) assert.ok(Math.hypot(n.x - 40, n.z - 40) <= 120, n.id);
+test('valley deposits keep the WORLD §2 guarantee and S3 adds secondary and far deposits', () => {
+ const start = NODES.filter(n => ['iron-a','iron-b','copper-a','copper-b','stone-a','ice-a','sand-a','grass-a','grass-b'].includes(n.id));
+ const sum = (list: typeof NODES, id: string) => list.filter(n => n.itemId === id).reduce((a, n) => a + n.amount, 0);
+ assert.deepEqual([sum(start, 'iron_raw'), sum(start, 'copper_raw'), sum(start, 'stone'), sum(start, 'ice'), sum(start, 'sand'), sum(start, 'grass')], [48, 32, 48, 24, 32, 100]);
+ for (const n of NODES.filter(n => !n.far)) assert.ok(Math.hypot(n.x - 40, n.z - 40) <= 120, n.id);
+ // Every finite material has at least two valley deposits; only grass regrows.
+ for (const id of ['iron_raw', 'copper_raw', 'stone', 'ice', 'sand']) assert.ok(NODES.filter(n => n.itemId === id && !n.far).length >= 2, id);
+ for (const n of NODES) assert.equal(!!n.regrowSeconds, n.material === 'grass', n.id);
+ assert.deepEqual([sum(NODES, 'iron_raw'), sum(NODES, 'copper_raw'), sum(NODES, 'stone'), sum(NODES, 'ice'), sum(NODES, 'sand')], [144, 112, 108, 264, 200]);
 });
 test('clock: fixed 50 ms ticks, ≤5 per frame, no catch-up after stop or long frames', () => {
  const c = new SimClock();
@@ -37,7 +42,7 @@ test('inventory stacks to 64, overflow is reported, removal is exact', () => {
 test('starting kit per SYSTEMS §1 and strict validation round trip', () => {
  const s = fresh();
  assert.equal(s.player.inventory[0]!.itemId, 'tool_stone'); assert.equal(s.player.inventory[0]!.durability, 160);
- assert.deepEqual(s.player.inventory[1], { itemId: 'pulp', count: 4 }); assert.equal(s.player.bottles[0]!.milliGU, 240000);
+ assert.deepEqual(s.player.inventory[1], { itemId: 'pulp', count: 4 }); assert.equal(s.player.bottles[0]!.milliGU, 600000);
  assert.deepEqual(sanitizeState(JSON.parse(JSON.stringify(s))), s);
  const bad = cloneState(s) as any; bad.player.inventory[2] = { itemId: 'stone', count: 65 }; assert.throws(() => sanitizeState(bad), /count/);
  const evil = JSON.parse(JSON.stringify(s).replace('"meta":{', '"meta":{"__proto__":{"x":1},')); assert.equal((sanitizeState(evil).meta as any).x, undefined);
@@ -56,7 +61,7 @@ test('mining: 4 s per iron block with the stone multitool, finite node, tool wea
  s.world.nodes['ice-a'] = 1; for (let i = 0; i < 30; i++) mineTick(s, m, 'ice-a', true);
  assert.equal(s.world.nodes['ice-a'], 0); assert.equal(mineTick(s, m, 'ice-a', true).kind, 'blocked');
 });
-test('mining: full inventory spills into a persistent ground pile; broken tool stops mining', () => {
+test('mining: full inventory spills into a persistent ground pile; a broken tool falls back to slower bare hands', () => {
  const s = fresh(), m: Mining = { nodeId: null, ticks: 0 };
  for (let i = 2; i < 24; i++) s.player.inventory[i] = { itemId: 'ice', count: 64 };
  s.player.inventory[1] = { itemId: 'pulp', count: 64 };
@@ -64,7 +69,11 @@ test('mining: full inventory spills into a persistent ground pile; broken tool s
  assert.equal(ev!.kind, 'block'); assert.equal((ev as any).toGround, 1); assert.equal(s.world.drops.length, 1); assert.deepEqual(s.world.drops[0].items, [{ itemId: 'stone', count: 1 }]);
  s.player.inventory[5] = null; assert.equal(pickUp(s, s.world.drops[0].id), 1); assert.equal(s.world.drops.length, 0);
  s.player.inventory[0]!.durability = 1; for (let i = 0; i < 60; i++) ev = mineTick(s, m, 'stone-a', true);
- assert.equal((ev as any).toolBroke, true); assert.deepEqual(mineTick(s, m, 'stone-a', true), { kind: 'blocked', nodeId: 'stone-a', reason: 'Инструмент сломан' });
+ assert.equal((ev as any).toolBroke, true);
+ // Loose stone is still gathered by hand (2.5× slower), so a new tool can always be made; ore is not.
+ const before = s.world.nodes['stone-a']; for (let i = 0; i < 149; i++) assert.equal(mineTick(s, m, 'stone-a', true).kind, 'progress');
+ assert.equal(mineTick(s, m, 'stone-a', true).kind, 'block'); assert.equal(s.world.nodes['stone-a'], before - 1); assert.equal(s.player.inventory[0]!.durability, 0);
+ assert.deepEqual(mineTick(s, m, 'iron-a', true), { kind: 'blocked', nodeId: 'iron-a', reason: 'Инструмент сломан' });
  assert.equal(TOOLS.tool_stone.durability, 160);
 });
 test('sha256 matches node:crypto and canonical JSON sorts keys', () => {

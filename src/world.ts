@@ -1,4 +1,5 @@
 /** Hand-authored Verdana layout (B1 positions, B3 terrain detail). Metres; north is +z. No production-world generator. */
+import { NODES } from './game/resources';
 import { fbm, noise2, ridged } from './noise';
 /** Walkable world bounds. B4: 560 × 560 m (3.5× B3 per side); the B1–B3 arrival valley keeps its 0…160 coordinates. */
 export const MIN = -200;
@@ -165,6 +166,7 @@ export function makeColliders(){
  // Mineable deposits: each main body loses its own collider when depleted.
  boxes.push(box('stone-outcrop',30,heightAt(30,52)+.45,52,2.2,.9,2.2));
  boxes.push(box('ice-outcrop',33,heightAt(33,76.5)+.5,76.5,1.8,1,1.8));
+ for(const n of NODES)if(n.box){const [w,h,d]=n.box;boxes.push(box('node-'+n.id,n.x,heightAt(n.x,n.z)+h/2-.1,n.z,w,h,d));}
  // Footprint of the rotated formation (geometry spans ±w × ±d): axis-aligned bounds of its elliptical base.
  for(const [i,f] of FORMATIONS.entries()){const c=Math.cos(f.rotation),s=Math.sin(f.rotation),hx=Math.hypot(f.w*c,f.d*s),hz=Math.hypot(f.w*s,f.d*c);boxes.push(box('formation-'+i,f.x,f.base+f.h/2,f.z,hx*1.9,f.h,hz*1.9));}
  boxes.push(box('spire-a',100,heightAt(100,103)+8,103,5,16,6));

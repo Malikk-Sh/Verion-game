@@ -19,7 +19,7 @@ export type ItemDef = { id: string; name: string; short: string; stack: number; 
 const def = (d: ItemDef) => d;
 export const ITEMS: Record<string, ItemDef> = {
  tool_stone: def({ id: 'tool_stone', name: 'Каменный мультитул', short: 'Мультитул', stack: 1, kind: 'equipment', category: 'tool', description: 'Для добычи камня, руды и льда.' }),
- bottle_1: def({ id: 'bottle_1', name: 'Баллон I', short: 'Баллон', stack: 1, kind: 'equipment', category: 'tank', description: 'Баллон кислорода на 240 GU. Работает, когда установлен в слот баллона.' }),
+ bottle_1: def({ id: 'bottle_1', name: 'Баллон I', short: 'Баллон', stack: 1, kind: 'equipment', category: 'tank', description: 'Баллон кислорода на 600 GU — около 10 минут дыхания. Работает, когда установлен в слот баллона.' }),
  suit_helmet: def({ id: 'suit_helmet', name: 'Базовый шлем', short: 'Шлем', stack: 1, kind: 'equipment', category: 'suit', part: 'helmet', tier: 'Базовый', description: 'Закрытый шлем с герметичным визором.' }),
  suit_chest: def({ id: 'suit_chest', name: 'Базовый нагрудник', short: 'Нагрудник', stack: 1, kind: 'equipment', category: 'suit', part: 'chest', tier: 'Базовый', description: 'Герметичный корпус костюма с разъёмами для двух баллонов.' }),
  suit_legs: def({ id: 'suit_legs', name: 'Базовые поножи', short: 'Поножи', stack: 1, kind: 'equipment', category: 'suit', part: 'legs', tier: 'Базовый', description: 'Герметичные поножи с усиленными коленями.' }),
@@ -44,7 +44,8 @@ export const TOOLS: Record<string, { tier: number; timeMul: number; durability: 
  tool_stone: { tier: 0, timeMul: 1, durability: 160 },
 };
 /** Gas tanks: capacity in milli-GU. */
-export const TANKS: Record<string, { capacity: number }> = { bottle_1: { capacity: 240000 } };
+/** S3: Bottle I holds 600 GU (10 min of breathing at 1 GU/s; was 240 GU in B0). */
+export const TANKS: Record<string, { capacity: number }> = { bottle_1: { capacity: 600000 } };
 /** Base block time in seconds and the tier needed (SYSTEMS §3). */
 export const MATERIALS = {
  grass: { seconds: 1, tier: 0, label: 'Трава' },
@@ -55,3 +56,5 @@ export const MATERIALS = {
  copper: { seconds: 4, tier: 0, label: 'Медь' },
 } as const;
 export type Material = keyof typeof MATERIALS;
+/** Loose materials can be gathered without a tool, only slower: a broken multitool never locks the game. */
+export const HAND_MINING: Partial<Record<Material, number>> = { grass: 1, sand: 2, stone: 2.5, ice: 2.5 };

@@ -10,8 +10,11 @@ export const RECIPES: Recipe[] = catalog.recipes as unknown as Recipe[];
 export const RECIPE_BY_ID = new Map(RECIPES.map(r => [r.id, r]));
 // Import-only recipe: finish old paid melts without giving the old operation a new UI entry.
 RECIPE_BY_ID.set('legacy_melt',{id:'legacy_melt',station:'electrolyzer',inputs:{ice:1},outputs:{water:1},seconds:2,EU_per_second:6});
-export type Job = { recipeId: string; workMs: number; reserved: ItemStack[]; water: number };
-export type Building = { id: string; kind: BuildingKind; level: 1 | 2; x: number; y: number; z: number; input: Slot[]; output: Slot[]; job: Job | null; queue: string[]; enabled: boolean; lowPriority: boolean; energy: number; fuel: number; water: number; oxygen: number; zone: { q: number; temperature: number; purity: number; lossRemainder: number; breachMs: number; shell: number[] } };
+/** `repeat` more identical batches follow this one while inputs last (S3 batch crafting). */
+export type Job = { recipeId: string; workMs: number; reserved: ItemStack[]; water: number; repeat: number };
+export const MAX_REPEAT = 99;
+/** `rot`: quarter turns around +y (0 = facing +z). */
+export type Building = { id: string; kind: BuildingKind; level: 1 | 2; rot: number; x: number; y: number; z: number; input: Slot[]; output: Slot[]; job: Job | null; queue: string[]; enabled: boolean; lowPriority: boolean; energy: number; fuel: number; water: number; oxygen: number; zone: { q: number; temperature: number; purity: number; lossRemainder: number; breachMs: number; shell: number[] } };
 export type Link = { id: string; kind: 'cable' | 'gas_pipe'; from: string; to: string };
 export type BaseState = { buildings: Building[]; links: Link[]; nextId: number; hand: Job | null; handQueue: string[]; passage: { domeId: string; direction: 'in' | 'out'; remainingMs: number } | null };
 export const freshBase = (): BaseState => ({ buildings: [], links: [], nextId: 1, hand: null, handQueue: [], passage: null });
@@ -19,6 +22,12 @@ export const machine = (g: GameState, id: string) => g.world.base.buildings.find
 export const DOME_VOLUME = 48;
 export const DOME_CAPACITY = 960000;
 export const endpoint = (g: GameState, id: string) => id === 'capsule' ? { x: 40, y: heightAt(40,40)+.14, z: 40 } : machine(g, id);
+/** A line is paid per started 4 m segment (SYSTEMS §6) and may chain up to LINK_RANGE. */
+export const SEGMENT = 4, LINK_RANGE = 12;
+export const linkSegments = (d: number) => Math.max(1, Math.ceil((d - .001) / SEGMENT));
+export const linkLength = (g: GameState, l: { from: string; to: string }) => { const a=endpoint(g,l.from),b=endpoint(g,l.to);return a&&b?Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z):0; };
+/** Gas pipes always run from an electrolyzer output into a consumer; order of selection does not matter. */
+export function gasDirection(g: GameState, a: string, b: string): [string, string] { return machine(g,a)?.kind==='electrolyzer'&&machine(g,b)?.kind!=='electrolyzer'?[a,b]:machine(g,b)?.kind==='electrolyzer'?[b,a]:[a,b]; }
 export const insideDome = (b: Building, x: number, y: number, z: number) => b.kind === 'dome' && Math.abs(x - b.x) < 2 && Math.abs(z - b.z) < 2 && y >= b.y - .1 && y < b.y + 3;
 /** 4×4×3 air cells, panels occupy faces. Each of 80 exterior faces owns HP. */
 export function domeFaces() {
@@ -113,7 +122,7 @@ export function startJob(g: GameState, recipeId: string, id = 'hand', buffered =
  const reserved: ItemStack[] = [];
  for (const [item,n] of Object.entries(r.inputs)) if (item !== 'water'||(b?.water??0)<n*1000) { removeItems(inv,item,n); reserved.push({itemId:item,count:n}); } else b!.water-=n*1000;
  if(dedicated)b!.input.splice(0,2,...inv);
- const job: Job = {recipeId,workMs:0,reserved,water:reserved.some(s=>s.itemId==='water')?0:(r.inputs.water??0)*1000};
+ const job: Job = {recipeId,workMs:0,reserved,water:reserved.some(s=>s.itemId==='water')?0:(r.inputs.water??0)*1000,repeat:0};
  if(id==='hand')g.world.base.hand=job;else b!.job=job;
  return '';
 }
@@ -157,20 +166,21 @@ export function loadFuel(g: GameState, id: string): string {
  const b=machine(g,id);if(!b||b.kind!=='biogenerator')return 'Нужен биогенератор';
  if(countItem(b.input,'fiber')>=64)return 'Топливный вход полон';if(!removeItems(g.player.inventory,'fiber',1))return 'Нужны растительные волокна';addItems(b.input,'fiber',1);return '';
 }
-export function makeBuilding(g: GameState, kind: BuildingKind, x: number, y: number, z: number): Building {
- const b:Building={id:'build-'+g.world.base.nextId++,kind,level:1,x,y,z,input:Array(4).fill(null),output:Array(4).fill(null),job:null,queue:[],enabled:true,lowPriority:false,energy:0,fuel:0,water:0,oxygen:0,zone:{q:0,temperature:10,purity:0,lossRemainder:0,breachMs:0,shell:Array(FACES.length).fill(180)}};
+export function makeBuilding(g: GameState, kind: BuildingKind, x: number, y: number, z: number, rot = 0): Building {
+ const b:Building={id:'build-'+g.world.base.nextId++,kind,level:1,rot:((rot%4)+4)%4,x,y,z,input:Array(4).fill(null),output:Array(4).fill(null),job:null,queue:[],enabled:true,lowPriority:false,energy:0,fuel:0,water:0,oxygen:0,zone:{q:0,temperature:10,purity:0,lossRemainder:0,breachMs:0,shell:Array(FACES.length).fill(180)}};
  g.world.base.buildings.push(b);return b;
 }
 export function connect(g: GameState, kind: Link['kind'], from: string, to: string): string {
  const a=endpoint(g,from),b=endpoint(g,to);
  if(!a||!b||from===to)return 'Выберите два разных порта';
  if(g.world.base.links.length>=128)return 'Достигнут предел соединений';
- if(Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z)>4.001)return 'Сегмент длиннее 4 м';
+ const d=Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);if(d>LINK_RANGE+.001)return 'Слишком далеко: до '+LINK_RANGE+' м';
  if(g.world.base.links.some(l=>l.kind===kind&&((l.from===from&&l.to===to)||(kind==='cable'&&l.to===from&&l.from===to))))return 'Соединение уже есть';
  const source=machine(g,from),target=machine(g,to);
  if(kind==='cable' && (!source||!target||!electricPort(source)||!electricPort(target)))return 'У этих корпусов нет электрического порта';
  if(kind==='gas_pipe' && (!source||source.kind!=='electrolyzer'||(to!=='capsule'&&(!target||!['refill','distributor'].includes(target.kind)))))return 'O₂: выход электролиза → вход капсулы, заправки или распределителя';
- if(!removeItems(g.player.inventory,kind,1))return 'Нужен '+ITEMS[kind].name;
+ const cost=linkSegments(d);if(countItem(g.player.inventory,kind)<cost)return 'Нужно '+cost+' × '+ITEMS[kind].name;
+ removeItems(g.player.inventory,kind,cost);
  g.world.base.links.push({id:'link-'+g.world.base.nextId++,kind,from,to});return '';
 }
 export function poweredComponent(g: GameState, id: string) {
@@ -185,9 +195,19 @@ export function beginPassage(g: GameState, id: string): string {
  return ''; 
 }
 export type ProductionTick = { changed: boolean; passage: {x:number;y:number;z:number} | null };
+/**
+ * Read-only view of the last simulated tick for visuals and station screens: accepted energy per
+ * building and gas moved per link/room (milli-units in `ms`). Never read by the simulation itself.
+ */
+export const telemetry = { ms: 50, power: new Map<string, number>(), supply: new Map<string, number>(), gas: new Map<string, number>(), room: new Map<string, number>() };
+export const powerRate = (id: string) => (telemetry.power.get(id) ?? 0) / telemetry.ms;
+export const supplyRate = (id: string) => (telemetry.supply.get(id) ?? 0) / telemetry.ms;
+export const gasRate = (id: string) => (telemetry.gas.get(id) ?? 0) / telemetry.ms;
+export const roomRate = (id: string) => (telemetry.room.get(id) ?? 0) / telemetry.ms;
 /** Finite sources, explicit paid links, one shared budget per component. No wall-clock catch-up. */
 export function productionTick(g: GameState, ms: number, refillId: string | null = null, outside = 10): ProductionTick {
  const base=g.world.base;let changed=false;
+ telemetry.ms=Math.max(1,ms);telemetry.power.clear();telemetry.supply.clear();telemetry.gas.clear();telemetry.room.clear();
 
  const bottleNeed=(b:Building)=>b.kind==='electrolyzer'&&b.enabled&&b.input[1]&&TANKS[b.input[1].itemId]?Math.min(b.oxygen,20*ms,TANKS[b.input[1].itemId].capacity-(b.input[1].milliGU??0))/10:0;
  for(const b of base.buildings)if(hasQueue(b)&&b.enabled&&!b.job&&b.queue.length&&!startJob(g,b.queue[0],b.id,true)){b.queue.shift();changed=true;}const power=new Map<string,number>();
@@ -209,22 +229,23 @@ export function productionTick(g: GameState, ms: number, refillId: string | null
   const requests=group.map(b=>{let need=0;if(b.enabled){if(b.job && b.job.workMs < RECIPE_BY_ID.get(b.job.recipeId)!.seconds*1000)need=Math.ceil(energyRate(b,RECIPE_BY_ID.get(b.job.recipeId)!)*Math.min(ms,RECIPE_BY_ID.get(b.job.recipeId)!.seconds*1000-b.job.workMs));if(b.kind==='distributor'&&base.buildings.some(d=>insideDome(d,b.x,b.y,b.z)))need=Math.round((10+Math.min(8,Math.abs(outside-20)/20))*ms);if(b.id===refillId&&b.kind==='refill'&&b.oxygen>0&&g.player.bottles.some(t=>t&&(t.milliGU??0)<TANKS[t.itemId].capacity))need=Math.ceil(Math.min(b.oxygen,20*ms,g.player.bottles.reduce((n,t)=>n+(t?TANKS[t.itemId].capacity-(t.milliGU??0):0),0))/10);}need+=(tankDemand.get(b.id)??0);return {b,need,priority:b.kind==='electrolyzer'&&b.lowPriority?2:0};}).filter(r=>r.need>0);
   const supply=group.filter(b=>b.kind==='biogenerator'&&b.enabled),available=Math.min(120*ms,supply.reduce((n,b)=>n+Math.min(b.energy,40*ms),0));let remaining=available;
   for(const priority of [0,1,2]){const rs=requests.filter(r=>r.priority===priority),total=rs.reduce((n,r)=>n+r.need,0),accepted=Math.min(remaining,total);let allocated=0;rs.forEach((r,i)=>{const n=i===rs.length-1?accepted-allocated:Math.floor(accepted*r.need/total);power.set(r.b.id,n);allocated+=n;});remaining-=accepted;}
-  let left=available-remaining;for(const b of supply){const n=Math.min(left,b.energy,40*ms);b.energy-=n;left-=n;}
+  let left=available-remaining;for(const b of supply){const n=Math.min(left,b.energy,40*ms);b.energy-=n;left-=n;if(n>0)telemetry.supply.set(b.id,n);}
 
  }
+ for(const [id,n] of power)if(n>0)telemetry.power.set(id,n);
  if([...power.values()].some(n=>n>0))changed=recordQuestFact(g,'system:power')||changed;
  const finish=(job:Job,slots:Slot[],b?:Building)=>{const r=RECIPE_BY_ID.get(job.recipeId)!;if(job.workMs<r.seconds*1000)return false;if(r.id==='legacy_melt'){if(b!.water>19000)return false;b!.water+=1000;}else if(r.id==='electrolysis'){if(b!.oxygen>240000)return false;b!.oxygen+=240000;}else if(b?.kind==='kiln'){const output=[b.output[0]];if(!insert(output,outputSlots(r)))return false;b.output[0]=output[0];}else if(!insert(slots,outputSlots(r)))return false;recordQuestFact(g,'craft:'+(r.id==='legacy_melt'?'melt_in_generator':r.id));for(const id of Object.keys(r.outputs))if(Object.hasOwn(ITEMS,id))recordQuestFact(g,'item:'+id);if(b?.kind==='workbench'&&b.level===2&&!nearby(g,b))recordQuestFact(g,'system:auto');changed=true;return true;};
- if(base.hand){base.hand.workMs=Math.min(base.hand.workMs+ms,RECIPE_BY_ID.get(base.hand.recipeId)!.seconds*1000);if(finish(base.hand,g.player.inventory))base.hand=null;}
+ if(base.hand){base.hand.workMs=Math.min(base.hand.workMs+ms,RECIPE_BY_ID.get(base.hand.recipeId)!.seconds*1000);if(finish(base.hand,g.player.inventory)){const {repeat,recipeId}=base.hand;base.hand=null;if(repeat>0&&!startJob(g,recipeId,'hand'))base.hand!.repeat=repeat-1;}}
  const manual=base.hand?undefined:manualWork(g);
  let automaticWork=false;
- for(const b of base.buildings)if(b.job&&b.enabled){const r=RECIPE_BY_ID.get(b.job.recipeId)!,rate=energyRate(b,r);if(b.kind==='workbench'&&b.level===1&&b!==manual)continue;const before=b.job.workMs;b.job.workMs=Math.min(r.seconds*1000,b.job.workMs+(rate?Math.max(0,(power.get(b.id)??0)-(tankDemand.get(b.id)??0))/rate:ms));if(b.kind==='workbench'&&b.level===2&&b.job.workMs>before)automaticWork=true;if(finish(b.job,b.output,b))b.job=null;}
+ for(const b of base.buildings)if(b.job&&b.enabled){const r=RECIPE_BY_ID.get(b.job.recipeId)!,rate=energyRate(b,r);if(b.kind==='workbench'&&b.level===1&&b!==manual)continue;const before=b.job.workMs;b.job.workMs=Math.min(r.seconds*1000,b.job.workMs+(rate?Math.max(0,(power.get(b.id)??0)-(tankDemand.get(b.id)??0))/rate:ms));if(b.kind==='workbench'&&b.level===2&&b.job.workMs>before)automaticWork=true;if(finish(b.job,b.output,b)){const {repeat,recipeId}=b.job;b.job=null;if(repeat>0&&b.kind==='workbench'){if(nearby(g,b))loadRecipeInputs(g,recipeId,b.id);if(!startJob(g,recipeId,b.id,true))b.job!.repeat=repeat-1;}}}
  for(const b of base.buildings){const t=b.input[1],need=(tankDemand.get(b.id)??0);if(need>0&&t){const n=Math.min(need*10,(power.get(b.id)??0)*10,b.oxygen,TANKS[t.itemId].capacity-(t.milliGU??0));b.oxygen-=n;t.milliGU=(t.milliGU??0)+n;if(n>0){changed=recordQuestFact(g,'system:refill')||changed;}}}
- for(const l of base.links)if(l.kind==='gas_pipe'){const a=machine(g,l.from)!,b=machine(g,l.to),cap=b?480000:2400000,stored=b?b.oxygen:g.world.capsuleMilliGU;const mounted=a.input[1],reserved=mounted&&TANKS[mounted.itemId]?TANKS[mounted.itemId].capacity-(mounted.milliGU??0):0;const n=Math.min(Math.max(0,a.oxygen-reserved),cap-stored,40*ms);a.oxygen-=n;if(b)b.oxygen+=n;else g.world.capsuleMilliGU+=n;}
+ for(const l of base.links)if(l.kind==='gas_pipe'){const a=machine(g,l.from)!,b=machine(g,l.to),cap=b?480000:2400000,stored=b?b.oxygen:g.world.capsuleMilliGU;const mounted=a.input[1],reserved=mounted&&TANKS[mounted.itemId]?TANKS[mounted.itemId].capacity-(mounted.milliGU??0):0;const n=Math.min(Math.max(0,a.oxygen-reserved),cap-stored,40*ms);a.oxygen-=n;if(b)b.oxygen+=n;else g.world.capsuleMilliGU+=n;if(n>0)telemetry.gas.set(l.id,n);}
  for(const b of base.buildings)if(b.kind==='dome'){
   const sealed=sealCheck(b.zone.shell).sealed,occupied=insideDome(b,g.player.x,g.player.y,g.player.z);
   const installed=base.buildings.filter(d=>d.kind==='distributor'&&insideDome(b,d.x,d.y,d.z)),distributors=installed.filter(d=>d.enabled);
   b.zone.breachMs=sealed?0:Math.min(1000,b.zone.breachMs+ms);
-  let powered=0;for(const d of distributors){const ratio=(power.get(d.id)??0)/Math.round((10+Math.min(8,Math.abs(outside-20)/20))*ms);powered+=ratio;if(sealed||b.zone.breachMs<1000){const n=Math.min(d.oxygen,DOME_CAPACITY-b.zone.q,Math.round(20*ms*ratio));d.oxygen-=n;b.zone.q+=n;}}
+  let powered=0;for(const d of distributors){const ratio=(power.get(d.id)??0)/Math.round((10+Math.min(8,Math.abs(outside-20)/20))*ms);powered+=ratio;if(sealed||b.zone.breachMs<1000){const n=Math.min(d.oxygen,DOME_CAPACITY-b.zone.q,Math.round(20*ms*ratio));d.oxygen-=n;b.zone.q+=n;if(n>0){telemetry.room.set(b.id,(telemetry.room.get(b.id)??0)+n);telemetry.gas.set(d.id,(telemetry.gas.get(d.id)??0)+n);}}}
   if(sealed){if(installed.length){b.zone.lossRemainder+=Math.round(.096*ms*1000);const loss=Math.floor(b.zone.lossRemainder/1000);b.zone.lossRemainder%=1000;b.zone.q=Math.max(0,b.zone.q-loss);}if(powered>0){b.zone.purity=Math.min(1,b.zone.purity+ms/30000*powered);const step=.0005*ms*powered;b.zone.temperature+=Math.sign(20-b.zone.temperature)*Math.min(step,Math.abs(20-b.zone.temperature));}else{if(occupied)b.zone.purity=Math.max(0,b.zone.purity-ms/360000);b.zone.temperature=outside+(b.zone.temperature-outside)*Math.exp(-ms/300000);}}
   else {b.zone.q=Math.floor(b.zone.q*Math.exp(-ms/30000));b.zone.purity*=Math.exp(-ms/15000);b.zone.temperature=outside+(b.zone.temperature-outside)*Math.exp(-ms/60000);}
  }
