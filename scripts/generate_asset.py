@@ -34,6 +34,7 @@ import io
 import json
 import mimetypes
 import os
+import socket
 import ssl
 import sys
 import time
@@ -88,10 +89,18 @@ def _redact(text: str) -> str:
     return text.replace(key, "***") if key else text
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Never follow redirects: the Authorization header must not reach another origin."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 def _post(path: str, body: bytes, content_type: str, timeout: float) -> dict:
     req = urllib.request.Request(f"{API_BASE}{path}", data=body, headers=_headers(content_type), method="POST")
     try:
-        with urllib.request.urlopen(req, timeout=timeout, context=_ssl_context()) as r:
+        opener = urllib.request.build_opener(_NoRedirect, urllib.request.HTTPSHandler(context=_ssl_context()))
+        with opener.open(req, timeout=timeout) as r:
             return json.loads(r.read())
     except urllib.error.HTTPError as e:
         raw = e.read().decode("utf-8", "replace")
@@ -217,7 +226,9 @@ def run(args: argparse.Namespace) -> int:
 
     # TOOKEN documents only model/prompt (+ n=1, size=auto, output_format=png for edits); extra
     # OpenAI parameters are sent only when explicitly requested.
-    fields: dict[str, object] = {"model": args.model, "prompt": prompt, "output_format": "png"}
+    fields: dict[str, object] = {"model": args.model, "prompt": prompt}
+    if args.cmd == "edit":
+        fields["output_format"] = "png"
     if args.n != 1:
         fields["n"] = args.n
     size = args.size or ("auto" if args.cmd == "edit" else None)
@@ -281,6 +292,9 @@ def run(args: argparse.Namespace) -> int:
             print(f"[api] error {e}", file=sys.stderr)
             return 2
         except (urllib.error.URLError, TimeoutError) as e:
+            reason = getattr(e, "reason", e)
+            if isinstance(reason, (ConnectionRefusedError, socket.gaierror)):
+                _budget_refund(task, args.n)  # never reached TOOKEN, cannot be billed
             _log({"time": dt.datetime.now().isoformat(timespec="seconds"), "task": task, "ok": False,
                   "error": str(e), "out": _rel(out)})
             print(f"[net] {e}", file=sys.stderr)
@@ -311,14 +325,15 @@ def run(args: argparse.Namespace) -> int:
                 rep = sprite_tools.remove_background(raw_path, path, key=None if args.auto_key else key_color,
                                                      tolerance=args.tolerance)
                 info["backgroundRemoval"] = rep
-                if not args.keep_raw and rep["ok"]:
-                    raw_path.unlink()
-                elif not rep["ok"]:
-                    print(f"[check] background removal failed; raw kept at {raw_path}", file=sys.stderr)
         report = sprite_tools.validate(path, require_alpha=args.transparent, expect_size=None)
         if info["backgroundRemoval"] and not info["backgroundRemoval"]["ok"]:
             report["problems"].append("background removal reported ok=false")
             report["ok"] = False
+        if raw_path != path and raw_path.exists():  # delete the paid original only after the final check
+            if report["ok"] and not args.keep_raw:
+                raw_path.unlink()
+            elif not report["ok"]:
+                print(f"[check] raw kept for reprocessing at {raw_path}", file=sys.stderr)
         if not report["ok"]:
             print(f"[check] {path}: {report['problems']}", file=sys.stderr)
         entry = {

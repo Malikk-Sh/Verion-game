@@ -15,13 +15,15 @@ await server.listen();
 const errors = [];
 let browser;
 try {
- browser = await chromium.launch({ headless: true, executablePath: process.env.VIREON_CHROMIUM_PATH, args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-angle=swiftshader'] });
+ browser = await chromium.launch({ headless: true, executablePath: process.env.VIREON_CHROMIUM_PATH, args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader'] });
  const page = await browser.newPage({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 1 });
  page.on('pageerror', e => errors.push(e.message));
  page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
  await page.addInitScript(() => localStorage.setItem('vireon.settings', JSON.stringify({ quality: 'low', sound: false })));
  await page.goto('http://127.0.0.1:5179');
  await page.waitForFunction(() => document.body.dataset.ready === 'true', null, { timeout: 60000 });
+ const webgl = await page.evaluate(() => { const gl = document.createElement('canvas').getContext('webgl2'), ext = gl.getExtension('WEBGL_debug_renderer_info'); return { version: gl.getParameter(gl.VERSION), renderer: ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER) }; });
+ assert.match(webgl.renderer, /SwiftShader/i, 'preview uses the pinned software renderer');
  const urls = files.map(f => `/@fs${resolve(f)}`);
  const result = await page.evaluate(async urls => {
   const { itemArt } = await import('/src/ui/art.ts');
@@ -51,7 +53,7 @@ try {
  // Rows can exceed the viewport with several files: let the overlay grow and capture it whole.
  await page.evaluate(() => { const w = document.getElementById('asset-preview'); w.style.position = 'absolute'; w.style.bottom = 'auto'; w.style.minHeight = '100vh'; w.style.padding = '16px 0'; });
  await page.locator('#asset-preview').screenshot({ path: 'artifacts/asset-preview.png' });
- await writeFile('artifacts/asset-preview.json', JSON.stringify({ files, result, errors }, null, 2));
+ await writeFile('artifacts/asset-preview.json', JSON.stringify({ files, webgl, result, errors }, null, 2));
  console.log(JSON.stringify(result, null, 1), '\nPASS: decoded and rendered in game UI → artifacts/asset-preview.png');
 } finally {
  await browser?.close();

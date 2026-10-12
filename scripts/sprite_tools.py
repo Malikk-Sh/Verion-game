@@ -143,6 +143,8 @@ def build_atlas(out: Path | str, frames: list[Path], cols: int | None = None, ce
     """Pack frames into a fixed grid with bottom-centre alignment (stable feet across a walk cycle)."""
     if Path(out).suffix.lower() != ".png":
         raise ValueError(f"atlas output must be .png (metadata goes to the .json sidecar), got {out}")
+    if cell and (cell[0] <= 0 or cell[1] <= 0):
+        raise ValueError(f"--cell must be positive, got {cell[0]}x{cell[1]}")
     ims = [_rgba(p) for p in frames]
     cw = cell[0] if cell else max(i.width for i in ims)
     ch = cell[1] if cell else max(i.height for i in ims)
