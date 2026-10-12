@@ -215,6 +215,9 @@ def run(args: argparse.Namespace) -> int:
         probe.unlink()
     except OSError as e:
         sys.exit(f"cannot write to {out.parent}: {e}")
+    for t in targets + raws:  # existing targets (only with --overwrite) must be writable regular files
+        if t.exists() and (not t.is_file() or not os.access(t, os.W_OK)):
+            sys.exit(f"cannot overwrite {t}: not a writable regular file")
     ref_bytes = {str(p): p.read_bytes() for p in refs}  # sent and hashed from the same bytes
     ref_info = {k: {"path": _rel(Path(k)), "sha256": hashlib.sha256(v).hexdigest()} for k, v in ref_bytes.items()}
     prompt = args.prompt if args.prompt else Path(args.prompt_file).read_text(encoding="utf-8")
@@ -293,8 +296,8 @@ def run(args: argparse.Namespace) -> int:
             return 2
         except (urllib.error.URLError, TimeoutError) as e:
             reason = getattr(e, "reason", e)
-            if isinstance(reason, (ConnectionRefusedError, socket.gaierror)):
-                _budget_refund(task, args.n)  # never reached TOOKEN, cannot be billed
+            if isinstance(reason, (ConnectionRefusedError, socket.gaierror, ssl.SSLError)):
+                _budget_refund(task, args.n)  # refused/DNS/TLS handshake: no HTTP request was sent
             _log({"time": dt.datetime.now().isoformat(timespec="seconds"), "task": task, "ok": False,
                   "error": str(e), "out": _rel(out)})
             print(f"[net] {e}", file=sys.stderr)
