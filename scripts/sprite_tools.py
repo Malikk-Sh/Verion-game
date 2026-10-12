@@ -141,6 +141,8 @@ def to_webp(src: Path | str, dst: Path | str, quality: int = 90) -> int:
 def build_atlas(out: Path | str, frames: list[Path], cols: int | None = None, cell: tuple[int, int] | None = None,
                 anims: list[str] | None = None, pixel: bool = False, pad: int = 2) -> dict:
     """Pack frames into a fixed grid with bottom-centre alignment (stable feet across a walk cycle)."""
+    if Path(out).suffix.lower() != ".png":
+        raise ValueError(f"atlas output must be .png (metadata goes to the .json sidecar), got {out}")
     ims = [_rgba(p) for p in frames]
     cw = cell[0] if cell else max(i.width for i in ims)
     ch = cell[1] if cell else max(i.height for i in ims)
@@ -175,6 +177,8 @@ def build_atlas(out: Path | str, frames: list[Path], cols: int | None = None, ce
 
 def split_sheet(sheet: Path | str, outdir: Path | str, cols: int, rows: int) -> list[Path]:
     im = _rgba(sheet)
+    if cols <= 0 or rows <= 0:
+        raise ValueError(f"--cols and --rows must be positive, got {cols}x{rows}")
     if im.width % cols or im.height % rows:
         raise ValueError(f"{im.width}x{im.height} sheet is not divisible into {cols}x{rows} equal frames")
     cw, ch = im.width // cols, im.height // rows

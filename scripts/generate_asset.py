@@ -269,9 +269,13 @@ def run(args: argparse.Namespace) -> int:
                 print(f"[api] {e}{conc}; retry {attempt + 1}/{args.retries} in {wait:.0f}s", file=sys.stderr)
                 time.sleep(wait)
                 attempt += 1
+                free = e.status in (400, 401, 403, 404, 422, 429) or bool(e.billing and "не списаны" in e.billing)
+                if not free:  # the failed attempt may have been billed: reserve budget for the retry
+                    used = _budget_take(task, args.n, limit)
+                    print(f"[budget] task '{task}': retry reserves {used}/{limit}", file=sys.stderr)
                 continue
             if e.status in (400, 401, 403, 404, 422, 429) or (e.billing and "не списаны" in e.billing):
-                _budget_refund(task, args.n)  # Rejected / rate-limited requests are not billed.
+                _budget_refund(task, args.n)  # Only the last attempt's reservation; it was not billed.
             _log({"time": dt.datetime.now().isoformat(timespec="seconds"), "task": task, "ok": False,
                   "status": e.status, "error": e.message, "billing": e.billing, "out": _rel(out)})
             print(f"[api] error {e}", file=sys.stderr)
