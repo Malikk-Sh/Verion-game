@@ -23,3 +23,12 @@
 @keyframes sweep{0%,60%{transform:translateX(-120%)}85%,100%{transform:translateX(120%)}}
 .cr-row:active,.journal-step:active,.st-btn:active,.st-bag-cell:active{transform:scale(.97)}
 @media(prefers-reduced-motion:reduce){.feed-entry,.feed-entry.bump b,.feed-entry.out,#hotbar .cell.bump,.journal-step,.cr-row,.st-status,.st-process,.st-meter,.st-links,.cr-card-head,.cr-req,.cr-ing,.cr-create::after,.st-btn.accent::after{animation:none!important}}
+/* ---------- S3 inventory: uses of the selected item ---------- */
+.d-uses{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin:2px 0 4px}
+.d-uses-label{font-size:11px;color:var(--cyan);margin-right:2px}
+.d-use{width:36px;height:36px;min-width:34px;min-height:34px;padding:3px;border:0;background:rgba(6,28,33,.7);box-shadow:inset 0 0 0 1px var(--glow-soft);clip-path:polygon(5px 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%,0 5px)}
+.d-use .art,.d-use img{width:100%;height:100%;object-fit:contain}.d-use:hover{box-shadow:inset 0 0 0 1px var(--aqua)}
+@media(max-height:500px){.d-uses{gap:3px;margin:0 0 2px}.d-use{width:34px;height:34px}.d-uses-label{display:none}}
+#hud~.veil .inv-detail,.inv-detail{overflow-y:auto;scrollbar-width:thin;touch-action:pan-y}
+.inv-detail .d-actions{margin-top:4px}
+.inv-detail .d-actions.two .ui-btn{padding:0 8px;gap:6px;font-size:12.5px}.inv-detail .d-actions.two .ui-btn span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
