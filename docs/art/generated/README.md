@@ -29,6 +29,7 @@ VIREON_CHROMIUM_PATH=/opt/pw-browsers/chromium node tools/preview_asset.mjs src/
 - Ключ в облачной среде подставляет прокси; вне её — `TOOKEN_API_KEY`.
 - `/v1/models`: `gpt-image-2.5-sunburst` поддерживает `images/generations` и `images/edits`.
 - Лимит ключа — 2 одновременных запроса. При занятых слотах API отвечает 429 с `Retry-After: 1` и `billing: "Токены не списаны"`; скрипт ждёт 20, 40, 60 с… Генерации выполнять последовательно.
+- Документированы только `model`/`prompt` для генерации и `image`/`image[]` (до 16), `mask`, `n=1`, `size=auto`, `output_format=png` для edits ([правила API](https://tooken.club/api-rules)). `size`, `quality`, `background` скрипт отправляет только по явному флагу; прозрачность — по умолчанию через хромакей.
 - Встречается 502 `upstream request failed`; скрипт повторяет запрос.
 
 ## Тестовая генерация

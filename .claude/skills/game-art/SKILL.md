@@ -28,9 +28,12 @@ Known API behaviour (tested 12.10.2026):
   Rate-limited and rejected requests report `billing: "Токены не списаны"` and are refunded to the
   local budget counter. Run generations one at a time, never in parallel.
 - Upstream 502 ("upstream request failed") happens; the script retries.
-- `background: "transparent"` is sent for `--transparent`; see the result section in
-  `docs/art/generated/README.md` for whether the API honoured it. The script always verifies alpha
-  and falls back to chroma-key removal (flat #FF00FF backdrop requested in the prompt).
+- Documented parameters: generations — `model`, `prompt`; edits — multipart `image`/`image[]`
+  (≤16), optional `mask`, `n=1`, `size=auto`, `output_format=png`. The script omits `size`,
+  `quality`, `background` unless passed (`--size`, `--quality`, `--api-background`).
+- Transparency is not documented: `--transparent` uses a flat #FF00FF backdrop in the prompt plus
+  chroma-key removal; `--api-background` additionally tries `background=transparent`. The script
+  always verifies alpha.
 
 ## Workflow
 
@@ -51,7 +54,7 @@ Known API behaviour (tested 12.10.2026):
      --prompt "..." --out docs/art/generated/<name>.png
    # preview the request for free: add --dry-run
    ```
-   Use `--size 1536x1024`/`1024x1536` for backgrounds, `--quality medium` for drafts. Raw PNG
+   Try `--size 1536x1024`/`1024x1536` for backgrounds (undocumented; drop it if rejected). Raw PNG
    sources live under `docs/art/generated/` (or the project's art-source folder); every result is
    appended to `docs/art/generated/MANIFEST.json` with prompt, model, sizes and SHA-256.
 5. **Look at the result** (Read the PNG) and judge it: silhouette readable at the in-game size,
@@ -69,7 +72,7 @@ Known API behaviour (tested 12.10.2026):
 
 ## Transparency and background removal
 
-`--transparent` requests API transparency and also asks for a flat magenta fallback backdrop.
+`--transparent` asks for a flat magenta backdrop (and with `--api-background` also for API alpha).
 If the returned image has no alpha, `remove_background` flood-fills from the borders through
 key-coloured pixels, removes clearly key-coloured enclosed holes, ramps alpha across the soft edge
 and un-mixes the key colour (despill). It reports `subject_ratio`/`border_opaque_ratio`; `ok:false`

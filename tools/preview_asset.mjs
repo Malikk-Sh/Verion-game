@@ -25,13 +25,13 @@ try {
  const urls = files.map(f => `/@fs${resolve(f)}`);
  const result = await page.evaluate(async urls => {
   const { itemArt } = await import('/src/ui/art.ts');
-  const wrap = document.createElement('div');
+  const wrap = document.createElement('div'); wrap.id = 'asset-preview';
   wrap.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;gap:10px;justify-content:center;align-items:center;background:rgba(6,14,16,.72)';
   document.body.append(wrap);
   const out = [];
   for (const url of urls) {
    const row = document.createElement('div');
-   row.style.cssText = 'display:flex;gap:14px;align-items:end';
+   row.style.cssText = 'display:flex;flex-shrink:0;gap:14px;align-items:end';
    for (const px of [32, 48, 96, 200]) {
     const slot = document.createElement('div');
     slot.style.cssText = `width:${px}px;height:${px}px;border:1px solid rgba(110,230,220,.45);border-radius:6px;background:rgba(18,30,34,.6);display:grid`;
@@ -48,7 +48,9 @@ try {
  }, urls);
  for (const r of result) { assert.ok(r.natural[0] > 0, `${r.url} did not decode`); assert.ok(r.contained, `${r.url} overflows its slot`); }
  assert.deepEqual(errors, [], 'Console errors');
- await page.screenshot({ path: 'artifacts/asset-preview.png' });
+ // Rows can exceed the viewport with several files: let the overlay grow and capture it whole.
+ await page.evaluate(() => { const w = document.getElementById('asset-preview'); w.style.position = 'absolute'; w.style.bottom = 'auto'; w.style.minHeight = '100vh'; w.style.padding = '16px 0'; });
+ await page.locator('#asset-preview').screenshot({ path: 'artifacts/asset-preview.png' });
  await writeFile('artifacts/asset-preview.json', JSON.stringify({ files, result, errors }, null, 2));
  console.log(JSON.stringify(result, null, 1), '\nPASS: decoded and rendered in game UI → artifacts/asset-preview.png');
 } finally {

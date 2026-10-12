@@ -161,6 +161,8 @@ def build_atlas(out: Path | str, frames: list[Path], cols: int | None = None, ce
     for spec in anims or []:  # name:first-last:ms
         name, rng, ms = spec.split(":")
         a, b = (int(v) for v in rng.split("-"))
+        if not 0 <= a <= b < len(frames):
+            raise ValueError(f"animation {name}: range {a}-{b} outside frames 0-{len(frames) - 1}")
         meta["animations"][name] = {"frames": list(range(a, b + 1)), "frameMs": int(ms), "loop": True}
     sheet.save(out, "PNG", optimize=True)
     Path(out).with_suffix(".json").write_text(json.dumps(meta, indent=2) + "\n")
@@ -169,6 +171,8 @@ def build_atlas(out: Path | str, frames: list[Path], cols: int | None = None, ce
 
 def split_sheet(sheet: Path | str, outdir: Path | str, cols: int, rows: int) -> list[Path]:
     im = _rgba(sheet)
+    if im.width % cols or im.height % rows:
+        raise ValueError(f"{im.width}x{im.height} sheet is not divisible into {cols}x{rows} equal frames")
     cw, ch = im.width // cols, im.height // rows
     Path(outdir).mkdir(parents=True, exist_ok=True)
     out = []

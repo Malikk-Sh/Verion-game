@@ -170,15 +170,27 @@ def run(args: argparse.Namespace) -> int:
     out = Path(args.out)
     if out.suffix.lower() != ".png":
         sys.exit("--out must be a .png path (convert to WebP afterwards with sprite_tools.py webp)")
-    if out.exists() and not args.overwrite:
-        sys.exit(f"{out} exists; reuse it or pass --overwrite (avoid regenerating approved assets)")
+    targets = [out if i == 0 else out.with_name(f"{out.stem}_{i + 1}{out.suffix}") for i in range(args.n)]
+    clash = [str(t) for t in targets if t.exists()]
+    if clash and not args.overwrite:
+        sys.exit(f"{', '.join(clash)} exist; reuse them or pass --overwrite (avoid regenerating approved assets)")
+    refs = [Path(p) for p in (getattr(args, "image", None) or [])] + ([Path(args.mask)] if getattr(args, "mask", None) else [])
+    missing = [str(p) for p in refs if not p.is_file()]
+    if missing:
+        sys.exit(f"reference image(s) not found: {', '.join(missing)}")
     prompt = args.prompt if args.prompt else Path(args.prompt_file).read_text(encoding="utf-8")
     key_color = sprite_tools.parse_color(args.key_color)
     if args.transparent and not args.no_chroma_hint:
         prompt += CHROMA_HINT.format(name=args.key_color_name, hex=args.key_color)
 
-    fields: dict[str, object] = {"model": args.model, "prompt": prompt, "n": args.n, "size": args.size,
-                                 "output_format": "png"}
+    # TOOKEN documents only model/prompt (+ n=1, size=auto, output_format=png for edits); extra
+    # OpenAI parameters are sent only when explicitly requested.
+    fields: dict[str, object] = {"model": args.model, "prompt": prompt, "output_format": "png"}
+    if args.n != 1:
+        fields["n"] = args.n
+    size = args.size or ("auto" if args.cmd == "edit" else None)
+    if size:
+        fields["size"] = size
     if args.quality:
         fields["quality"] = args.quality
     if args.transparent and args.api_background:
@@ -186,7 +198,7 @@ def run(args: argparse.Namespace) -> int:
 
     if args.dry_run:
         shown = dict(fields)
-        print(json.dumps({"endpoint": f"{API_BASE}/images/{args.cmd if args.cmd == 'edit' else 'generations'}",
+        print(json.dumps({"endpoint": f"{API_BASE}/images/{'edits' if args.cmd == 'edit' else 'generations'}",
                           "images": getattr(args, "image", None) or [], **shown}, indent=2, ensure_ascii=False))
         return 0
 
@@ -197,7 +209,8 @@ def run(args: argparse.Namespace) -> int:
 
     t0 = time.time()
     dropped_background = False
-    for attempt in range(args.retries + 1):
+    attempt = 0
+    while True:
         try:
             if args.cmd == "edit":
                 files = [("image[]" if len(args.image) > 1 else "image", Path(p)) for p in args.image]
@@ -214,7 +227,7 @@ def run(args: argparse.Namespace) -> int:
                 print(f"[api] background=transparent rejected ({e.message}); retrying with chroma key", file=sys.stderr)
                 fields.pop("background")
                 dropped_background = True
-                continue
+                continue  # parameter change, not a transient retry
             transient = e.retryable is True or e.status in (429, 500, 502, 503, 504)
             if transient and e.retryable is not False and attempt < args.retries:
                 # TOOKEN allows 2 concurrent requests per key and answers Retry-After: 1 even while both
@@ -223,6 +236,7 @@ def run(args: argparse.Namespace) -> int:
                 conc = f" (concurrent {e.concurrency})" if e.concurrency else ""
                 print(f"[api] {e}{conc}; retry {attempt + 1}/{args.retries} in {wait:.0f}s", file=sys.stderr)
                 time.sleep(wait)
+                attempt += 1
                 continue
             if e.status in (400, 401, 403, 404, 422, 429) or (e.billing and "не списаны" in e.billing):
                 _budget_refund(task, args.n)  # Rejected / rate-limited requests are not billed.
@@ -244,7 +258,7 @@ def run(args: argparse.Namespace) -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     saved = []
     for i, it in enumerate(items):
-        path = out if i == 0 else out.with_name(f"{out.stem}_{i + 1}{out.suffix}")
+        path = targets[i] if i < len(targets) else out.with_name(f"{out.stem}_{i + 1}{out.suffix}")
         raw = base64.b64decode(it["b64_json"])
         if raw[:8] != b"\x89PNG\r\n\x1a\n":
             print(f"[warn] item {i} is not PNG-signed; re-encoding to PNG", file=sys.stderr)
@@ -269,7 +283,7 @@ def run(args: argparse.Namespace) -> int:
         entry = {
             "path": _rel(path), "date": dt.date.today().isoformat(), "model": args.model,
             "endpoint": "images/edits" if args.cmd == "edit" else "images/generations",
-            "size": args.size, "quality": args.quality, "prompt": prompt,
+            "size": fields.get("size"), "quality": args.quality, "prompt": prompt,
             "references": [_rel(Path(p)) for p in (getattr(args, "image", None) or [])],
             "width": report["width"], "height": report["height"], "bytes": path.stat().st_size,
             "sha256": hashlib.sha256(path.read_bytes()).hexdigest(), **info,
@@ -296,12 +310,13 @@ def main() -> int:
         g.add_argument("--prompt-file")
         p.add_argument("--out", required=True, help="target .png")
         p.add_argument("--model", default=DEFAULT_MODEL)
-        p.add_argument("--size", default="1024x1024", help="1024x1024, 1536x1024, 1024x1536 or auto")
-        p.add_argument("--quality", default="high", help="low|medium|high|auto ('' to omit)")
+        p.add_argument("--size", help="omit by default (edit sends auto, the only documented value); "
+                       "e.g. 1024x1024, 1536x1024 for generate")
+        p.add_argument("--quality", help="low|medium|high (not documented by TOOKEN; omitted by default)")
         p.add_argument("--n", type=int, default=1)
         p.add_argument("--transparent", action="store_true", help="sprite cut-out: request alpha, chroma-key fallback")
-        p.add_argument("--no-api-background", dest="api_background", action="store_false",
-                       help="do not send background=transparent (use chroma key only)")
+        p.add_argument("--api-background", action="store_true",
+                       help="also send background=transparent (undocumented by TOOKEN; chroma key is the default)")
         p.add_argument("--no-chroma-hint", action="store_true", help="do not append the flat-backdrop sentence")
         p.add_argument("--key-color", default="#FF00FF")
         p.add_argument("--key-color-name", default="magenta")
@@ -322,6 +337,8 @@ def main() -> int:
     args = ap.parse_args()
     if args.n < 1:
         ap.error("--n must be >= 1")
+    if args.cmd == "edit" and (args.n != 1 or (args.size or "auto") != "auto"):
+        ap.error("TOOKEN edits support only n=1 and size=auto")
     if args.n > 1:
         print("[budget] n>1 bills several images in one request; each image counts against the budget",
               file=sys.stderr)
