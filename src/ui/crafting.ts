@@ -131,6 +131,7 @@ export function createCraftingView() {
   function fill() {
    list.replaceChildren();
    if (b?.kind === 'workbench' && b.level === 1) { const up = button('', () => { upgrade = true; redraw(); }, 'cr-row cr-row-upgrade'); up.append(itemArt('workbench_2'), (() => { const t = h('span', '', 'cr-row-text'); t.append(h('b', 'Улучшить до Верстака II'), h('small', 'Очередь и автосборка')); return t; })(), h('span', '›', 'cr-badge')); list.append(up); }
+   let index = 0;
    for (const r of VISIBLE) {
     const out = Object.keys(r.outputs)[0];
     if (query && !name(out).toLowerCase().includes(query.toLowerCase())) continue;
@@ -138,7 +139,7 @@ export function createCraftingView() {
     const can = affordable(g, r, b), here = usable(r);
     if (onlyReady && (!here || can < 1)) continue;
     const row = button('', () => { selected = r.id; quantity = 1; detailScroll = 0; redraw(); }, 'cr-row' + (r.id === selected ? ' selected' : '') + (here ? '' : ' elsewhere'));
-    row.dataset.recipe = r.id; row.setAttribute('role', 'option'); row.setAttribute('aria-selected', String(r.id === selected));
+    row.dataset.recipe = r.id; row.style.setProperty('--i', String(index++)); row.setAttribute('role', 'option'); row.setAttribute('aria-selected', String(r.id === selected));
     const text = h('span', '', 'cr-row-text'); text.append(h('b', name(out) + (r.outputs[out] > 1 ? ' ×' + r.outputs[out] : '')));
     const chips = h('span', '', 'cr-row-chips');
     for (const [id, k] of Object.entries(r.inputs)) { const have = countItem(g.player.inventory, id) + countItem(b?.input ?? [], id), c = h('span', '', 'cr-mini' + (have >= k ? ' ok' : '')); c.append(itemArt(id), h('i', String(k))); c.title = `${name(id)}: ${have} / ${k}`; chips.append(c); }

@@ -58,7 +58,9 @@ class Pool {
   const g = this.points.geometry;
   for (const name of ['position', 'aColor', 'aSize', 'aAlpha']) (g.attributes[name] as THREE.BufferAttribute).needsUpdate = true;
   if (!alive) { this.live = 0; this.points.visible = false; }
+  this.alive = alive;
  }
+ alive = 0;
 }
 export const MATERIAL_FX: Record<string, string> = { stone: '#b9b0a2', iron: '#5a4c44', copper: '#b8703f', ice: '#e8f6fb', sand: '#d8c08a', grass: '#8a9a5e' };
 export function createFx(scene: THREE.Scene) {
@@ -70,14 +72,14 @@ export function createFx(scene: THREE.Scene) {
   /** Small chips off a deposit at each tool strike. */
   strike(x: number, y: number, z: number, material: string) {
    if (!enabled) return; const c = MATERIAL_FX[material] ?? '#b9b0a2';
-   solid.emit({ x, y, z, color: c, count: material === 'grass' ? 4 : 7, spread: 2.2, up: 2.6, size: material === 'ice' ? .07 : .06, life: .55, gravity: 9, drag: .6 });
-   soft.emit({ x, y, z, color: material === 'ice' ? '#ffffff' : '#c9b79c', count: 2, spread: .6, up: .5, size: .35, grow: 1.6, life: .7, gravity: -.2, drag: 1.4, alpha: .35 });
+   solid.emit({ x, y, z, color: c, count: material === 'grass' ? 5 : 9, spread: 2.4, up: 2.8, size: material === 'ice' ? .1 : .09, life: .6, gravity: 9, drag: .6 });
+   soft.emit({ x, y, z, color: material === 'ice' ? '#ffffff' : '#c9b79c', count: 3, spread: .7, up: .5, size: .4, grow: 1.8, life: .8, gravity: -.2, drag: 1.4, alpha: .45 });
    if (material === 'ice') glow.emit({ x, y, z, color: '#bff6ff', count: 3, spread: 1.6, up: 1.4, size: .05, life: .4, gravity: 4 });
   },
   /** A finished block: a heavier burst and a dust cloud. */
   block(x: number, y: number, z: number, material: string) {
    if (!enabled) return; const c = MATERIAL_FX[material] ?? '#b9b0a2';
-   solid.emit({ x, y, z, color: c, count: 18, spread: 3, up: 3.4, size: .08, life: .9, gravity: 10, drag: .4 });
+   solid.emit({ x, y, z, color: c, count: 22, spread: 3.2, up: 3.6, size: .11, life: .95, gravity: 10, drag: .4 });
    soft.emit({ x, y: y - .2, z, color: material === 'ice' ? '#f4fbff' : material === 'grass' ? '#a7b07a' : '#cbb89a', count: 8, spread: 1.4, up: .7, size: .55, grow: 2.2, life: 1.3, gravity: -.15, drag: 1.2, alpha: .4 });
   },
   /** A placed station settles: a ring of dust at its footprint. */
@@ -91,11 +93,12 @@ export function createFx(scene: THREE.Scene) {
    if (!enabled) return; const c = kind === 'cable' ? '#ffb46a' : '#9ff1ff';
    points.forEach((p, i) => { if (i % 2) return; glow.emit({ x: p.x, y: p.y, z: p.z, color: c, count: 3, spread: .8, up: .8, size: .07, life: .5 + i * .02, gravity: 2 }); });
   },
-  smoke(x: number, y: number, z: number, dark = false) { if (enabled) soft.emit({ x, y, z, color: dark ? '#4a4642' : '#a49e96', count: 1, spread: .25, up: .9, size: .3, grow: 3.2, life: 2.6, gravity: -.35, drag: .8, alpha: dark ? .45 : .32, vx: .25 }); },
+  smoke(x: number, y: number, z: number, dark = false) { if (enabled) soft.emit({ x, y, z, color: dark ? '#35312e' : '#625c56', count: 2, spread: .3, up: .9, size: .42, grow: 3.2, life: 2.6, gravity: -.35, drag: .8, alpha: dark ? .75 : .68, vx: .25 }); },
   steam(x: number, y: number, z: number) { if (enabled) soft.emit({ x, y, z, color: '#f2fbff', count: 1, spread: .2, up: .7, size: .18, grow: 2.4, life: 1.4, gravity: -.3, drag: 1, alpha: .28 }); },
   ember(x: number, y: number, z: number) { if (enabled) glow.emit({ x, y, z, color: '#ff9a4a', count: 1, spread: .5, up: 1.4, size: .04, life: .9, gravity: -.4, drag: .9 }); },
   hiss(x: number, y: number, z: number) { if (enabled) soft.emit({ x, y, z, color: '#e9f3f2', count: 3, spread: 1.4, up: .3, size: .25, grow: 2.5, life: .9, gravity: 0, drag: 1.8, alpha: .3 }); },
   update(dt: number, camera: THREE.PerspectiveCamera, height: number) { solid.update(dt, camera, height); soft.update(dt, camera, height); glow.update(dt, camera, height); },
+  stats: () => ({ solid: solid.alive, soft: soft.alive, glow: glow.alive }),
  };
  return api;
 }

@@ -2,6 +2,8 @@ import { Diagnostics, observeDiagnostics } from './diagnostics';
 import { sceneInterval } from './renderPolicy';
 import { createWorldInteraction } from './worldInteraction';
 import { stationStatus } from './game/stationStatus';
+import { createFx } from './fx';
+import { createFeed } from './ui/feed';
 import { packStation } from './game/worldActions';
 import { countItem } from './game/inventory';
 import { createQuestBook } from './ui/quests';
@@ -15,6 +17,7 @@ import { productionTick, manualWork, releaseHandOnDeath, breathingDome, machine 
 import * as THREE from 'three';
 import './style.css';
 import './ui/hud.css';
+import './ui/motion.css';
 import { HUD_GROUPS, HUD_MIN, HUD_MAX, HUD_STEP, HUD_VERSION, loadHudSettings, defaultHudSettings, applyHudSettings, type HudSettings, type HudGroup } from './ui/hud';
 import { VISOR_CONTROLS, defaultVisorSettings, parseVisorSettings, applyVisorSettings, type VisorGroup, type VisorSettings } from './ui/visor';
 import { installFullscreen } from './fullscreen';
@@ -58,7 +61,7 @@ function boot(){
  renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1;
  renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFShadowMap;
  const scene=new THREE.Scene();const camera=new THREE.PerspectiveCamera(68,1,.15,1400);
- const built=createBuildings(scene),interaction=createWorldInteraction(scene,camera);
+ const fx=createFx(scene),built=createBuildings(scene,fx),interaction=createWorldInteraction(scene,camera);
  const world=createWorld(scene),actor=new Character(boxes),audio=new Ambience(),settings=loadSettings();
  const diagnostics=new Diagnostics(),gl=renderer.getContext(),rendererVersion=String(gl.getParameter(gl.VERSION));
  const gpuExtension=gl.getExtension('WEBGL_debug_renderer_info');
@@ -184,7 +187,8 @@ function boot(){
   lastAction=`${actionKind}:${running}:${nearMachine??''}`;
   if(!running||!game)return;
   const before=game.world.base.buildings.length,linksBefore=game.world.base.links.length;
-  const result=interaction.action(game);if(result!==null){toast(result?'Действие в мире':'Готово',result||(game.world.base.links.length>linksBefore?'Соединено':'Установлено'));if(!result&&game.world.base.buildings.length>before)audio.tone('discover');built.sync(game);world.invalidateShadows();hudKey='';updateHotbar();interaction.update(game,true);updateAimUI();void saver?.save();return;}
+  const result=interaction.action(game);if(result!==null){toast(result?'Действие в мире':'Готово',result||(game.world.base.links.length>linksBefore?'Соединено':'Установлено'));if(!result&&game.world.base.buildings.length>before)audio.tone('discover');
+   if(!result&&game.world.base.links.length>linksBefore)audio.tone('item');built.sync(game);world.invalidateShadows();hudKey='';updateHotbar();interaction.update(game,true);updateAimUI();void saver?.save();return;}
   if(actionKind==='capsule')production.open('capsule');
   else if(actionKind==='crate'&&interaction.target)production.open(interaction.target);
   else if(actionKind==='pickup'&&nearDrop){const moved=pickUp(game,nearDrop);audio.tone(moved?'item':'warn');toast(moved?'Поднято':'Рюкзак полон',moved?`${moved} предм.`:'Освободите ячейку');syncDrops();hudKey='';updateHotbar();}
@@ -434,6 +438,9 @@ function boot(){
    status.textContent=`Импортировано как новый мир «${slot.name}». Существующие миры не изменены.`;audio.tone('item');
   }catch(e){status.textContent='Импорт отклонён: '+(e instanceof Error?e.message:String(e));audio.tone('warn');}
  }
+ const feed=createFeed();let shake=0;
+ /** Point on a deposit facing the camera: where chips fly from. */
+ function nodeHitPoint(id:string){const n=NODE_BY_ID.get(id)!,k=.42+.58*(game?game.world.nodes[id]:n.amount)/n.amount,c=new THREE.Vector3(n.x,heightAt(n.x,n.z)+n.height*k*.55,n.z),d=camera.position.clone().sub(c);d.y*=.4;return c.add(d.normalize().multiplyScalar(n.radius*k*.75));}
  // ---------- Aim: which deposit is under the reticle and within reach ----------
  const nodeCenter=new THREE.Vector3(),toNode=new THREE.Vector3();
  function computeAim(){
@@ -483,7 +490,8 @@ function boot(){
   world.invalidateShadows();
   const n=NODE_BY_ID.get(ev.nodeId)!;audio.tone('item');applyNodes();
   if(ev.toGround){syncDrops();toast('Рюкзак полон',`${itemName(ev.itemId)} оставлена на земле`);}
-  else toast(`+1 · в рюкзаке ${countItem(game!.player.inventory,ev.itemId)}`,itemName(ev.itemId));
+  else{const inv=game!.player.inventory,cell=inv.slice(0,HOTBAR_SIZE).findIndex(v=>v?.itemId===ev.itemId);feed.add(ev.itemId,ev.toInventory,countItem(inv,ev.itemId),cell>=0?hotCells[cell]:el('inventory-button'));}
+  {const p=nodeHitPoint(n.id);fx.block(p.x,p.y,p.z,n.material);shake=Math.max(shake,.09);}
   if(!ev.left){toast('Запас исчерпан',n.name);}
   if(ev.toolBroke){audio.tone('warn');toast('Инструмент сломан',itemName('tool_stone')+' · новый мультитул: 4 камня + 2 волокна в мастерской');}
   hudKey='';updateHotbar();
@@ -609,7 +617,7 @@ function boot(){
   const o=objective();if(o!==lastObjective){lastObjective=o;el('objective-text').textContent=o;const ob=el('objective');ob.classList.remove('advance');void ob.offsetWidth;ob.classList.add('advance');}
   updateVitals();updateHotbar();updateDayButton();
  }
- function state(){const sorted=[...frames].sort((a,b)=>a-b);return {ready:true,version:'S3',linkSource:interaction.source,lastAction,guide:game?{current:currentStep(game),objective:el('objective-text').textContent,task:el('objective-task').textContent,nav:navTarget(),selected}:null,station:production.station,worldTarget:interaction.target,quests:game?structuredClone(game.progress.quests):null,questBook:questBook.debug(),vitals:game?{...game.player.vitals}:null,survival:game?{...game.player.survival}:null,capsuleMilliGU:game?.world.capsuleMilliGU??0,base:game?structuredClone(game.world.base):null,visibleDrops:dropGroup.children.length,slotId,revision:saver?.revision??0,saveStatus:saver?.status.kind??(game?'none':'idle'),halted:!!saver?.halted,activeTicks:clock.activeTicks,clockRunning:clock.running,hotbar:game?.player.hotbar??0,cells:game?game.player.inventory.map(s=>s?{...s}:null):[],suit:game?Object.fromEntries(Object.entries(game.player.suit).map(([k,v])=>[k,v?.itemId??null])):null,worn:game?wornParts(game):0,bottles:game?game.player.bottles.map(b=>b?{...b}:null):[],oxygenGU:game?oxygenGU(game):0,dayPhase:dayPhase(),dayOffsetTicks:game?.world.dayOffsetTicks??0,nightValue:world.nightValue,action:actionKind,handItem:hand.visible,panel:panels.debug,aimNode,mineRatio,nodes:game?{...game.world.nodes}:null,inventory:game?game.player.inventory.filter(Boolean).map(s=>({...s})):[],drops:game?game.world.drops.length:0,storage:!!store,grassCount:world.grassCount,fullscreen:!!document.fullscreenElement,running,dialog,night:!isDay(dayPhase()),selected,visited:[...visited],activeTime:clock.activeSeconds,position:{x:actor.x,y:actor.y,z:actor.z},yaw:actor.yaw,pitch:actor.pitch,grounded:actor.grounded,input:{...input,joyX,joyY,joyPointer,lookPointer},quality:settings.quality,sound:settings.sound,bob:settings.bob,fov:settings.fov,fineTerrainBlocks:world.terrain.fineBlocks,drawCalls:renderCalls,triangles:renderTriangles,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0,viewport:{width:innerWidth,height:innerHeight},renderer:rendererVersion,diagnostics:diagnostics.enabled,shadowTarget:world.sunLight.target.position.toArray(),shadowBias:world.sunLight.shadow.bias};}
+ function state(){const sorted=[...frames].sort((a,b)=>a-b);return {ready:true,version:'S3',linkSource:interaction.source,lastAction,fx:fx.stats(),guide:game?{current:currentStep(game),objective:el('objective-text').textContent,task:el('objective-task').textContent,nav:navTarget(),selected}:null,station:production.station,worldTarget:interaction.target,quests:game?structuredClone(game.progress.quests):null,questBook:questBook.debug(),vitals:game?{...game.player.vitals}:null,survival:game?{...game.player.survival}:null,capsuleMilliGU:game?.world.capsuleMilliGU??0,base:game?structuredClone(game.world.base):null,visibleDrops:dropGroup.children.length,slotId,revision:saver?.revision??0,saveStatus:saver?.status.kind??(game?'none':'idle'),halted:!!saver?.halted,activeTicks:clock.activeTicks,clockRunning:clock.running,hotbar:game?.player.hotbar??0,cells:game?game.player.inventory.map(s=>s?{...s}:null):[],suit:game?Object.fromEntries(Object.entries(game.player.suit).map(([k,v])=>[k,v?.itemId??null])):null,worn:game?wornParts(game):0,bottles:game?game.player.bottles.map(b=>b?{...b}:null):[],oxygenGU:game?oxygenGU(game):0,dayPhase:dayPhase(),dayOffsetTicks:game?.world.dayOffsetTicks??0,nightValue:world.nightValue,action:actionKind,handItem:hand.visible,panel:panels.debug,aimNode,mineRatio,nodes:game?{...game.world.nodes}:null,inventory:game?game.player.inventory.filter(Boolean).map(s=>({...s})):[],drops:game?game.world.drops.length:0,storage:!!store,grassCount:world.grassCount,fullscreen:!!document.fullscreenElement,running,dialog,night:!isDay(dayPhase()),selected,visited:[...visited],activeTime:clock.activeSeconds,position:{x:actor.x,y:actor.y,z:actor.z},yaw:actor.yaw,pitch:actor.pitch,grounded:actor.grounded,input:{...input,joyX,joyY,joyPointer,lookPointer},quality:settings.quality,sound:settings.sound,bob:settings.bob,fov:settings.fov,fineTerrainBlocks:world.terrain.fineBlocks,drawCalls:renderCalls,triangles:renderTriangles,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0,viewport:{width:innerWidth,height:innerHeight},renderer:rendererVersion,diagnostics:diagnostics.enabled,shadowTarget:world.sunLight.target.position.toArray(),shadowBias:world.sunLight.shadow.bias};}
  const dev=!!(import.meta as unknown as {env?:{DEV?:boolean}}).env?.DEV;
  Object.defineProperty(window,'__vireon',{value:{getState:state,save:()=>saver?.save(),snapshot:()=>game?snapshot():null,diagnostics:()=>diagnosticReport(),
   // Development-only verification helpers; absent from production builds.
@@ -644,7 +652,7 @@ function boot(){
     if(running&&holdRefill&&actionKind==='refill'&&insideCapsule()&&(refillTanks?refillFromCapsule(game,FIXED_DT):refillCapsule(game,FIXED_DT))){hudKey='';updateHotbar();}
     const ev=mineTick(game,mining,running?aimNode:null,running&&holdMine&&!game.world.base.hand&&!manualWork(game)&&!game.world.base.passage);
     aimReason=ev.kind==='blocked'?ev.reason:'';mineRatio=ev.kind==='progress'?ev.ratio:0;
-    if(ev.kind==='progress'){strikeClock-=FIXED_DT;if(strikeClock<=0){strikeClock=.45;audio.strike(NODE_BY_ID.get(ev.nodeId)!.material==='ice');}}else strikeClock=0;
+    if(ev.kind==='progress'){strikeClock-=FIXED_DT;if(strikeClock<=0){strikeClock=.45;const n=NODE_BY_ID.get(ev.nodeId)!;audio.strike(n.material==='ice');const p=nodeHitPoint(n.id);fx.strike(p.x,p.y,p.z,n.material);shake=Math.max(shake,.04);}}else strikeClock=0;
     if(ev.kind==='block')onMined(ev);}
   }
   if(regrown)applyNodes();
@@ -667,6 +675,8 @@ function boot(){
    const pitch=actor.pitch-ease*.45;
    viewDirection.set(Math.sin(actor.yaw)*Math.cos(pitch),Math.sin(pitch),Math.cos(actor.yaw)*Math.cos(pitch));camera.lookAt(tmp.copy(viewPos).add(viewDirection));
    if(ease>0)camera.rotateZ(Math.sin(ease*3)*.06*ease);
+   // Short tool-impact shake; decays in ~0.2 s and respects the camera-bob setting.
+   if(shake>0&&settings.bob){camera.rotateX((Math.random()-.5)*shake*.06);camera.rotateY((Math.random()-.5)*shake*.06);}shake=Math.max(0,shake-dt*.5);
    const targetFov=settings.fov+(Math.hypot(actor.vx,actor.vz)>4&&running&&settings.bob?6:0);fov+=(targetFov-fov)*Math.min(1,dt*6);if(Math.abs(camera.fov-fov)>.01){camera.fov=fov;camera.updateProjectionMatrix();}
   }
   // Explicit pause (and settings opened from it) freezes the whole scene, not only the controller.
@@ -678,6 +688,7 @@ function boot(){
   if(renderScene){
    shadowAnchor.set(actor.x,actor.y,actor.z);
    world.update(frozen?0:renderElapsed,camera,renderer,!started||(!frozen&&!dialog),diagnostics.enabled?(name,ms)=>diagnostics.span('world:'+name,ms):undefined,started?shadowAnchor:undefined);
+   fx.update(frozen?0:renderElapsed,camera,renderer.domElement.height/renderer.getPixelRatio());
    measured=diagnostics.stage('world',measured);renderer.render(scene,camera);renderCalls=renderer.info.render.calls;renderTriangles=renderer.info.render.triangles;
    if(started&&hand.visible&&dialog!=='suit-panel'){hand.update(frozen?0:renderElapsed,camera,{sun:world.sunLight,hemi:world.hemiLight},holdMine&&mineRatio>0,handBobX,handBobY);renderer.autoClear=false;renderer.clearDepth();renderer.render(hand.scene,camera);renderer.autoClear=true;renderCalls+=renderer.info.render.calls;renderTriangles+=renderer.info.render.triangles;}
    if(captureRequested){const resolve=captureRequested;captureRequested=null;resolve(canvas.toDataURL('image/png'));}

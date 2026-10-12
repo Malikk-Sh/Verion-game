@@ -5,6 +5,7 @@ import { insideDome, makeBuilding, domeFaces, habitable, telemetry, RECIPE_BY_ID
 import { countItem } from './game/inventory';
 import type { GameState } from './game/state';
 import { buildStation, PORT_HEIGHT, type StationLook, type StationVisual } from './stationModels';
+import type { Fx } from './fx';
 export function placementProblem(g: GameState, kind: BuildingKind, x: number, z: number): string {
  if(!(BUILDABLE as readonly string[]).includes(kind)||!Number.isInteger(x)||!Number.isInteger(z))return 'Выберите корпус и клетку';
  if(g.world.base.buildings.length>=64)return 'Достигнут предел 64 корпусов';
@@ -63,7 +64,8 @@ function stripeTexture(color: string) {
  x.fillStyle = g; x.fillRect(0, 0, 64, 4); const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 /** Placed stations, cables and pipes; rebuilt only when the layout changes, animated every frame. */
-export function createBuildings(scene: THREE.Scene) {
+const UP = new THREE.Vector3(0, 1, 0);
+export function createBuildings(scene: THREE.Scene, fx?: Fx) {
  const root = new THREE.Group(); scene.add(root);
  const glass = new THREE.MeshStandardMaterial({ color: 0x9fd6dd, transparent: true, opacity: .2, roughness: .05, metalness: .1, depthWrite: false, side: THREE.DoubleSide });
  const roofGlass = new THREE.MeshStandardMaterial({ color: 0xb6e2e6, transparent: true, opacity: .28, roughness: .08, metalness: .1, depthWrite: false, side: THREE.DoubleSide });
@@ -75,7 +77,8 @@ export function createBuildings(scene: THREE.Scene) {
  const flange = new THREE.MeshStandardMaterial({ color: 0x4fa8c4, roughness: .45, metalness: .3 }), post = new THREE.MeshStandardMaterial({ color: 0x2a3336, roughness: .6, metalness: .5 });
  const cube = new THREE.BoxGeometry(1, 1, 1), ringGeo = new THREE.CylinderGeometry(1, 1, 1, 10);
  const stations = new Map<string, { b: Building; v: StationVisual; group: THREE.Group }>();
- const lines: { id: string; kind: 'cable' | 'gas_pipe'; mesh: THREE.Mesh; extra: THREE.Object3D[] }[] = [];
+ const lines: { id: string; kind: 'cable' | 'gas_pipe'; mesh: THREE.Mesh; extra: THREE.Object3D[]; curve: THREE.Curve<THREE.Vector3>; grow: number }[] = [];
+ const knownLinks = new Set<string>(), puff = new Map<string, number>();
  const born = new Map<string, number>();
  let key = '', time = 0, initial = true;
  function clearLines() { for (const l of lines) { l.mesh.geometry.dispose(); root.remove(l.mesh); for (const e of l.extra) root.remove(e); } lines.length = 0; }
@@ -130,12 +133,16 @@ export function createBuildings(scene: THREE.Scene) {
    const geo = new THREE.TubeGeometry(curve, Math.max(12, Math.ceil(curve.getLength() * 6)), l.kind === 'cable' ? .022 : .045, 6, false);
    const uv = geo.attributes.uv as THREE.BufferAttribute, total = curve.getLength(); for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * total / .9);
    const mesh = new THREE.Mesh(geo, l.kind === 'cable' ? cableMat : pipeMat); mesh.castShadow = true; mesh.name = l.id; root.add(mesh);
-   lines.push({ id: l.id, kind: l.kind, mesh, extra });
+   // A new line draws itself from the source to the target and sparks along its length.
+   const fresh = !initial && !knownLinks.has(l.id); knownLinks.add(l.id);
+   if (fresh) { geo.setDrawRange(0, 0); for (const e of extra) e.visible = false; fx?.connect(curve.getSpacedPoints(16), l.kind); }
+   lines.push({ id: l.id, kind: l.kind, mesh, extra, curve, grow: fresh ? 0 : 1 });
   }
+  if (initial) for (const l of g.world.base.links) knownLinks.add(l.id);
   initial = false;
  }
  /** A newly loaded world appears as saved; only later placements animate. */
- function reset() { key = ''; initial = true; for (const s of stations.values()) { root.remove(s.group); s.v.dispose(); } stations.clear(); clearLines(); born.clear(); }
+ function reset() { key = ''; initial = true; knownLinks.clear(); puff.clear(); for (const s of stations.values()) { root.remove(s.group); s.v.dispose(); } stations.clear(); clearLines(); born.clear(); }
  /** Animates stations and flow; `dt` is real frame time (0 while frozen). */
  function update(g: GameState | null, dt: number) {
   if (!g) return; time += dt;
@@ -144,15 +151,30 @@ export function createBuildings(scene: THREE.Scene) {
    const b = g.world.base.buildings.find(v => v.id === s.b.id); if (!b) continue;
    s.v.update(dt, stationLook(g, b));
    const t = born.get(b.id);
-   if (t !== undefined) { const k = Math.min(1, t + dt * 2.4); born.set(b.id, k); const e = 1 - Math.pow(1 - k, 3), over = Math.sin(k * Math.PI) * .08; s.v.group.scale.set(1 + over, e + over * .5, 1 + over); s.v.group.position.y = (1 - e) * .6; if (k >= 1) { born.delete(b.id); s.v.group.scale.setScalar(1); s.v.group.position.y = 0; } }
+   if (t !== undefined) { const k = Math.min(1, t + dt * 2.4); born.set(b.id, k); const e = 1 - Math.pow(1 - k, 3), over = Math.sin(k * Math.PI) * .08; s.v.group.scale.set(1 + over, e + over * .5, 1 + over); s.v.group.position.y = (1 - e) * .6; if (t < .55 && k >= .55) fx?.land(b.x, b.y, b.z, b.kind === 'dome' ? 2.3 : .6); if (k >= 1) { born.delete(b.id); s.v.group.scale.setScalar(1); s.v.group.position.y = 0; } }
+   if (fx && dt > 0) emitFrom(g, b, dt);
   }
-  const powered = new Set<string>();
+  for (const l of lines) if (l.grow < 1) { l.grow = Math.min(1, l.grow + dt * 1.8); const idx = l.mesh.geometry.index; l.mesh.geometry.setDrawRange(0, Math.floor((idx ? idx.count : l.mesh.geometry.attributes.position.count) * l.grow / 3) * 3); if (l.grow >= 1) for (const e of l.extra) e.visible = true; }
+ const powered = new Set<string>();
   for (const b of g.world.base.buildings) if ((telemetry.supply.get(b.id) ?? 0) > 0) for (const id of poweredComponent(g, b.id)) powered.add(id);
   for (const l of lines) {
    const link = g.world.base.links.find(v => v.id === l.id); if (!link) continue;
    const live = l.kind === 'cable' ? powered.has(link.from) && powered.has(link.to) : (telemetry.gas.get(l.id) ?? 0) > 0;
    l.mesh.material = l.kind === 'cable' ? (live ? cableLive : cableMat) : (live ? pipeLive : pipeMat);
   }
+ }
+ /** Smoke, exhaust, steam and airlock hiss from working stations, rate-limited per station. */
+ const local = new THREE.Vector3();
+ function emitFrom(g: GameState, b: Building, dt: number) {
+  const left = (puff.get(b.id) ?? Math.random() * .3) - dt; if (left > 0) { puff.set(b.id, left); return; }
+  const look = stationLook(g, b), world = (x: number, y: number, z: number) => { local.set(x, y, z).applyAxisAngle(UP, b.rot * Math.PI / 2); return [b.x + local.x, b.y + local.y, b.z + local.z] as const; };
+  let next = .35;
+  if (b.kind === 'kiln' && look.working) { const [x, y, z] = world(.2, 2.12, -.18); fx!.smoke(x, y, z); if (Math.random() < .5) { const [ex, ey, ez] = world(0, .45, .48); fx!.ember(ex, ey, ez); } next = .28; }
+  else if (b.kind === 'biogenerator' && look.working) { const [x, y, z] = world(.3, 1.36, -.24); fx!.smoke(x, y, z, true); next = .32; }
+  else if (b.kind === 'electrolyzer' && look.working) { const [x, y, z] = world(.3, 1.2, -.24); fx!.steam(x, y, z); next = .45; }
+  else if (b.kind === 'dome' && g.world.base.passage?.domeId === b.id) { const [x, y, z] = world(0, 1.2, 2.75); fx!.hiss(x, y, z); next = .25; }
+  else next = .6;
+  puff.set(b.id, next);
  }
  /** Newly placed station drops in with a short settle animation. */
  function celebrate(id: string) { born.set(id, 0); }

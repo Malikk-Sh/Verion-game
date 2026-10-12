@@ -26,6 +26,17 @@ export function createSky(){
    float band=exp(-pow(dot(d,normalize(vec3(.3,.55,-.78))),2.)*14.)*fbm(d.xz*9.+d.y*3.);
    nig+=vec3(.9,.95,1.)*star*smoothstep(0.,.12,y)*1.4+vec3(.28,.32,.45)*band*.35*smoothstep(0.,.3,y);
    vec3 col=mix(day,nig,night);
+   // Decorative gas giant: banded disc lit from the sun's side, thin atmosphere rim, faint at noon.
+   {vec3 pd=normalize(vec3(-.42,.62,.83));float r=.13,c=dot(d,pd);float ang=acos(clamp(c,-1.,1.));
+    if(ang<r*1.35){vec3 ax=normalize(cross(pd,vec3(0.,1.,0.))),ay=cross(ax,pd);vec2 q=vec2(dot(d-pd*c,ax),dot(d-pd*c,ay))/r;float rr=length(q);
+     float disc=smoothstep(1.,.985,rr);float z=sqrt(max(0.,1.-rr*rr));vec3 nrm=normalize(ax*q.x+ay*q.y+pd*z*-1.);
+     float lit=clamp(dot(-nrm,normalize(sunDir))*1.1+.12,0.,1.);float lat=q.y*.94+q.x*.34;
+     vec3 band=mix(vec3(.80,.62,.46),vec3(.56,.40,.32),.5+.5*sin(lat*15.+fbm(q*3.)*2.6));band=mix(band,vec3(.92,.86,.74),smoothstep(.55,.95,sin(lat*7.3+1.)));
+     float storm=smoothstep(.16,.0,length(q-vec2(.32,-.28)));band=mix(band,vec3(.86,.48,.3),storm*.8);
+     vec3 pc=band*(lit*1.15+.05)+vec3(.35,.5,.75)*pow(1.-z,3.)*.35;
+     float vis=mix(.62,1.,night)*smoothstep(-.02,.06,y);
+     col=mix(col,pc,disc*vis);
+     float rim=smoothstep(1.3,1.,rr)*smoothstep(.95,1.05,rr);col+=vec3(.55,.75,1.)*rim*.35*vis*(.35+lit);}}
    // Thin high clouds, lit by the sun during the day, faintly blue at night.
    vec2 cp=d.xz/(y+.12)*1.6+vec2(time*.004,time*.0015);
    float c=smoothstep(.55,.9,fbm(cp))*smoothstep(0.,.25,y);

@@ -14,18 +14,18 @@ const KICKER: Record<string, string> = { workbench: 'Сборка деталей
  * crafting, a floating feedback chip and either the workshop or a machine view.
  */
 export function createProductionPanel(host: Host) {
- const crafting = createCraftingView(); let station = 'hand', message = '', messageTone = true, messageAt = 0;
+ const crafting = createCraftingView(); let station = 'hand', message = '', messageTone = true, messageAt = 0, fresh = true;
  const say = (reason: string, success = 'Готово') => { message = reason || success; messageTone = !reason; messageAt = performance.now(); host.tone(!reason); if (!reason) host.changed(); draw(); };
  function open(id = 'hand', upgrade = false) {
   const g = host.game();
   // B near a workbench opens that workbench: the most useful station is the one in reach.
   if (id === 'hand' && g) { const b = g.world.base.buildings.filter(b => b.kind === 'workbench' && nearby(g, b)).sort((a, c) => Math.hypot(a.x - g.player.x, a.z - g.player.z) - Math.hypot(c.x - g.player.x, c.z - g.player.z))[0]; if (b) id = b.id; }
-  station = id; host.refill(null); crafting.open(id, upgrade); message = ''; host.show();
+  station = id; host.refill(null); crafting.open(id, upgrade); message = ''; fresh = true; host.show();
  }
  function openRecipe(recipeId: string) {
   const g = host.game(); if (!g) return; const r = RECIPES.find(r => r.id === recipeId); let id = 'hand';
   if (r && r.station !== 'hand') { const b = g.world.base.buildings.filter(b => b.kind === r.station && nearby(g, b))[0]; if (b) id = b.id; }
-  station = id; host.refill(null); crafting.open(id, false, recipeId); message = ''; host.show();
+  station = id; host.refill(null); crafting.open(id, false, recipeId); message = ''; fresh = true; host.show();
  }
  el('close-production').onclick = () => { host.refill(null); host.close(); };
  function tabs(g: GameState, craft: boolean) {
@@ -33,13 +33,15 @@ export function createProductionPanel(host: Host) {
   const options: [string, string][] = [['hand', 'Карман']];
   for (const b of g.world.base.buildings) if (b.kind === 'workbench' && nearby(g, b)) options.push([b.id, 'Верстак ' + (b.level === 2 ? 'II' : 'I')]);
   if (options.length < 2) return;
-  for (const [id, label] of options) { const t = document.createElement('button'); t.type = 'button'; t.className = 'st-tab'; t.textContent = label; t.setAttribute('role', 'tab'); t.setAttribute('aria-selected', String(id === station)); t.onclick = () => { if (id === station) return; station = id; crafting.open(id); host.tone(true); draw(); }; box.append(t); }
+  for (const [id, label] of options) { const t = document.createElement('button'); t.type = 'button'; t.className = 'st-tab'; t.textContent = label; t.setAttribute('role', 'tab'); t.setAttribute('aria-selected', String(id === station)); t.onclick = () => { if (id === station) return; station = id; crafting.open(id); fresh = true; host.tone(true); draw(); }; box.append(t); }
  }
  function draw() {
   const at = performance.now(); const g = host.game(); if (!g) return;
   const focus = document.activeElement as HTMLInputElement | null, search = focus?.id === 'craft-search', cursor = search ? [focus.selectionStart, focus.selectionEnd] : null;
   const b = machine(g, station), craft = station === 'hand' || b?.kind === 'workbench', panel = el('production-panel'), content = el('production-content');
   panel.classList.toggle('crafting-panel', craft); panel.classList.toggle('machine-panel', !craft);
+  // Entrance motion plays once per opening, not on every live redraw.
+  panel.classList.toggle('redraw', !fresh); fresh = false;
   const title = station === 'hand' ? 'Мастерская' : b?.kind === 'workbench' ? 'Верстак ' + (b.level === 2 ? 'II' : 'I') : station === 'capsule' ? 'Капсула' : station.startsWith('crate-') ? 'Ящик снабжения' : b ? ITEMS[b.kind].name : 'Станция';
   panel.querySelector('h2')!.textContent = title;
   el('production-kicker').textContent = station === 'hand' ? 'Карманный крафт · где угодно' : station === 'capsule' ? 'Кислородный порт' : station.startsWith('crate-') ? '24 ячейки · хранение' : b ? KICKER[b.kind] ?? '' : '';

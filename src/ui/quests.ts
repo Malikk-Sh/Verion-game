@@ -22,7 +22,7 @@ const plain = (id: QuestId) => QUEST_BY_ID.get(id)!.label.replace(/\n/g, ' ');
  */
 export function createQuestBook(host: Host) {
  const list = el('journal-list'), detail = el('journal-detail');
- let selected: QuestId | null = null, signature = '';
+ let selected: QuestId | null = null, signature = '', fresh = true, order = 0;
  function taskRow(g: GameState, t: GuideTask) {
   const row = h('li', '', 'journal-task' + (t.done ? ' done' : ''));
   row.append(h('i', t.done ? '✓' : '', 'journal-check'));
@@ -75,7 +75,7 @@ export function createQuestBook(host: Host) {
    const head = h('header', '', 'journal-chapter-head'); head.append(h('span', chapter < 5 ? `${chapter + 1}. ${title}` : title), h('small', `${doneCount}/${ids.length}`)); group.append(head);
    for (const id of ids) {
     const status = questStatus(g, id), step = guideStep(g, id), b = h('button', '', 'journal-step');
-    b.type = 'button'; b.dataset.quest = id; b.dataset.status = status; b.classList.toggle('current', id === current); b.setAttribute('aria-pressed', String(id === selected));
+    b.type = 'button'; b.dataset.quest = id; b.style.setProperty('--i', String(order++)); b.dataset.status = status; b.classList.toggle('current', id === current); b.setAttribute('aria-pressed', String(id === selected));
     const tasks = step.tasks.filter(t => t.done).length;
     b.append(h('i', status === 'done' ? '✓' : id === current ? '●' : '', 'journal-step-mark'), itemArt(step.item, 'art journal-step-art'));
     const text = h('span', '', 'journal-step-text'); text.append(h('b', step.title), h('small', status === 'done' ? 'Выполнено' : status === 'locked' ? 'Сначала: ' + questParents(id).filter(p => !g.progress.quests.completed.includes(p)).map(plain).join(', ') : `${tasks} / ${step.tasks.length}`));
@@ -111,7 +111,8 @@ export function createQuestBook(host: Host) {
   const g = host.game(); if (!g) return;
   const current = currentStep(g), sel = selected ?? current ?? GUIDE_ORDER[0];
   const sig = JSON.stringify([g.progress.quests, sel, g.player.inventory, g.world.base.buildings.length, g.world.base.links.length, Math.round(g.player.x / 4), Math.round(g.player.z / 4)]);
-  if (!force && sig === signature) return; signature = sig;
+  if (!force && sig === signature) return; signature = sig; order = 0;
+  document.getElementById('quest-panel')!.classList.toggle('redraw', !fresh); fresh = false;
   const { done, total } = progressCount(g);
   el('journal-count').textContent = String(done); el('journal-total').textContent = String(total); el('journal-fill').style.transform = `scaleX(${done / total})`;
   drawList(g, current); drawDetail(g, guideStep(g, sel), current);
@@ -120,7 +121,7 @@ export function createQuestBook(host: Host) {
  }
  function open(id?: QuestId) {
   const g = host.game(); if (!g) return; if (refreshQuestProgress(g)) host.changed();
-  selected = id ?? null; host.show(); draw(true);
+  selected = id ?? null; fresh = true; host.show(); draw(true);
   requestAnimationFrame(() => list.querySelector<HTMLElement>('.journal-step[aria-pressed=true], .journal-step.current')?.scrollIntoView({ block: 'center' }));
  }
  el('quest-close').onclick = () => { host.tone(); host.close(); };

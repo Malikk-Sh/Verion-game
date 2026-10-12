@@ -237,11 +237,11 @@ export function buildStation(kind: BuildingKind, level: number): StationVisual {
   const bar = new THREE.Mesh(BOX, lampMat); bar.scale.set(1.3, .02, .08); bar.position.set(0, 2.895, 0); group.add(bar); a.mats.room = lampMat;
   const light = new THREE.PointLight('#cdf7f0', 0, 6, 1.6); light.position.set(0, 2.6, 0); group.add(light); a.parts.light = light;
  }
- let t = Math.random() * 10, spin = 0;
+ let t = Math.random() * 10, spin = 0, heat = 0;
  function update(dt: number, look: StationLook) {
   t += dt; const w = look.working;
   status.mat.emissive.set(LAMP_COLOR[look.status]); status.mat.emissiveIntensity = look.status === 'warn' ? 1.2 + Math.max(0, Math.sin(t * 6)) * 2.4 : look.status === 'off' ? .2 : 2.2;
-  if (a.mats.fire) { const f = w ? .9 + Math.sin(t * 13) * .25 + Math.sin(t * 7.3) * .2 : Math.max(0, a.mats.fire.emissiveIntensity - dt); a.mats.fire.emissiveIntensity = f * 2.2; (a.parts.light as THREE.PointLight).intensity = f * 3.2; }
+  if (a.mats.fire) { heat = THREE.MathUtils.clamp(heat + (w ? dt * 1.5 : -dt * .6), 0, 1); const f = heat * (.9 + Math.sin(t * 13) * .25 + Math.sin(t * 7.3) * .2); a.mats.fire.emissiveIntensity = f * 2.2; (a.parts.light as THREE.PointLight).intensity = f * 3.2; }
   if (a.parts.wheel) { spin = THREE.MathUtils.lerp(spin, w ? 9 : 0, Math.min(1, dt * 1.5)); a.parts.wheel.rotation.x += spin * dt; }
   if (a.parts.fan) { spin = THREE.MathUtils.lerp(spin, w ? 14 : 0, Math.min(1, dt * 1.2)); a.parts.fan.rotation.y += spin * dt; }
   if (a.parts.bubbles) { a.mats.glow.emissiveIntensity = THREE.MathUtils.lerp(a.mats.glow.emissiveIntensity, w ? 1.4 + Math.sin(t * 5) * .2 : .12, Math.min(1, dt * 3)); a.parts.bubbles.visible = w > 0; if (w) for (const b of a.parts.bubbles.children) { b.position.y += b.userData.speed * dt; if (b.position.y > .43) b.position.y = 0; } }
