@@ -31,8 +31,10 @@ export function createWorldInteraction(scene: THREE.Scene, camera: THREE.Camera)
    if (isDome && insideDome(b, p.x, p.y + .1, p.z)) continue;
    const r = isDome ? 2.5 : .6, h = isDome ? 3.1 : b.kind === 'workbench' && b.level === 2 ? 1.6 : 1.5;
    box.set(lo.set(b.x - r, b.y, b.z - r), hi.set(b.x + r, b.y + h, b.z + r));
-   const hit = ray.ray.intersectBox(box, hitPoint); if (!hit) continue;
-   const d = hit.distanceTo(camera.position);
+   // Standing in the airlock vestibule (inside the dome's aim box, outside its cells) faces the dome directly.
+   const near = isDome && box.containsPoint(camera.position);
+   const hit = near ? camera.position : ray.ray.intersectBox(box, hitPoint); if (!hit) continue;
+   const d = near ? 0 : hit.distanceTo(camera.position);
    if (isDome) { if (d < domeDist) { domeDist = d; dome = b.id; } }
    else if (d < best) { best = d; target = b.id; }
   }
@@ -111,6 +113,7 @@ export function createWorldInteraction(scene: THREE.Scene, camera: THREE.Camera)
   get rotation() { return rot; },
   get target() { return target; }, get building() { return isBody(selection); }, get linking() { return selection === 'cable' || selection === 'gas_pipe'; },
   get source() { return source; },
+  get linkOk() { return !source || link.valid; },
   get hint() { return !source ? 'Наведите на первую станцию · F' : link.reason ? link.reason : `${link.distance.toFixed(1)} м · ${link.cost} × ${ITEMS[selection]?.name ?? ''} · F`; },
   get sourceName() { return source ? '' : ''; },
   portName,
