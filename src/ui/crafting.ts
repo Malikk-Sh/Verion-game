@@ -224,7 +224,8 @@ export function createCraftingView() {
  function tick(g: GameState, stationId: string) {
   const bench = machine(g, stationId);
   // Finished workbench batches go straight to the backpack while the player stands at the bench.
-  if (bench && nearby(g, bench) && bench.output.some(Boolean)) { const sig = JSON.stringify(bench.output); if (sig !== outputSig) { outputSig = sig; const n = collectOutput(g, stationId); if (n) queueMicrotask(() => { pulseCraft('#production-panel .st-head'); redrawHook?.(); }); } }
+  // A full backpack is retried only after the output or the backpack changes.
+  if (bench && nearby(g, bench) && bench.output.some(Boolean)) { const sig = JSON.stringify([bench.output, g.player.inventory]); if (sig !== outputSig) { const n = collectOutput(g, stationId); outputSig = n ? '' : sig; if (n) queueMicrotask(() => { pulseCraft('#production-panel .st-head'); redrawHook?.(); }); } }
   if (!progress || !bar || !status || !tickOwner) return;
   const id = tickOwner, b = machine(g, id), job = b ? b.job : g.world.base.hand, r = job ? RECIPE_BY_ID.get(job.recipeId) : null;
   const ratio = job && r ? Math.min(1, job.workMs / (r.seconds * 1000)) : 0;
