@@ -165,6 +165,8 @@ def build_atlas(out: Path | str, frames: list[Path], cols: int | None = None, ce
         a, b = (int(v) for v in rng.split("-"))
         if not 0 <= a <= b < len(frames):
             raise ValueError(f"animation {name}: range {a}-{b} outside frames 0-{len(frames) - 1}")
+        if int(ms) <= 0:
+            raise ValueError(f"animation {name}: frame duration must be > 0 ms, got {ms}")
         meta["animations"][name] = {"frames": list(range(a, b + 1)), "frameMs": int(ms), "loop": True}
     sheet.save(out, "PNG", optimize=True)
     Path(out).with_suffix(".json").write_text(json.dumps(meta, indent=2) + "\n")

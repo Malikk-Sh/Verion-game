@@ -199,6 +199,13 @@ def run(args: argparse.Namespace) -> int:
     missing = [str(p) for p in refs if not p.is_file()]
     if missing:
         sys.exit(f"reference image(s) not found: {', '.join(missing)}")
+    try:  # fail on a bad output path before any paid request
+        out.parent.mkdir(parents=True, exist_ok=True)
+        probe = out.parent / f".write-test-{uuid.uuid4().hex}"
+        probe.write_bytes(b"")
+        probe.unlink()
+    except OSError as e:
+        sys.exit(f"cannot write to {out.parent}: {e}")
     ref_bytes = {str(p): p.read_bytes() for p in refs}  # sent and hashed from the same bytes
     ref_info = {k: {"path": _rel(Path(k)), "sha256": hashlib.sha256(v).hexdigest()} for k, v in ref_bytes.items()}
     prompt = args.prompt if args.prompt else Path(args.prompt_file).read_text(encoding="utf-8")
@@ -300,8 +307,10 @@ def run(args: argparse.Namespace) -> int:
                 rep = sprite_tools.remove_background(raw_path, path, key=None if args.auto_key else key_color,
                                                      tolerance=args.tolerance)
                 info["backgroundRemoval"] = rep
-                if not args.keep_raw:
+                if not args.keep_raw and rep["ok"]:
                     raw_path.unlink()
+                elif not rep["ok"]:
+                    print(f"[check] background removal failed; raw kept at {raw_path}", file=sys.stderr)
         report = sprite_tools.validate(path, require_alpha=args.transparent, expect_size=None)
         if info["backgroundRemoval"] and not info["backgroundRemoval"]["ok"]:
             report["problems"].append("background removal reported ok=false")
