@@ -32,3 +32,10 @@ VIREON_CHROMIUM_PATH=/opt/pw-browsers/chromium node tools/preview_asset.mjs src/
 - Встречается 502 `upstream request failed`; скрипт повторяет запрос.
 
 ## Тестовая генерация
+
+12.10.2026 тест ещё не выполнен. Первый запрос получил два ответа 502 `upstream request failed`. После этого ключ ~35 минут отвечал 429 при `X-Ratelimit-Active-Concurrent: 2/2`: оба слота занимали запросы на стороне TOOKEN. Токены не списаны, изображение не получено. Скрипт и постобработка проверены офлайн (синтетический спрайт: удаление фона, обрезка, nearest-neighbor, атлас), `tools/preview_asset.mjs` проверен на `stone.webp`. Повторить тест, когда слоты освободятся:
+
+```bash
+python3 scripts/generate_asset.py generate --task art-pipeline-test --transparent --keep-raw \
+  --out docs/art/generated/test/iron_ingot.png --prompt "<промпт слитка из MANIFEST/истории сессии>"
+```
