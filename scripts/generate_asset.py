@@ -26,7 +26,9 @@ from __future__ import annotations
 
 import argparse
 import base64
+import contextlib
 import datetime as dt
+import fcntl
 import hashlib
 import io
 import json
@@ -52,7 +54,7 @@ LOG_FILE = ROOT / "artifacts" / "asset_gen" / "requests.jsonl"
 DEFAULT_MANIFEST = ROOT / "docs" / "art" / "generated" / "MANIFEST.json"
 # Appended when a cut-out is requested so the fallback chroma key has a clean, uniform backdrop.
 CHROMA_HINT = (" Transparent background; if any backdrop is rendered it must be one perfectly flat uniform solid"
-               " {name} ({hex}) colour filling the whole canvas,"
+               " {name}colour {hex} filling the whole canvas,"
                " no gradient, no floor, no cast shadow, no vignette; the subject must not contain this colour.")
 
 
@@ -110,24 +112,37 @@ def _post(path: str, body: bytes, content_type: str, timeout: float) -> dict:
         raise ApiError(e.code, _redact(msg), retry_after, info.get("retryable"), info.get("billing"), conc) from None
 
 
-def _multipart(fields: dict[str, str], files: list[tuple[str, Path]]) -> tuple[bytes, str]:
+def _multipart(fields: dict[str, str], files: list[tuple[str, Path, bytes]]) -> tuple[bytes, str]:
     boundary = uuid.uuid4().hex
     out = io.BytesIO()
     for k, v in fields.items():
         out.write(f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode())
-    for k, p in files:
+    for k, p, data in files:
         ctype = mimetypes.guess_type(p.name)[0] or "image/png"
         out.write(f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"; filename="{p.name}"\r\n'
                   f"Content-Type: {ctype}\r\n\r\n".encode())
-        out.write(p.read_bytes())
+        out.write(data)
         out.write(b"\r\n")
     out.write(f"--{boundary}--\r\n".encode())
     return out.getvalue(), f"multipart/form-data; boundary={boundary}"
 
 
 # ---------------------------------------------------------------- budget
-def _budget_take(task: str, n: int, limit: int) -> int:
+@contextlib.contextmanager
+def _budget_lock():
+    """Inter-process lock so parallel runs cannot both pass the limit check."""
     BUDGET_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(BUDGET_FILE.with_suffix(".lock"), "w") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        yield
+
+
+def _budget_take(task: str, n: int, limit: int) -> int:
+    with _budget_lock():
+        return _budget_take_locked(task, n, limit)
+
+
+def _budget_take_locked(task: str, n: int, limit: int) -> int:
     data = json.loads(BUDGET_FILE.read_text()) if BUDGET_FILE.exists() else {}
     used = int(data.get(task, 0))
     if used + n > limit:
@@ -139,6 +154,11 @@ def _budget_take(task: str, n: int, limit: int) -> int:
 
 
 def _budget_refund(task: str, n: int) -> None:
+    with _budget_lock():
+        _budget_refund_locked(task, n)
+
+
+def _budget_refund_locked(task: str, n: int) -> None:
     data = json.loads(BUDGET_FILE.read_text()) if BUDGET_FILE.exists() else {}
     data[task] = max(0, int(data.get(task, 0)) - n)
     BUDGET_FILE.write_text(json.dumps(data, indent=1, ensure_ascii=False))
@@ -179,10 +199,14 @@ def run(args: argparse.Namespace) -> int:
     missing = [str(p) for p in refs if not p.is_file()]
     if missing:
         sys.exit(f"reference image(s) not found: {', '.join(missing)}")
+    ref_bytes = {str(p): p.read_bytes() for p in refs}  # sent and hashed from the same bytes
+    ref_info = {k: {"path": _rel(Path(k)), "sha256": hashlib.sha256(v).hexdigest()} for k, v in ref_bytes.items()}
     prompt = args.prompt if args.prompt else Path(args.prompt_file).read_text(encoding="utf-8")
     key_color = sprite_tools.parse_color(args.key_color)
     if args.transparent and not args.no_chroma_hint:
-        prompt += CHROMA_HINT.format(name=args.key_color_name, hex=args.key_color)
+        # Name the colour only when it matches the key (a custom --key-color without a name uses the hex alone).
+        name = args.key_color_name or ("magenta " if key_color == (255, 0, 255) else "")
+        prompt += CHROMA_HINT.format(name=name and name.strip() + " ", hex=args.key_color.upper())
 
     # TOOKEN documents only model/prompt (+ n=1, size=auto, output_format=png for edits); extra
     # OpenAI parameters are sent only when explicitly requested.
@@ -214,9 +238,9 @@ def run(args: argparse.Namespace) -> int:
     while True:
         try:
             if args.cmd == "edit":
-                files = [("image[]" if len(args.image) > 1 else "image", Path(p)) for p in args.image]
+                files = [("image[]" if len(args.image) > 1 else "image", Path(p), ref_bytes[str(Path(p))]) for p in args.image]
                 if args.mask:
-                    files.append(("mask", Path(args.mask)))
+                    files.append(("mask", Path(args.mask), ref_bytes[str(Path(args.mask))]))
                 body, ctype = _multipart({k: str(v) for k, v in fields.items()}, files)
                 resp = _post("/images/edits", body, ctype, args.timeout)
             else:
@@ -288,10 +312,8 @@ def run(args: argparse.Namespace) -> int:
             "path": _rel(path), "date": dt.date.today().isoformat(), "model": args.model,
             "endpoint": "images/edits" if args.cmd == "edit" else "images/generations",
             "size": fields.get("size"), "quality": args.quality, "prompt": prompt,
-            "references": [{"path": _rel(Path(p)), "sha256": hashlib.sha256(Path(p).read_bytes()).hexdigest()}
-                           for p in (getattr(args, "image", None) or [])],
-            "mask": ({"path": _rel(Path(args.mask)), "sha256": hashlib.sha256(Path(args.mask).read_bytes()).hexdigest()}
-                     if getattr(args, "mask", None) else None),
+            "references": [ref_info[str(Path(p))] for p in (getattr(args, "image", None) or [])],
+            "mask": ref_info[str(Path(args.mask))] if getattr(args, "mask", None) else None,
             "width": report["width"], "height": report["height"], "bytes": path.stat().st_size,
             "sha256": hashlib.sha256(path.read_bytes()).hexdigest(), **info,
             "revisedPrompt": it.get("revised_prompt"), "checks": report,
@@ -326,7 +348,7 @@ def main() -> int:
                        help="also send background=transparent (undocumented by TOOKEN; chroma key is the default)")
         p.add_argument("--no-chroma-hint", action="store_true", help="do not append the flat-backdrop sentence")
         p.add_argument("--key-color", default="#FF00FF")
-        p.add_argument("--key-color-name", default="magenta")
+        p.add_argument("--key-color-name", help="colour word for the prompt (default: magenta for #FF00FF, else hex only)")
         p.add_argument("--auto-key", action="store_true", help="estimate the backdrop colour from the borders")
         p.add_argument("--tolerance", type=float, default=60.0)
         p.add_argument("--keep-raw", action="store_true", help="keep <name>.raw.png before background removal")
