@@ -156,7 +156,9 @@ def build_atlas(out: Path | str, frames: list[Path], cols: int | None = None, ce
         x0 = pad + (n % cols) * (cw + pad)
         y0 = pad + (n // cols) * (ch + pad)
         sheet.paste(im, (x0 + (cw - im.width) // 2, y0 + ch - im.height))
-        key = Path(p).stem if Path(p).stem not in meta["frames"] else f"{Path(p).stem}_{n}"
+        key, k = Path(p).stem, 1
+        while key in meta["frames"]:
+            key, k = f"{Path(p).stem}_{k}", k + 1
         meta["frames"][key] = {"x": x0, "y": y0, "w": cw, "h": ch, "index": n}
     for spec in anims or []:  # name:first-last:ms
         name, rng, ms = spec.split(":")
@@ -212,6 +214,8 @@ def validate(path: Path | str, require_alpha: bool = False, expect_size: tuple[i
         rep["subjectRatio"] = round(float(vis.mean()), 4)
         if rep["subjectRatio"] < 0.02:
             problems.append("subject too small / nearly empty")
+        if rep["transparentRatio"] < 0.05:
+            problems.append("almost fully opaque: background was not removed")
         bbox = Image.fromarray((vis * 255).astype(np.uint8)).getbbox()
         rep["bbox"] = list(bbox) if bbox else None
         rep["semiTransparentRatio"] = round(float(((a > 8) & (a < 247)).mean()), 4)

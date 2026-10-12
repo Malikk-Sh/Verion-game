@@ -171,7 +171,8 @@ def run(args: argparse.Namespace) -> int:
     if out.suffix.lower() != ".png":
         sys.exit("--out must be a .png path (convert to WebP afterwards with sprite_tools.py webp)")
     targets = [out if i == 0 else out.with_name(f"{out.stem}_{i + 1}{out.suffix}") for i in range(args.n)]
-    clash = [str(t) for t in targets if t.exists()]
+    raws = [t.with_name(t.stem + ".raw.png") for t in targets] if args.transparent else []
+    clash = [str(t) for t in targets + raws if t.exists()]
     if clash and not args.overwrite:
         sys.exit(f"{', '.join(clash)} exist; reuse them or pass --overwrite (avoid regenerating approved assets)")
     refs = [Path(p) for p in (getattr(args, "image", None) or [])] + ([Path(args.mask)] if getattr(args, "mask", None) else [])
@@ -251,14 +252,14 @@ def run(args: argparse.Namespace) -> int:
             return 3
 
     items = resp.get("data") or []
-    if not items or not items[0].get("b64_json"):
-        print(f"[api] unexpected response keys: {list(resp)}; data[0] keys: {list(items[0]) if items else []}", file=sys.stderr)
+    if len(items) != args.n or not all(it.get("b64_json") for it in items):
+        print(f"[api] expected {args.n} b64_json image(s), got {len(items)}", file=sys.stderr)
         return 4
 
     out.parent.mkdir(parents=True, exist_ok=True)
     saved = []
     for i, it in enumerate(items):
-        path = targets[i] if i < len(targets) else out.with_name(f"{out.stem}_{i + 1}{out.suffix}")
+        path = targets[i]
         raw = base64.b64decode(it["b64_json"])
         if raw[:8] != b"\x89PNG\r\n\x1a\n":
             print(f"[warn] item {i} is not PNG-signed; re-encoding to PNG", file=sys.stderr)
@@ -278,13 +279,19 @@ def run(args: argparse.Namespace) -> int:
                 if not args.keep_raw:
                     raw_path.unlink()
         report = sprite_tools.validate(path, require_alpha=args.transparent, expect_size=None)
+        if info["backgroundRemoval"] and not info["backgroundRemoval"]["ok"]:
+            report["problems"].append("background removal reported ok=false")
+            report["ok"] = False
         if not report["ok"]:
             print(f"[check] {path}: {report['problems']}", file=sys.stderr)
         entry = {
             "path": _rel(path), "date": dt.date.today().isoformat(), "model": args.model,
             "endpoint": "images/edits" if args.cmd == "edit" else "images/generations",
             "size": fields.get("size"), "quality": args.quality, "prompt": prompt,
-            "references": [_rel(Path(p)) for p in (getattr(args, "image", None) or [])],
+            "references": [{"path": _rel(Path(p)), "sha256": hashlib.sha256(Path(p).read_bytes()).hexdigest()}
+                           for p in (getattr(args, "image", None) or [])],
+            "mask": ({"path": _rel(Path(args.mask)), "sha256": hashlib.sha256(Path(args.mask).read_bytes()).hexdigest()}
+                     if getattr(args, "mask", None) else None),
             "width": report["width"], "height": report["height"], "bytes": path.stat().st_size,
             "sha256": hashlib.sha256(path.read_bytes()).hexdigest(), **info,
             "revisedPrompt": it.get("revised_prompt"), "checks": report,
