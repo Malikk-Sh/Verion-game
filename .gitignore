@@ -5,3 +5,4 @@ artifacts/
 .DS_Store
 
 .vercel/
+__pycache__/
