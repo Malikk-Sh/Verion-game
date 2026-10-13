@@ -1,8 +1,9 @@
 import { ITEMS } from '../game/defs';
 import { countItem } from '../game/inventory';
-import { RECIPES, RECIPE_BY_ID, WORKBENCH_UPGRADE, cancelJob, clearQueue, collectOutput, energyRate, loadRecipeInputs, machine, nearby, queueJob, removeQueuedJob, startJob, upgradeBuilding, powerRate, MAX_REPEAT, type Recipe, type Building } from '../game/production';
+import { RECIPES, RECIPE_BY_ID, WORKBENCH_UPGRADE, cancelJob, clearQueue, collectInput, collectOutput, energyRate, loadRecipeInputs, machine, nearby, queueJob, removeQueuedJob, startJob, upgradeBuilding, powerRate, MAX_REPEAT, type Recipe, type Building } from '../game/production';
 import { readyWorldItem } from '../game/backpack';
 import { nearestNode, nearestStation, type GuideTarget } from '../game/guide';
+import { stationStatus } from '../game/stationStatus';
 import type { GameState } from '../game/state';
 import { itemArt } from './art';
 import { captureTokens, transferCraft, pulseCraft } from './craftMotion';
@@ -62,6 +63,17 @@ export function createCraftingView() {
   void stationKind; return box;
  }
  let redrawHook: (() => void) | null = null;
+ /** Bench state in plain words (II: power even while idle), with the controls the old window had:
+  * switch a bench saved as off back on, and return inputs left behind by a cleared queue. */
+ function benchStrip(g: GameState, id: string, b: Building, notify: Notify, changed: () => void, redraw: () => void) {
+  const loose = b.input.some(Boolean) && !b.queue.length;
+  if (b.enabled && !loose && (b.level === 1 || b.job)) return null; // a running job already shows its own state
+  const st = stationStatus(g, b), near = nearby(g, b), box = h('div', '', 'cr-bench ' + st.tone), text = h('div', '', 'cr-bench-text');
+  text.append(h('b', st.title), h('small', st.hint)); box.append(text);
+  if (!b.enabled) box.append(button('Включить', () => { b.enabled = true; changed(); redraw(); }, 'cr-bench-btn', !near));
+  else if (loose) box.append(button('Вернуть входы', () => notify(collectInput(g, id) ? '' : 'Освободите место в рюкзаке', 'Материалы в рюкзаке'), 'cr-bench-btn', !near));
+  return box;
+ }
  function jobCard(g: GameState, id: string, b: Building | undefined, notify: Notify, changed: () => void, redraw: () => void) {
   const job = b ? b.job : g.world.base.hand, auto = b?.level === 2, near = !b || nearby(g, b);
   const card = h('section', '', 'cr-work');
@@ -214,6 +226,7 @@ export function createCraftingView() {
    if (reason) make.append(h('p', reason, 'cr-reason warn'));
   } else make.append(h('p', r.station === 'kiln' ? 'Откройте печь: положите сырьё в верхний слот и волокно в слот топлива — плавка пойдёт сама.' : r.station === 'electrolyzer' ? 'Положите воду в генератор кислорода и подайте питание.' : 'Этот рецепт собирается в другом месте.', 'cr-reason'));
   main.append(make);
+  const strip = b?.kind === 'workbench' ? benchStrip(g, id, b, notify, changed, redraw) : null; if (strip) main.append(strip);
   // Show the work that matters for this recipe: the pocket job, or the bench (with its queue and output).
   const showHand = pocket || (!!g.world.base.hand && !b?.job), card = showHand ? (g.world.base.hand ? jobCard(g, 'hand', undefined, notify, changed, redraw) : null) : (b && (b.job || b.queue.length || b.output.some(Boolean)) ? jobCard(g, id, b, notify, changed, redraw) : null);
   if (card) main.append(card); else { progress = bar = status = null; }

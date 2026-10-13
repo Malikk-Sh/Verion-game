@@ -46,6 +46,7 @@ try{
  }
  await page.setViewportSize({width:844,height:390});await click('#quest-close');await pause();await click('#quests-button');await click('#quest-close');assert.equal((await state()).dialog,'paused');
  await click('#quests-button');await page.locator('[data-quest="bench"]').click();const ticks=(await snapshot()).meta.activeTicks;await page.locator('#journal-detail .journal-craft').first().click();await page.waitForFunction(()=>window.__vireon.getState().dialog==='production-panel');await page.waitForTimeout(800);assert.equal((await snapshot()).meta.activeTicks,ticks);await click('#close-production');assert.equal((await state()).dialog,'paused');
- check('Pause-menu entry returns to pause; a recipe opened from the paused journal keeps time frozen and closes back into the pause');
+ await click('#quests-button');await page.locator('[data-quest="bench"]').click();await page.locator('#journal-detail .journal-craft').first().click();await page.waitForFunction(()=>window.__vireon.getState().dialog==='production-panel');await page.keyboard.press('Escape');await page.waitForFunction(()=>window.__vireon.getState().dialog==='paused');assert.equal((await snapshot()).meta.activeTicks,ticks);
+ check('Pause-menu entry returns to pause; a recipe opened from the paused journal keeps time frozen and closes (button or Escape) back into the pause');
  assert.deepEqual(report.errors,[]);check('No JavaScript or browser console errors');
 }catch(e){report.failure=String(e.stack??e);throw e;}finally{await writeFile('artifacts/s3-journal-verification.json',JSON.stringify(report,null,2));await browser?.close();await server.close();}

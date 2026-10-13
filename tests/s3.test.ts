@@ -10,6 +10,8 @@ import { TANKS } from '../src/game/defs.ts';
 import { heightAt } from '../src/world.ts';
 import { placementProblem } from '../src/buildings.ts';
 import { survivalTick } from '../src/game/survival.ts';
+import { stationStatus } from '../src/game/stationStatus.ts';
+import { nearestNode } from '../src/game/guide.ts';
 
 const fresh = () => newGame('w-s3', 7, 1, heightAt(40, 42));
 const advance = (g: GameState, ms: number) => { for (let n = 0; n < ms; n += 50) { productionTick(g, 50); natureTick(g, 50); g.meta.activeTicks++; } };
@@ -120,4 +122,22 @@ test('S3: in a power shortage the dome distributor is served before workbench II
  gen.energy = 600; productionTick(g, 50, null, 10);
  assert.equal(telemetry.power.get(dist.id), Math.round((10 + Math.abs(10 - 20) / 20) * 50));
  assert.equal(telemetry.power.get(bench.id), 600 - Math.round((10 + Math.abs(10 - 20) / 20) * 50));
+});
+test('S3: the dome checklist wants pipe and power at the same distributor; an idle workbench II reports its power', () => {
+ const g = fresh(), gen = makeBuilding(g, 'biogenerator', 44, 0, 40), electro = makeBuilding(g, 'electrolyzer', 48, 0, 36), dome = makeBuilding(g, 'dome', 52, 0, 40);
+ const piped = makeBuilding(g, 'distributor', 51, 0, 40), powered = makeBuilding(g, 'distributor', 53, 0, 40);
+ addItems(g.player.inventory, 'cable', 9); addItems(g.player.inventory, 'gas_pipe', 9);
+ assert.equal(connect(g, 'gas_pipe', electro.id, piped.id), ''); assert.equal(connect(g, 'cable', gen.id, powered.id), '');
+ gen.energy = 400000; productionTick(g, 50, null, 10);
+ const checks = stationStatus(g, dome).checks!, check = (label: RegExp) => checks.find(c => label.test(c.label))!.ok;
+ assert.equal(check(/Труба/), true); assert.equal(check(/Питание/), false);
+ const bench = makeBuilding(g, 'workbench', 46, 0, 44); bench.level = 2;
+ assert.equal(stationStatus(g, bench).title, 'Не подключён');
+ assert.equal(connect(g, 'cable', gen.id, bench.id), ''); assert.match(stationStatus(g, bench).title, /Питание есть/);
+});
+test('S3: beside a far deposit the compass points at it, not back to the valley', () => {
+ const g = fresh(), far = NODE_BY_ID.get('iron-canyon')!;
+ assert.notEqual(nearestNode(g, 'iron_raw')!.name, far.name);
+ Object.assign(g.player, { x: far.x + 3, z: far.z });
+ assert.equal(nearestNode(g, 'iron_raw')!.name, far.name);
 });

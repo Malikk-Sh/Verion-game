@@ -67,7 +67,10 @@ export function stationStatus(g: GameState, b: Building): StationStatus {
   }
   case 'dome': {
    const seal = sealCheck(b.zone.shell), inside = g.world.base.buildings.filter(d => d.kind === 'distributor' && insideDome(b, d.x, d.y, d.z));
-   const pipe = inside.some(d => g.world.base.links.some(l => l.kind === 'gas_pipe' && l.to === d.id)), power = inside.some(d => hasPower(g, d)), feed = roomRate(b.id);
+   // Pipe and power must meet at one distributor: each one feeds the dome with the power given to it.
+   const piped = (d: Building) => g.world.base.links.some(l => l.kind === 'gas_pipe' && l.to === d.id);
+   const best = inside.find(d => piped(d) && hasPower(g, d)) ?? inside.find(piped) ?? inside[0];
+   const pipe = !!best && piped(best), power = !!best && hasPower(g, best), feed = roomRate(b.id);
    const checks: Check[] = [
     { ok: seal.sealed, label: 'Оболочка герметична', fix: 'Пробита панель — ремонт пока недоступен, переставьте купол.' },
     { ok: inside.length > 0, label: 'Распределитель внутри', fix: 'Поставьте распределитель внутри купола (можно целиться сквозь стекло).' },
@@ -85,7 +88,9 @@ export function stationStatus(g: GameState, b: Building): StationStatus {
    if (b.job && !running) return { tone: 'warn', title: 'Выход заполнен', hint: 'Заберите готовые предметы.' };
    if (running && b.level === 1) return nearby(g, b) ? { tone: 'ok', title: `Сборка ${pct}%`, hint: outName } : { tone: 'warn', title: 'Пауза', hint: 'Верстак I работает, только когда вы рядом.' };
    if (running) return powerRate(b.id) > 0 ? { tone: 'ok', title: `Автосборка ${pct}%`, hint: outName + (b.queue.length ? ` · в очереди ${b.queue.length}` : '') } : { tone: 'warn', title: 'Нет питания', hint: 'Верстак II работает от кабеля: 4 EU/с.' };
-   return { tone: 'idle', title: b.level === 2 ? 'Очередь пуста' : 'Свободен', hint: 'Откройте и выберите рецепт.' };
+   if (b.level === 2 && !generatorIn(g, b).length) return { tone: 'warn', title: 'Не подключён', hint: 'Протяните кабель от биогенератора: 4 EU/с во время сборки.' };
+   if (b.level === 2 && !hasPower(g, b)) return { tone: 'warn', title: 'Нет питания', hint: 'Генератору в сети нужно волокно.' };
+   return { tone: 'idle', title: b.level === 2 ? 'Питание есть · очередь пуста' : 'Свободен', hint: 'Выберите рецепт.' };
   }
  }
  void telemetry;

@@ -292,7 +292,7 @@ function boot(){
   setDialog('info-panel');updateUI();
  }
  addEventListener('keydown',event=>{
-  if(event.code==='Escape'){event.preventDefault();if(dialog==='quest-panel'){questBook.escape();return;}if((dialog==='hud-settings-panel'||dialog==='visor-settings-panel'||dialog==='diagnostics-panel')){setDialog('settings');return;}if(dialog==='settings'){setDialog(settingsReturn);return;}if(started){if(running)pause();else resume();}return;}
+  if(event.code==='Escape'){event.preventDefault();if(dialog==='quest-panel'){questBook.escape();return;}if((dialog==='hud-settings-panel'||dialog==='visor-settings-panel'||dialog==='diagnostics-panel')){setDialog('settings');return;}if(dialog==='settings'){setDialog(settingsReturn);return;}if(dialog==='production-panel'){el('close-production').click();return;}if(started){if(running)pause();else resume();}return;}
   if(event.target instanceof HTMLElement && (event.target.isContentEditable || event.target.closest('input,textarea,select')))return;
   if(event.code==='KeyJ'&&started&&!event.repeat){event.preventDefault();openQuests();return;}
   if(event.code==='KeyM'&&started&&!event.repeat){event.preventDefault();if(dialog==='map-panel')resume();else setDialog('map-panel');return;}
@@ -585,7 +585,8 @@ function boot(){
   if(id!==lastStep){lastStep=id;guideOverride=null;guideCache.at=-1;}
   if(!id){el('objective-kicker').textContent='Глава завершена';el('objective-task').textContent='Исследуйте Вердану';el('objective-icon').replaceChildren(itemArt('dome'));return 'База работает';}
   const step=guideStep(game,id),task=step.tasks.find(t=>!t.done),{done:n,total}=progressCount(game);
-  el('objective-kicker').textContent=(game.progress.quests.tracked===id?'Выбрано · ':'Цель ')+(n+1)+' / '+total;
+  // The optional chapter has no place in the main count (18 steps): it is labelled instead of showing 19 / 18.
+  el('objective-kicker').textContent=(game.progress.quests.tracked===id?'Выбрано · ':step.optional?'':'Цель ')+(step.optional?'Дополнительно':Math.min(n+1,total)+' / '+total);
   const taskEl=el('objective-task'),key=task?task.label+task.have:'';
   if(task){taskEl.replaceChildren(document.createTextNode(task.label+(task.need>1?' ':'')));if(task.need>1){const b=document.createElement('b');b.textContent=`${task.have}/${task.need}`;taskEl.append(b);}}else taskEl.textContent='Готово — проверьте журнал';
   if(key!==lastTaskKey){if(lastTaskKey){const ob=el('objective');ob.classList.remove('tick');void ob.offsetWidth;ob.classList.add('tick');}lastTaskKey=key;}
