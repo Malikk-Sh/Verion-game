@@ -12,6 +12,7 @@ import { placementProblem } from '../src/buildings.ts';
 import { survivalTick } from '../src/game/survival.ts';
 import { stationStatus } from '../src/game/stationStatus.ts';
 import { nearestNode } from '../src/game/guide.ts';
+import { refreshQuestProgress } from '../src/game/quests.ts';
 
 const fresh = () => newGame('w-s3', 7, 1, heightAt(40, 42));
 const advance = (g: GameState, ms: number) => { for (let n = 0; n < ms; n += 50) { productionTick(g, 50); natureTick(g, 50); g.meta.activeTicks++; } };
@@ -92,11 +93,12 @@ test('S3: a turned dome keeps its airlock on the turned side, in and out', () =>
  Object.assign(g.player, { x: 60, y: 0, z: 42.8 });
  assert.equal(beginPassage(g, d.id), 'Подойдите к шлюзу купола');
  Object.assign(g.player, { x: 62.8, z: 40 });
- assert.equal(beginPassage(g, d.id), '');
+ d.zone.q = 3999; assert.match(beginPassage(g, d.id), /4 GU/, 'Entry needs the full 4 GU charge');
+ d.zone.q = 8000; assert.equal(beginPassage(g, d.id), ''); assert.equal(d.zone.q, 4000);
  const enter = productionTick(g, 6000).passage!;
  assert.ok(insideDome(d, enter.x, enter.y, enter.z)); assert.equal(Math.round(enter.x), 61); assert.equal(enter.z, 40);
  Object.assign(g.player, { x: enter.x, y: enter.y, z: enter.z });
- assert.equal(beginPassage(g, d.id), '');
+ d.zone.q = 0; assert.equal(beginPassage(g, d.id), '', 'Leaving an empty dome is always possible');
  const leave = productionTick(g, 6000).passage!;
  assert.ok(!insideDome(d, leave.x, leave.y, leave.z)); assert.ok(leave.x > 63); assert.equal(leave.z, 40);
 });
@@ -148,4 +150,9 @@ test('S3: beside a far deposit the compass points at it, not back to the valley'
  assert.notEqual(nearestNode(g, 'iron_raw')!.name, far.name);
  Object.assign(g.player, { x: far.x + 3, z: far.z });
  assert.equal(nearestNode(g, 'iron_raw')!.name, far.name);
+});
+test('S3: the distributor step needs a distributor inside a dome, not just anywhere', () => {
+ const g = fresh(); makeBuilding(g, 'distributor', 46, 0, 46); makeBuilding(g, 'dome', 56, 0, 40);
+ refreshQuestProgress(g); assert.ok(!g.progress.quests.completed.includes('distributor'));
+ makeBuilding(g, 'distributor', 56, 0, 40); refreshQuestProgress(g); assert.ok(g.progress.quests.completed.includes('distributor'));
 });

@@ -1,5 +1,5 @@
 import { NODES } from './resources';
-import { RECIPES, habitable, WORKBENCH_UPGRADE } from './production';
+import { RECIPES, habitable, insideDome, WORKBENCH_UPGRADE } from './production';
 import { recordQuestFact } from './questFacts';
 import { countItem } from './inventory';
 import { QUESTS, QUEST_BY_ID, type QuestId } from './questCatalog';
@@ -42,7 +42,7 @@ export function refreshQuestProgress(g: GameState): boolean {
   metals:item('iron')&&item('copper'),glass:item('glass'),wrench:item('wrench'),circuit:item('circuit'),
   generator:has('biogenerator'),electrolyzer:has('electrolyzer'),dome:has('dome'),
   bench2:g.world.base.buildings.some(b=>b.kind==='workbench'&&b.level===2),
-  power:fact('system:power'),distributor:has('distributor'),auto:fact('system:auto'),
+  power:fact('system:power'),distributor:g.world.base.buildings.some(b=>b.kind==='distributor'&&g.world.base.buildings.some(d=>insideDome(d,b.x,b.y,b.z))),auto:fact('system:auto'),
   oxygen:fact('craft:electrolysis'),refill:fact('system:refill'),air:g.world.base.buildings.some(habitable),
   base:fact('system:base'),
  };

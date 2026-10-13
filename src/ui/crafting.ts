@@ -27,8 +27,11 @@ export function recipeCategory(r: Recipe): CraftCategory {
 const VISIBLE = RECIPES.filter(r => r.id !== 'legacy_melt').sort((a, b) => rank(a.id) - rank(b.id));
 /** How many batches the player can pay for now (backpack plus what is already loaded). */
 export function affordable(g: GameState, r: Recipe, b?: Building): number {
+ // Inputs already promised to queued batches of workbench II are not free (queueJob counts them the same way).
+ const promised: Record<string, number> = {};
+ for (const rid of b?.queue ?? []) for (const [id, k] of Object.entries(RECIPE_BY_ID.get(rid)?.inputs ?? {})) promised[id] = (promised[id] ?? 0) + k;
  let n = Infinity;
- for (const [id, k] of Object.entries(r.inputs)) n = Math.min(n, Math.floor((countItem(g.player.inventory, id) + countItem(b?.input ?? [], id) + (id === 'water' && b ? Math.floor(b.water / 1000) : 0)) / k));
+ for (const [id, k] of Object.entries(r.inputs)) n = Math.min(n, Math.floor(Math.max(0, countItem(g.player.inventory, id) + countItem(b?.input ?? [], id) + (id === 'water' && b ? Math.floor(b.water / 1000) : 0) - (promised[id] ?? 0)) / k));
  return Number.isFinite(n) ? n : 0;
 }
 type Notify = (reason: string, success?: string) => void;

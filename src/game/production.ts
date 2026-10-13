@@ -211,6 +211,9 @@ export function beginPassage(g: GameState, id: string): string {
  const b=machine(g,id);if(!b||b.kind!=='dome')return 'Нужен купол';if(g.world.base.passage)return 'Шлюз занят';
  const inside=insideDome(b,g.player.x,g.player.y,g.player.z),f=domeFront(b);
  if(!inside&&Math.hypot(g.player.x-(b.x+f.x*2.8),g.player.z-(b.z+f.z*2.8))>3)return 'Подойдите к шлюзу купола';
+ // Entering charges the chamber with the full 4 GU (it carries the player's breath for the cycle); leaving is always
+ // possible, paying what is left, so nobody is trapped in an empty dome.
+ if(!inside&&b.zone.q<4000)return 'В куполе меньше 4 GU воздуха — сначала наполните его';
  const cost=Math.min(b.zone.q,4000);b.zone.q-=cost;
  g.world.base.passage={domeId:id,direction:inside?'out':'in',remainingMs:6000};
  return ''; 

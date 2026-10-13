@@ -13,9 +13,10 @@ const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(ma
 const elapsedAfter = (before: number, elapsed: number, grace: number) => Math.max(0, before + elapsed - grace) - Math.max(0, before - grace);
 
 /** Advances only accepted active time. Oxygen is conserved even across source exhaustion. */
-/** The dome whose airlock is cycling. Its chamber was charged when the cycle started (beginPassage: up to 4 GU of dome
- * air), so the 6 s cycle is breathable without drawing any source again: a paid passage is never a suffocation trap. */
-const cyclingDome = (state: GameState) => { const p = state.world.base.passage; return p ? machine(state, p.domeId) : undefined; };
+/** The dome the player is entering through its airlock. Entry is paid with the full 4 GU of dome air when the cycle
+ * starts (beginPassage), and that charge carries the breath for the 6 s: a paid passage is never a suffocation trap.
+ * Leaving needs no cover: the player is still inside the dome and breathes it (or their tanks) as usual. */
+const cyclingDome = (state: GameState) => { const p = state.world.base.passage; return p?.direction === 'in' ? machine(state, p.domeId) : undefined; };
 export function survivalTick(state: GameState, dt: number, insideCapsule: boolean, running = false): SurvivalEvent {
   if (state.player.vitals.health <= 0) return 'death';
   const ms = Math.max(0, Math.round(dt * 1000));
