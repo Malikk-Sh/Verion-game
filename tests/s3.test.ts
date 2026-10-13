@@ -227,10 +227,18 @@ test('S3: a power deficit inside one class is shared in proportion to the reques
  const got = sinks.map(s => out.get(s.id)!);
  assert.equal(got.reduce((a, b) => a + b, 0), 40 * ms, 'The whole supply is used');
  for (const v of got) { assert.ok(Number.isInteger(v)); assert.ok(v >= 181 && v <= 182, String(v)); }
- // Equal remainders rotate: over 11 shortage ticks every consumer receives exactly the same total.
+ // Carried fractions: over 11 shortage ticks every consumer receives exactly the same total.
  const total = new Map(sinks.map(s => [s.id, out.get(s.id)!]));
  for (let i = 1; i < 11; i++) { const d = deliverPower(g, [gen, ...sinks], [gen], sinks.map(b => ({ b, need: 4 * ms, priority: 2 })), ms).delivered; for (const s of sinks) total.set(s.id, total.get(s.id)! + d.get(s.id)!); }
  assert.deepEqual(new Set(total.values()), new Set([40 * ms]));
+ // Unequal requests stay proportional over time too: 600 and 3 × 525 from 2000 per tick, 50 ticks.
+ const u = fresh(); addItems(u.player.inventory, 'cable', 20);
+ const ug = makeBuilding(u, 'biogenerator', 50, 0, 50); ug.energy = 400000;
+ const us = [[54, 50], [46, 50], [50, 54], [50, 46]].map(([x, z]) => makeBuilding(u, 'distributor', x, 0, z)), needs = [600, 525, 525, 525];
+ for (const s of us) assert.equal(connect(u, 'cable', ug.id, s.id), '');
+ const sum = us.map(() => 0);
+ for (let i = 0; i < 50; i++) { const d = deliverPower(u, [ug, ...us], [ug], us.map((b, j) => ({ b, need: needs[j], priority: 0 })), ms).delivered; us.forEach((b, j) => { sum[j] += d.get(b.id)!; }); }
+ needs.forEach((n, j) => assert.ok(Math.abs(sum[j] - 50 * 2000 * n / 2175) < 1, `${n}: ${sum[j]}`));
  // Unequal requests keep their ratio: 30 vs 10 EU/s from 20 EU/s → 15 and 5.
  const h = fresh(); addItems(h.player.inventory, 'cable', 10);
  const hg = makeBuilding(h, 'biogenerator', 50, 0, 50), a = makeBuilding(h, 'distributor', 54, 0, 50), b = makeBuilding(h, 'distributor', 46, 0, 50); hg.energy = 20 * ms;

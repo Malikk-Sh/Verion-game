@@ -234,12 +234,14 @@ export const roomRate = (id: string) => (telemetry.room.get(id) ?? 0) / telemetr
  * generators (each up to 40 EU/s of its buffer) through the cable graph is filled class by class (0 → 1 → 2) on the
  * residual graph, so a lower class never takes what a higher one can still receive. Returns what each consumer
  * receives and what each generator gives, in milli-EU for this tick. */
-/** Turn for equal remainders: rotates every shared deficit, so a lasting shortage stays proportional over time. */
-let remainderTurn = 0;
+/** Unit fractions each consumer is still owed (+) or got ahead (−) from earlier shared deficits, per base. Whole-unit
+ *  shares then stay proportional over time; nothing is saved (a reload restarts from zero, off by less than a unit). */
+const powerDebt = new WeakMap<object, Map<string, number>>();
 export function deliverPower(g: GameState, group: Building[], supply: Building[], requests: { b: Building; need: number; priority: number }[], ms: number) {
  const at = new Map(group.map((b, i) => [b.id, i + 2])), n = group.length + 2, cap = Array.from({ length: n }, () => new Array<number>(n).fill(0));
  for (const l of g.world.base.links) if (l.kind === 'cable') { const a = at.get(l.from), b = at.get(l.to); if (a !== undefined && b !== undefined) { cap[a][b] += 120 * ms; cap[b][a] += 120 * ms; } }
- const offered = new Map(supply.map(b => [b.id, Math.min(b.energy, 40 * ms)]));
+ const offered = new Map(supply.map(b => [b.id, Math.min(b.energy, 40 * ms)])), debt = powerDebt.get(g.world.base) ?? new Map<string, number>();
+ powerDebt.set(g.world.base, debt);
  for (const [id, v] of offered) cap[0][at.get(id)!] += v;
  const maxflow = (c: number[][]) => {
   let total = 0;
@@ -259,10 +261,13 @@ export function deliverPower(g: GameState, group: Building[], supply: Building[]
   let best = route(cls.map(r => r.need));
   if (best.flow < want) {
    // A deficit inside one class is shared in proportion to the requests (SYSTEMS): every consumer slows down
-   // instead of the first ones found taking it all. Whole units with largest remainders keep gas amounts integer.
-   const turn = remainderTurn++, ring = (i: number) => (i - turn % cls.length + cls.length) % cls.length;
-   const share = (k: number) => { const raw = cls.map(r => r.need * k / want), t = raw.map(Math.floor); let rest = k - t.reduce((s, v) => s + v, 0);
-    for (const i of raw.map((_, i) => i).sort((a, b) => (raw[b] - t[b]) - (raw[a] - t[a]) || ring(a) - ring(b))) if (rest > 0) { t[i]++; rest--; }
+   // instead of the first ones found taking it all. Whole units (gas amounts stay integer) by largest remainder,
+   // with each consumer's carried fraction, so the split stays proportional over many ticks.
+   const share = (k: number) => {
+    const raw = cls.map(r => Math.min(r.need, Math.max(0, r.need * k / want + (debt.get(r.b.id) ?? 0)))), t = raw.map(Math.floor);
+    let rest = k - t.reduce((s, v) => s + v, 0); const order = raw.map((_, i) => i).sort((a, b) => (raw[b] - t[b]) - (raw[a] - t[a]));
+    while (rest > 0 && order.some(i => t[i] < cls[i].need)) for (const i of order) if (rest > 0 && t[i] < cls[i].need) { t[i]++; rest--; }
+    while (rest < 0 && order.some(i => t[i] > 0)) for (const i of [...order].reverse()) if (rest < 0 && t[i] > 0) { t[i]--; rest++; }
     return t; };
    let fair = route(share(best.flow));
    if (fair.flow < best.flow) { // a cable bottleneck: the largest fair share that the cables can carry
@@ -271,7 +276,9 @@ export function deliverPower(g: GameState, group: Building[], supply: Building[]
     sinks.forEach((v, i) => { fair.c[v][1] += cls[i].need - fair.targets[i]; }); maxflow(fair.c); // what only some consumers can reach still goes to them
    }
    best = fair;
-  }
+   const given = sinks.map(v => best.c[1][v]), total = given.reduce((s, v) => s + v, 0);
+   cls.forEach((r, i) => debt.set(r.b.id, Math.max(-1, Math.min(1, r.need * total / want + (debt.get(r.b.id) ?? 0) - given[i]))));
+  } else for (const r of cls) debt.delete(r.b.id);
   for (let i = 0; i < n; i++) cap[i] = best.c[i];
   for (const v of sinks) cap[v][1] = 0; // this class is served; its unmet need is not offered to the next one
  }
