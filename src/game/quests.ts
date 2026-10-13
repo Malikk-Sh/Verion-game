@@ -1,6 +1,7 @@
 import { NODES } from './resources';
-import { RECIPES, habitable, WORKBENCH_UPGRADE } from './production';
+import { RECIPES, habitable, insideDome, WORKBENCH_UPGRADE } from './production';
 import { recordQuestFact } from './questFacts';
+import { countItem } from './inventory';
 import { QUESTS, QUEST_BY_ID, type QuestId } from './questCatalog';
 import type { GameState } from './state';
 
@@ -36,11 +37,12 @@ export function refreshQuestProgress(g: GameState): boolean {
  if(oxygenEvidence||waterEvidence||g.world.base.buildings.some(b=>b.kind==='dome'&&b.zone.purity>0))changed=recordQuestFact(g,'system:power')||changed;
  if(slots.filter(s=>s?.itemId==='tool_stone').length>=2)changed=recordQuestFact(g,'craft:craft_tool_stone')||changed;
  const achieved: Record<QuestId, boolean> = {
-  materials:item('stone')&&item('fiber'), bench:has('workbench'), tool:fact('craft:craft_tool_stone'), kiln:has('kiln'),
+  // The first step asks for exactly what the workbench costs (the journal's counters), or a bench already standing.
+  materials:has('workbench')||item('stone')&&item('fiber')&&countItem(g.player.inventory,'stone')>=8&&countItem(g.player.inventory,'fiber')>=4, bench:has('workbench'), tool:fact('craft:craft_tool_stone'), kiln:has('kiln'),
   metals:item('iron')&&item('copper'),glass:item('glass'),wrench:item('wrench'),circuit:item('circuit'),
   generator:has('biogenerator'),electrolyzer:has('electrolyzer'),dome:has('dome'),
   bench2:g.world.base.buildings.some(b=>b.kind==='workbench'&&b.level===2),
-  power:fact('system:power'),distributor:has('distributor'),auto:fact('system:auto'),
+  power:fact('system:power'),distributor:g.world.base.buildings.some(b=>b.kind==='distributor'&&g.world.base.buildings.some(d=>insideDome(d,b.x,b.y,b.z))),auto:fact('system:auto'),
   oxygen:fact('craft:electrolysis'),refill:fact('system:refill'),air:g.world.base.buildings.some(habitable),
   base:fact('system:base'),
  };

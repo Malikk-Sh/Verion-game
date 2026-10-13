@@ -1,0 +1,34 @@
+/* ---------- S3 motion: pickup feed, hotbar bump, entrances ---------- */
+#pickup-feed{position:absolute;left:calc(var(--hud-hotbar-left) + var(--hud-hotbar-width));bottom:calc(var(--sb) + 70px * var(--hud-hotbar) + 34px);transform:translateX(-100%);display:flex;flex-direction:column-reverse;align-items:flex-end;gap:4px;pointer-events:none;z-index:4}
+.feed-entry{display:flex;align-items:center;gap:6px;height:28px;padding:0 10px 0 4px;font-size:12.5px;white-space:nowrap;background:linear-gradient(90deg,rgba(5,22,26,0),rgba(9,38,43,.9) 30%);box-shadow:inset -2px 0 0 var(--aqua);animation:feed-in .35s cubic-bezier(.2,.8,.2,1)}
+.feed-entry .art{width:24px;height:24px}.feed-entry .art img{width:100%;height:100%;object-fit:contain}
+.feed-entry b{color:var(--aqua);font-variant-numeric:tabular-nums;min-width:22px;text-align:right}.feed-entry small{color:var(--muted);font-variant-numeric:tabular-nums}
+.feed-entry.bump b{animation:feed-bump .35s ease}.feed-entry.out{animation:feed-out .3s ease forwards}
+@keyframes feed-in{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
+@keyframes feed-out{to{opacity:0;transform:translateX(12px)}}
+@keyframes feed-bump{40%{transform:scale(1.35);color:#fff}}
+.feed-token{position:fixed;z-index:30;width:36px;height:36px;pointer-events:none;filter:drop-shadow(0 0 8px rgba(84,226,236,.7))}.feed-token img{width:100%;height:100%;object-fit:contain}
+#hotbar .cell.bump,#hud-buttons .bump{animation:cell-bump .45s cubic-bezier(.2,.8,.2,1)}
+@keyframes cell-bump{0%{filter:brightness(1)}30%{filter:brightness(1.8);transform:scale(1.12)}100%{filter:none;transform:none}}
+/* Lists ease in once when a window opens. */
+.panel:not([hidden]) .journal-step,.panel:not([hidden]) .cr-row{animation:row-in .38s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(min(var(--i,0),14) * 22ms)}
+.production-panel.redraw .cr-row,.journal-panel.redraw .journal-step{animation:none}
+@keyframes row-in{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:none}}
+.st-status,.st-process,.st-meter,.st-links,.cr-card-head,.cr-req,.cr-ing{animation:fade-up .4s cubic-bezier(.2,.8,.2,1) both}
+.production-panel.redraw .st-status,.production-panel.redraw .st-process,.production-panel.redraw .st-meter,.production-panel.redraw .st-links,.production-panel.redraw .cr-card-head,.production-panel.redraw .cr-req,.production-panel.redraw .cr-ing{animation:none}
+@keyframes fade-up{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+/* Buttons: tactile press and a soft glow sweep on primary actions. */
+.cr-create:not(:disabled),.st-btn.accent{position:relative;overflow:hidden}
+.cr-create:not(:disabled)::after,.st-btn.accent::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 35%,rgba(255,255,255,.45) 50%,transparent 65%);transform:translateX(-120%);animation:sweep 3.2s ease-in-out infinite}
+@keyframes sweep{0%,60%{transform:translateX(-120%)}85%,100%{transform:translateX(120%)}}
+.cr-row:active,.journal-step:active,.st-btn:active,.st-bag-cell:active{transform:scale(.97)}
+@media(prefers-reduced-motion:reduce){.feed-entry,.feed-entry.bump b,.feed-entry.out,#hotbar .cell.bump,.journal-step,.cr-row,.st-status,.st-process,.st-meter,.st-links,.cr-card-head,.cr-req,.cr-ing,.cr-create::after,.st-btn.accent::after{animation:none!important}}
+/* ---------- S3 inventory: uses of the selected item ---------- */
+.d-uses{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin:2px 0 4px}
+.d-uses-label{font-size:11px;color:var(--cyan);margin-right:2px}
+.d-use{width:36px;height:36px;min-width:34px;min-height:34px;padding:3px;border:0;background:rgba(6,28,33,.7);box-shadow:inset 0 0 0 1px var(--glow-soft);clip-path:polygon(5px 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%,0 5px)}
+.d-use .art,.d-use img{width:100%;height:100%;object-fit:contain}.d-use:hover{box-shadow:inset 0 0 0 1px var(--aqua)}
+@media(max-height:500px){.d-uses{gap:3px;margin:0 0 2px}.d-use{width:34px;height:34px}.d-uses-label{display:none}}
+#hud~.veil .inv-detail,.inv-detail{overflow-y:auto;scrollbar-width:thin;touch-action:pan-y}
+.inv-detail .d-actions{margin-top:4px}
+.inv-detail .d-actions.two .ui-btn{padding:0 8px;gap:6px;font-size:12.5px}.inv-detail .d-actions.two .ui-btn span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

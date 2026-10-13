@@ -3,6 +3,8 @@ import { INVENTORY_SIZE, stateful, type Slot } from '../game/inventory';
 import { HOTBAR_SIZE, type GameState } from '../game/state';
 import { dropSlot, equipPart, installTank, moveSlot, readyWorldItem, removeTank, sortRest, splitSlot, unequipPart, wornParts, type Result } from '../game/backpack';
 import { figureArt, ghostArt, itemArt } from './art';
+import { RECIPES } from '../game/production';
+import { eatPulp } from '../game/survival';
 /**
  * Inventory and suit screens (approved mock-ups «Инвентарь» and «Костюм»). Pure DOM over the
  * game state; every change goes through a backpack.ts transaction and then host.changed().
@@ -16,6 +18,8 @@ export type PanelHost = {
  tone(kind: 'ui' | 'item' | 'warn'): void;
  show(which: 'inventory-panel' | 'suit-panel'): void;
  close(): void;
+ /** Opens the workshop on a recipe (S3 «Где применяется»). */
+ recipe?(id: string): void;
 };
 type Sel = { kind: 'cell'; i: number } | { kind: 'tank'; b: 0 | 1 };
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -88,11 +92,11 @@ export function createPanels(host: PanelHost) {
    if (sel?.kind === 'cell' && sel.i === i) c.classList.add('selected');
    if (moveFrom === i) c.classList.add('source');
    c.setAttribute('aria-label', cellAria(s, i) + (i < HOTBAR_SIZE ? ', быстрый доступ' : ''));
-   c.onclick = () => { if (dragged) { dragged = false; return; } selectCell(i); };
+   c.onclick = () => { if (dragged) { dragged = false; return; } const now = performance.now(); if (lastTap.i === i && now - lastTap.t < 320 && moveFrom === null && inv[i]) { lastTap = { i: -1, t: 0 }; quickSwap(i); return; } lastTap = { i, t: now }; selectCell(i); };
    c.addEventListener('pointerdown', e => startDrag(e, i, c));
    return c;
   }));
-  el('pack-hint').textContent = moveFrom !== null ? `Выберите ячейку назначения для «${ITEMS[inv[moveFrom]!.itemId].short}». Пустая — перенос, занятая — обмен.` : message || 'Первая строка — быстрый доступ. Время идёт.';
+  el('pack-hint').textContent = moveFrom !== null ? `Выберите ячейку назначения для «${ITEMS[inv[moveFrom]!.itemId].short}». Пустая — перенос, занятая — обмен.` : message || 'Первая строка — быстрый доступ. Двойное нажатие — перенос между строкой и рюкзаком. Время идёт.';
   drawDetail(g);
  }
  function drawDetail(g: GameState) {
@@ -103,6 +107,13 @@ export function createPanels(host: PanelHost) {
   box.append(h('strong', 'd-name', d.name), h('span', 'd-cat', CATEGORY_LABEL[d.category] + (sel?.kind === 'cell' && sel.i < HOTBAR_SIZE ? ` · быстрый доступ ${sel.i + 1}` : '')), itemArt(s.itemId, 'art d-art'));
   if (st) { const row = h('div', 'd-state'); row.append(h('span', '', st.label + ':'), h('b', '', st.value)); const bar = h('i', 'd-bar ' + st.kind); bar.style.setProperty('--r', String(st.ratio)); box.append(row, bar); }
   box.append(h('p', 'd-desc', d.description));
+  // S3: what this item is good for — each result opens its recipe in the workshop.
+  const uses = RECIPES.filter(r => r.inputs[s.itemId] && r.id !== 'legacy_melt');
+  if (uses.length && host.recipe) {
+   const row = h('div', 'd-uses'); row.append(h('span', 'd-uses-label', 'Применяется:'));
+   for (const r of uses.slice(0, 8)) { const out = Object.keys(r.outputs)[0], b = h('button', 'd-use'); b.type = 'button'; b.append(itemArt(out)); b.title = (ITEMS[out]?.name ?? out) + ' — открыть рецепт'; b.setAttribute('aria-label', b.title); b.onclick = () => { host.tone('ui'); host.recipe!(r.id); }; row.append(b); }
+   box.append(row);
+  }
   const acts = h('div', 'd-actions');
   if (sel?.kind === 'tank') {
    const b = sel.b, rm = button('Снять в рюкзак', 'i-download'); rm.onclick = () => { const r = removeTank(g, b); say(r, 'Баллон перенесён в рюкзак'); if (r.ok) host.changed('inventory'); drawInventory(); }; acts.append(rm);
@@ -113,6 +124,8 @@ export function createPanels(host: PanelHost) {
     const use=button(s.itemId==='cable'||s.itemId==='gas_pipe'?'Соединить':'Разместить','i-plug');use.id='act-world';
     use.onclick=()=>{const r=readyWorldItem(g,i);say(r);if(r.ok){moveFrom=null;host.changed('inventory');host.close();}else drawInventory();};acts.append(use);
    }
+   if (s.itemId === 'pulp') { const eat = button('Съесть', 'i-food'); eat.id = 'act-eat'; eat.onclick = () => { const r = eatPulp(g); message = r === 'ate' ? '+8 сытости, +1 HP' : g.player.vitals.satiety >= 100 ? 'Вы сыты' : 'Подождите перед следующей порцией'; host.tone(r === 'ate' ? 'item' : 'warn'); if (r === 'ate') host.changed('inventory'); drawInventory(); }; acts.append(eat); }
+   if (i >= HOTBAR_SIZE) { const quick = button('В быстрый доступ', 'i-swap'); quick.id = 'act-quick'; quick.onclick = () => { const free = g.player.inventory.slice(0, HOTBAR_SIZE).findIndex(v => !v), to = free >= 0 ? free : g.player.hotbar; const r = moveSlot(g.player.inventory, i, to); say(r, 'В быстром доступе: ячейка ' + (to + 1)); if (r.ok) { sel = { kind: 'cell', i: to }; host.changed('inventory'); } drawInventory(); }; acts.append(quick); }
    if (moveFrom === i) { const cancel = button('Отмена', 'i-close'); cancel.onclick = () => { moveFrom = null; message = 'Перемещение отменено'; host.tone('ui'); drawInventory(); }; acts.append(cancel); }
    else { const mv = button('Переместить', 'i-swap'); mv.id = 'act-move'; mv.onclick = () => { moveFrom = i; message = ''; host.tone('ui'); drawInventory(); }; acts.append(mv); }
    if (!stateful(s) && s.count > 1) { const sp = button('Разделить', 'i-split'); sp.id = 'act-split'; sp.onclick = () => { const r = splitSlot(g.player.inventory, i); say(r, 'Стак разделён'); if (r.ok) host.changed('inventory'); drawInventory(); }; acts.append(sp); }
@@ -124,6 +137,14 @@ export function createPanels(host: PanelHost) {
   }
   acts.classList.toggle('two', acts.childElementCount > 2);
   box.append(acts);
+ }
+ /** Double tap: hotbar row ↔ backpack, first free cell on the other side. */
+ let lastTap = { i: -1, t: 0 };
+ function quickSwap(i: number) {
+  const g = host.game(); if (!g) return; const inv = g.player.inventory;
+  const to = i < HOTBAR_SIZE ? inv.findIndex((v, k) => k >= HOTBAR_SIZE && !v) : inv.slice(0, HOTBAR_SIZE).findIndex(v => !v);
+  if (to < 0) { message = i < HOTBAR_SIZE ? 'В рюкзаке нет свободной ячейки' : 'Быстрый доступ заполнен'; host.tone('warn'); drawInventory(); return; }
+  const r = moveSlot(inv, i, to); say(r, i < HOTBAR_SIZE ? 'Убрано в рюкзак' : 'В быстром доступе'); if (r.ok) { sel = { kind: 'cell', i: to }; host.changed('inventory'); } drawInventory();
  }
  // Optional drag & drop (mouse or finger): same transaction as «Переместить».
  let dragged = false, drag: { i: number; x: number; y: number; id: number; ghost?: HTMLElement } | null = null;

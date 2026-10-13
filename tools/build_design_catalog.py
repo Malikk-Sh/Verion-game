@@ -202,9 +202,9 @@ for metal in ['iron','copper','gold','velite','astrite']:
  scope='expansion2' if metal=='astrite' else 'core'
  R('pack_'+metal,'hand',{metal+'_speck':4},{metal+'_dust':1},1,scope=scope)
  for form in ['raw','dust']:
-  R('smelt_'+metal+'_'+form,'kiln',{metal+'_'+form:1,'fiber':2},{metal:1},6,scope=scope,note='Печь сжигает волокна; снаружи в вакууме требует 2 GU O₂/с или пригодное помещение.')
+  R('smelt_'+metal+'_'+form,'kiln',{metal+'_'+form:1,'fiber':1},{metal:1},6,scope=scope,note='Печь сжигает волокно (S3: 1 на плавку); снаружи в вакууме требует 2 GU O₂/с или пригодное помещение.')
   R('arc_'+metal+'_'+form,'arc_furnace',{metal+'_'+form:1},{metal:1},4,16,tech='steel',scope=scope)
-R('glass','kiln',{'sand':2,'fiber':2},{'glass':1},6)
+R('glass','kiln',{'sand':2,'fiber':1},{'glass':1},6)
 R('charcoal','kiln',{'fiber':8},{'carbon':1},10,note='Требует окислитель печи как другие операции kiln.')
 R('steel','arc_furnace',{'iron':2,'carbon':1},{'steel':2},10,20,'power')
 C('wrench','workbench',{'iron':4,'copper':1},note='Многоразовый инструмент улучшения построек; не расходуется при улучшении.')

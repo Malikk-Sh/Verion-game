@@ -154,7 +154,7 @@
       "station": "kiln",
       "inputs": {
         "iron_raw": 1,
-        "fiber": 2
+        "fiber": 1
       },
       "outputs": {
         "iron": 1
@@ -163,14 +163,14 @@
       "EU_per_second": 0,
       "tech": "start",
       "scope": "core",
-      "note": "Печь сжигает волокна; снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
+      "note": "Печь сжигает волокно (S3: 1 на плавку); снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
     },
     {
       "id": "smelt_copper_raw",
       "station": "kiln",
       "inputs": {
         "copper_raw": 1,
-        "fiber": 2
+        "fiber": 1
       },
       "outputs": {
         "copper": 1
@@ -179,14 +179,14 @@
       "EU_per_second": 0,
       "tech": "start",
       "scope": "core",
-      "note": "Печь сжигает волокна; снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
+      "note": "Печь сжигает волокно (S3: 1 на плавку); снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
     },
     {
       "id": "glass",
       "station": "kiln",
       "inputs": {
         "sand": 2,
-        "fiber": 2
+        "fiber": 1
       },
       "outputs": {
         "glass": 1

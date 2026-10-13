@@ -93,7 +93,7 @@ export function hudLayout(width: number, height: number, inset: HudInsets, prefs
  s.hotbar = Math.min(s.hotbar, Math.max(.8, (height / 2 - inset.bottom - 36 - 32 * .8) / barUnits));
  const aimRoom = height / 2 - inset.bottom - barUnits * s.hotbar;
  s.info = Math.min(s.info, Math.max(.8, aimRoom >= 68 ? (aimRoom - 16) / 52 : (aimRoom - 36) / 32));
- const objectiveHeight = Math.max(32, 36 * s.info), objectiveWidth = Math.min(200 * s.info, room * .44);
+ const objectiveHeight = Math.max(40, 50 * s.info), objectiveWidth = Math.min(250 * s.info, room * .42);
  const saveHeight = Math.max(16, 16 * s.info), joyBottom = inset.bottom + saveHeight + gap;
  s.joystick = Math.min(s.joystick, Math.max(.6, (height - joyBottom - objectiveTop - objectiveHeight - gap) / 100));
  const joyWidth = 100 * s.joystick, barWidth = 270 * s.hotbar;

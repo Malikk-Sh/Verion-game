@@ -1,0 +1,193 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { newGame, cloneState, sanitizeState, type GameState } from '../src/game/state.ts';
+import { addItems, countItem } from '../src/game/inventory.ts';
+import { NODES, NODE_BY_ID } from '../src/game/resources.ts';
+import { natureTick } from '../src/game/nature.ts';
+import { RECIPES, RECIPE_BY_ID, WORKBENCH_UPGRADE, makeBuilding, startJob, productionTick, connect, linkSegments, insideDome, beginPassage, domeFront, telemetry, deliverPower, manualWork, queueJob } from '../src/game/production.ts';
+import { packStation } from '../src/game/worldActions.ts';
+import { TANKS } from '../src/game/defs.ts';
+import { heightAt } from '../src/world.ts';
+import { placementProblem } from '../src/buildings.ts';
+import { survivalTick } from '../src/game/survival.ts';
+import { stationStatus } from '../src/game/stationStatus.ts';
+import { nearestNode } from '../src/game/guide.ts';
+import { refreshQuestProgress } from '../src/game/quests.ts';
+
+const fresh = () => newGame('w-s3', 7, 1, heightAt(40, 42));
+const advance = (g: GameState, ms: number) => { for (let n = 0; n < ms; n += 50) { productionTick(g, 50); natureTick(g, 50); g.meta.activeTicks++; } };
+
+test('S3: grass regrows one plant per period of active time, never in a burst and never above its amount', () => {
+ const g = fresh(), n = NODE_BY_ID.get('grass-c')!;
+ g.world.nodes[n.id] = n.amount - 3;
+ advance(g, n.regrowSeconds! * 1000 - 50); assert.equal(g.world.nodes[n.id], n.amount - 3);
+ advance(g, 50); assert.equal(g.world.nodes[n.id], n.amount - 2);
+ // A huge step still adds at most what the elapsed periods allow, and stops at the amount.
+ natureTick(g, n.regrowSeconds! * 1000 * 10); assert.equal(g.world.nodes[n.id], n.amount); assert.equal(g.world.regrow[n.id], undefined);
+ // Finite deposits never regrow.
+ g.world.nodes['iron-a'] = 0; natureTick(g, 1e7); assert.equal(g.world.nodes['iron-a'], 0);
+ assert.deepEqual(sanitizeState(JSON.parse(JSON.stringify(g))), g);
+ const bad = cloneState(g) as any; bad.world.regrow['iron-a'] = 10; assert.throws(() => sanitizeState(bad), /не отрастает/);
+});
+
+test('S3: a version 6 save migrates to 7 without losing anything; new deposits arrive full', () => {
+ const g = fresh(), old: any = cloneState(g);
+ old.meta.stateVersion = 6; delete old.world.regrow;
+ for (const id of ['stone-b', 'iron-c', 'ice-crater', 'grass-g']) delete old.world.nodes[id];
+ const k = makeBuilding(old, 'kiln', 46, 0, 46); delete k.rot; k.input = [{ itemId: 'sand', count: 3 }, { itemId: 'fiber', count: 64 }, null, null];
+ k.job = { recipeId: 'glass', workMs: 3000, reserved: [{ itemId: 'sand', count: 2 }, { itemId: 'fiber', count: 2 }], water: 0 } as any;
+ old.player.inventory[5] = { itemId: 'workbench', count: 1, packed: { kind: 'workbench', level: 1, input: [null, null, null, null], output: [null, null, null, null], job: null, queue: [], enabled: true, lowPriority: false, energy: 0, fuel: 0, water: 0, oxygen: 0, zone: k.zone } };
+ const m = sanitizeState(old);
+ assert.equal(m.meta.stateVersion, 7);
+ for (const id of ['stone-b', 'iron-c', 'ice-crater', 'grass-g']) assert.equal(m.world.nodes[id], NODE_BY_ID.get(id)!.amount);
+ const forged: any = cloneState(g); forged.meta.stateVersion = 6; delete forged.world.regrow; delete forged.world.nodes['iron-a'];
+ assert.throws(() => sanitizeState(forged), 'A deleted pre-S3 deposit is not refilled by migration');
+ assert.deepEqual(m.world.regrow, {});
+ const kiln = m.world.base.buildings[0];
+ assert.equal(kiln.rot, 0); assert.equal(kiln.job!.repeat, 0);
+ assert.deepEqual(kiln.job!.reserved, [{ itemId: 'sand', count: 2 }, { itemId: 'fiber', count: 1 }]);
+ // Fuel slot was full: the refunded fiber takes the first spare slot.
+ assert.deepEqual(kiln.input, [{ itemId: 'sand', count: 3 }, { itemId: 'fiber', count: 64 }, { itemId: 'fiber', count: 1 }, null]);
+ assert.equal(m.player.inventory[5]!.packed!.rot, 0);
+});
+
+test('S3: lines chain up to 12 m, cost one item per started 4 m, and packing refunds every segment', () => {
+ const g = fresh(), gen = makeBuilding(g, 'biogenerator', 44, 0, 40), e = makeBuilding(g, 'electrolyzer', 53, 0, 40);
+ assert.equal(linkSegments(4), 1); assert.equal(linkSegments(4.2), 2); assert.equal(linkSegments(9), 3);
+ addItems(g.player.inventory, 'cable', 3); assert.equal(connect(g, 'cable', gen.id, e.id), ''); assert.equal(countItem(g.player.inventory, 'cable'), 0);
+ Object.assign(g.player, { x: 53, z: 41.5 }); assert.equal(packStation(g, e.id), '');
+ assert.equal(countItem(g.player.inventory, 'cable'), 3); assert.equal(g.world.base.links.length, 0);
+});
+
+test('S3: a repeated batch keeps crafting while inputs last, then stops without debt', () => {
+ const g = fresh(); addItems(g.player.inventory, 'grass', 3);
+ assert.equal(startJob(g, 'grass_parts'), ''); g.world.base.hand!.repeat = 5;
+ advance(g, 6000);
+ assert.equal(countItem(g.player.inventory, 'grass'), 0); assert.equal(countItem(g.player.inventory, 'fiber'), 6); assert.equal(g.world.base.hand, null);
+});
+
+test('S3: the whole start-to-base path fits the valley deposits with margin', () => {
+ // Build list of the Verdana milestones: every station once, a second tank, the upgrade, lines.
+ const want: Record<string, number> = { workbench: 1, kiln: 1, tool_stone: 1, wrench: 1, biogenerator: 1, electrolyzer: 1, refill: 1, bottle_1: 1, distributor: 1, dome: 1, cable: 12, gas_pipe: 8 };
+ const raw: Record<string, number> = {}, made: Record<string, number> = {};
+ const produce = (id: string, n: number) => {
+  const r = RECIPES.find(r => r.outputs[id] && r.station !== 'electrolyzer');
+  if (!r || ['iron_raw', 'copper_raw', 'stone', 'sand', 'ice', 'grass'].includes(id)) { raw[id] = (raw[id] ?? 0) + n; return; }
+  const have = made[id] ?? 0, use = Math.min(have, n); made[id] = have - use; n -= use; if (!n) return;
+  const batches = Math.ceil(n / r.outputs[id]); made[id] = (made[id] ?? 0) + batches * r.outputs[id] - n;
+  for (const [input, k] of Object.entries(r.inputs)) produce(input, k * batches);
+ };
+ for (const [id, n] of Object.entries(want)) produce(id, n);
+ for (const [id, n] of Object.entries(WORKBENCH_UPGRADE.inputs)) produce(id, n);
+ const valley = (id: string) => NODES.filter(v => v.itemId === id && !v.far).reduce((a, v) => a + v.amount, 0);
+ for (const id of ['iron_raw', 'copper_raw', 'stone', 'sand']) assert.ok(raw[id] <= valley(id) * .75, `${id}: need ${raw[id]} of ${valley(id)}`);
+ // Grass covers the fibre of this list from the start patches alone; regrowth pays for fuel.
+ assert.ok((raw.grass ?? 0) <= 100, 'grass ' + raw.grass);
+ assert.ok(TANKS.bottle_1.capacity >= 600000);
+ assert.ok(RECIPE_BY_ID.get('electrolysis'));
+ assert.equal(insideDome({ kind: 'dome', x: 0, y: 0, z: 0 } as any, 1, .5, 1), true);
+});
+test('S3: a turned dome keeps its airlock on the turned side, in and out', () => {
+ const g = fresh(), d = makeBuilding(g, 'dome', 60, 0, 40, 1);
+ assert.deepEqual(domeFront(d), { x: 1, z: 0 });
+ Object.assign(g.player, { x: 60, y: 0, z: 42.8 });
+ assert.equal(beginPassage(g, d.id), 'Подойдите к шлюзу купола');
+ Object.assign(g.player, { x: 62.8, z: 40 });
+ d.zone.q = 3999; assert.match(beginPassage(g, d.id), /4 GU/, 'Entry needs the full 4 GU charge');
+ d.zone.q = 8000; assert.equal(beginPassage(g, d.id), ''); assert.equal(d.zone.q, 4000);
+ const enter = productionTick(g, 6000).passage!;
+ assert.ok(insideDome(d, enter.x, enter.y, enter.z)); assert.equal(Math.round(enter.x), 61); assert.equal(enter.z, 40);
+ Object.assign(g.player, { x: enter.x, y: enter.y, z: enter.z });
+ d.zone.q = 0; assert.equal(beginPassage(g, d.id), '', 'Leaving an empty dome is always possible');
+ const leave = productionTick(g, 6000).passage!;
+ assert.ok(!insideDome(d, leave.x, leave.y, leave.z)); assert.ok(leave.x > 63); assert.equal(leave.z, 40);
+});
+test('S3: the airlock landing spots stay free and its 6 s cycle is breathable', () => {
+ const g = fresh(), y = heightAt(60, 40), d = makeBuilding(g, 'dome', 60, y, 40, 1);
+ Object.assign(g.player, { x: 58, y, z: 37 });
+ assert.match(placementProblem(g, 'distributor', 61, 40), /шлюза/);
+ assert.equal(placementProblem(g, 'distributor', 59, 40), '');
+ assert.match(placementProblem(g, 'biogenerator', 59, 40), /выхлоп/, 'A generator never burns inside a dome');
+ Object.assign(g.player, { x: 66, y, z: 37 });
+ assert.match(placementProblem(g, 'kiln', 64, 40), /шлюза/);
+ const g2 = fresh(); makeBuilding(g2, 'kiln', 64, heightAt(64, 40), 40); Object.assign(g2.player, { x: 58, y, z: 35 });
+ assert.match(placementProblem(g2, 'dome', 60, 40, 1), /Перед шлюзом/);
+ // A rock or deposit in front of the door counts too: the stone pile X24/Z25 blocks a dome at X24/Z21 facing it.
+ Object.assign(g2.player, { x: 18, z: 15 }); assert.match(placementProblem(g2, 'dome', 24, 21, 0), /препятствие/); assert.equal(placementProblem(g2, 'dome', 24, 21, 1), '');
+ // Entering from outside with empty tanks: the paid chamber air carries the player through the cycle.
+ Object.assign(g.player, { x: 62.8, y: d.y, z: 40 }); for (const t of g.player.bottles) if (t) t.milliGU = 0;
+ d.zone.q = 20000; assert.equal(beginPassage(g, d.id), ''); assert.equal(d.zone.q, 16000);
+ for (let i = 0; i < 100; i++) survivalTick(g, .05, false);
+ // The 4 GU paid at the start carry the cycle: no suffocation and no second charge from the dome.
+ assert.equal(g.player.survival.suffocationMs, 0); assert.equal(d.zone.q, 16000);
+});
+test('S3: in a power shortage the dome distributor is served before workbench II (SYSTEMS energy classes)', () => {
+ const g = fresh(), gen = makeBuilding(g, 'biogenerator', 44, 0, 40), dist = makeBuilding(g, 'distributor', 52, 0, 40), bench = makeBuilding(g, 'workbench', 46, 0, 44);
+ makeBuilding(g, 'dome', 52, 0, 40); bench.level = 2;
+ addItems(g.player.inventory, 'cable', 9); assert.equal(connect(g, 'cable', gen.id, dist.id), ''); assert.equal(connect(g, 'cable', gen.id, bench.id), '');
+ Object.assign(g.player, { x: 46, z: 45 }); addItems(g.player.inventory, 'copper', 4); assert.equal(startJob(g, 'craft_wire', bench.id), '');
+ gen.energy = 600; productionTick(g, 50, null, 10);
+ assert.equal(telemetry.power.get(dist.id), Math.round((10 + Math.abs(10 - 20) / 20) * 50));
+ assert.equal(telemetry.power.get(bench.id), 600 - Math.round((10 + Math.abs(10 - 20) / 20) * 50));
+});
+test('S3: the dome checklist wants pipe and power at the same distributor; an idle workbench II reports its power', () => {
+ const g = fresh(), gen = makeBuilding(g, 'biogenerator', 44, 0, 40), electro = makeBuilding(g, 'electrolyzer', 48, 0, 36), dome = makeBuilding(g, 'dome', 52, 0, 40);
+ const piped = makeBuilding(g, 'distributor', 51, 0, 40), powered = makeBuilding(g, 'distributor', 53, 0, 40);
+ addItems(g.player.inventory, 'cable', 9); addItems(g.player.inventory, 'gas_pipe', 9);
+ assert.equal(connect(g, 'gas_pipe', electro.id, piped.id), ''); assert.equal(connect(g, 'cable', gen.id, powered.id), '');
+ gen.energy = 400000; productionTick(g, 50, null, 10);
+ const checks = stationStatus(g, dome).checks!, check = (label: RegExp) => checks.find(c => label.test(c.label))!.ok;
+ assert.equal(check(/Труба/), true); assert.equal(check(/Питание/), false);
+ const bench = makeBuilding(g, 'workbench', 46, 0, 44); bench.level = 2;
+ assert.equal(stationStatus(g, bench).title, 'Не подключён');
+ assert.equal(connect(g, 'cable', gen.id, bench.id), ''); assert.match(stationStatus(g, bench).title, /Питание есть/);
+ // A generator inside a dome burns nothing there: fuel alone is no power for the network.
+ const g2 = fresh(), d2 = makeBuilding(g2, 'dome', 52, 0, 40), inGen = makeBuilding(g2, 'biogenerator', 51, 0, 40), b2 = makeBuilding(g2, 'workbench', 46, 0, 44);
+ b2.level = 2; addItems(inGen.input, 'fiber', 5); addItems(g2.player.inventory, 'cable', 9); assert.equal(connect(g2, 'cable', inGen.id, b2.id), '');
+ void d2; assert.equal(stationStatus(g2, b2).title, 'Нет питания');
+});
+test('S3: beside a far deposit the compass points at it, not back to the valley', () => {
+ const g = fresh(), far = NODE_BY_ID.get('iron-canyon')!;
+ assert.notEqual(nearestNode(g, 'iron_raw')!.name, far.name);
+ Object.assign(g.player, { x: far.x + 3, z: far.z });
+ assert.equal(nearestNode(g, 'iron_raw')!.name, far.name);
+});
+test('S3: the distributor step needs a distributor inside a dome, not just anywhere', () => {
+ const g = fresh(); makeBuilding(g, 'distributor', 46, 0, 46); makeBuilding(g, 'dome', 56, 0, 40);
+ refreshQuestProgress(g); assert.ok(!g.progress.quests.completed.includes('distributor'));
+ makeBuilding(g, 'distributor', 56, 0, 40); refreshQuestProgress(g); assert.ok(g.progress.quests.completed.includes('distributor'));
+});
+test('S3: each cable carries 120 EU/s, the network as a whole is not capped; classes fill in order', () => {
+ const ms = 50, g = fresh(); addItems(g.player.inventory, 'cable', 40);
+ const sink = makeBuilding(g, 'distributor', 50, 0, 50), gens = [[46, 50], [54, 50], [50, 46], [50, 54]].map(([x, z]) => makeBuilding(g, 'biogenerator', x, 0, z));
+ for (const gen of gens) { gen.energy = 400000; assert.equal(connect(g, 'cable', gen.id, sink.id), ''); }
+ const all = [sink, ...gens], want = (need: number) => [{ b: sink, need, priority: 0 }];
+ // Four separate cables: 4 × 40 EU/s reach the station (the old network cap stopped at 120).
+ assert.equal(deliverPower(g, all, gens, want(160 * ms), ms).delivered.get(sink.id), 160 * ms);
+ // Through one shared cable only 120 EU/s pass.
+ const h = fresh(); addItems(h.player.inventory, 'cable', 40);
+ const hub = makeBuilding(h, 'distributor', 50, 0, 50), far = makeBuilding(h, 'distributor', 50, 0, 58), hg = [[46, 50], [54, 50], [50, 46], [47, 47]].map(([x, z]) => makeBuilding(h, 'biogenerator', x, 0, z));
+ for (const gen of hg) { gen.energy = 400000; assert.equal(connect(h, 'cable', gen.id, hub.id), ''); }
+ assert.equal(connect(h, 'cable', hub.id, far.id), '');
+ const one = deliverPower(h, [hub, far, ...hg], hg, [{ b: far, need: 160 * ms, priority: 0 }], ms);
+ assert.equal(one.delivered.get(far.id), 120 * ms); assert.equal([...one.drawn.values()].reduce((a, b) => a + b, 0), 120 * ms);
+ // One 40 EU/s generator: class 0 is served first, class 2 gets the rest.
+ const k = fresh(); addItems(k.player.inventory, 'cable', 10);
+ const kg = makeBuilding(k, 'biogenerator', 50, 0, 50), c0 = makeBuilding(k, 'distributor', 54, 0, 50), c2 = makeBuilding(k, 'distributor', 46, 0, 50); kg.energy = 400000;
+ assert.equal(connect(k, 'cable', kg.id, c0.id), ''); assert.equal(connect(k, 'cable', kg.id, c2.id), '');
+ const split = deliverPower(k, [kg, c0, c2], [kg], [{ b: c0, need: 30 * ms, priority: 0 }, { b: c2, need: 30 * ms, priority: 2 }], ms).delivered;
+ assert.equal(split.get(c0.id), 30 * ms); assert.equal(split.get(c2.id), 10 * ms);
+});
+test('S3: a finished but blocked bench I frees the hands; every queue counts its active batch', () => {
+ const g = fresh(), a = makeBuilding(g, 'workbench', 46, 0, 44), b = makeBuilding(g, 'workbench', 48, 0, 44);
+ Object.assign(g.player, { x: 47, z: 45 }); const wire = RECIPE_BY_ID.get('craft_wire')!;
+ a.job = { recipeId: 'craft_wire', workMs: wire.seconds * 1000, reserved: [], water: 0, repeat: 0 } as any; a.output = a.output.map(() => ({ itemId: 'stone', count: 64 }));
+ b.job = { recipeId: 'craft_wire', workMs: 0, reserved: [], water: 0, repeat: 0 } as any;
+ assert.equal(manualWork(g)?.id, b.id);
+ productionTick(g, 1000); assert.ok(b.job!.workMs > 0 || !b.job, 'The second bench works while the first waits for space');
+ const k = makeBuilding(g, 'kiln', 50, 0, 46); k.job = { recipeId: 'smelt_iron_raw', workMs: 0, reserved: [], water: 0, repeat: 0 } as any; k.queue = Array(4).fill('smelt_iron_raw');
+ Object.assign(g.player, { x: 50, z: 47 }); assert.match(queueJob(g, 'smelt_iron_raw', k.id, 1), /максимум 5/);
+ const v = fresh(), vk = makeBuilding(v, 'kiln', 50, 0, 46);
+ vk.job = { recipeId: 'smelt_iron_raw', workMs: 0, reserved: [{ itemId: 'iron_raw', count: 1 }, { itemId: 'fiber', count: 1 }], water: 0, repeat: 0 } as any; vk.queue = Array(5).fill('smelt_iron_raw');
+ assert.throws(() => sanitizeState(JSON.parse(JSON.stringify(v))), /очередь/, 'Five queued plus the active batch is six');
+});

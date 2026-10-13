@@ -8,6 +8,7 @@ import { groundTextures, hullTextures, gratingTexture, consoleScreen, panelTextu
 import { createSky, createDust } from './sky';
 import { Terrain, createShadeBaker, useBakedShade } from './terrain';
 import { CYCLE_S, nightAmount, sunDirection } from './game/daycycle';
+import { PATCH_NODES } from './game/resources';
 
 export type Quality = 'low'|'standard'|'high';
 const lin=(r:number,g:number,b:number)=>new THREE.Color().setRGB(r,g,b,THREE.LinearSRGBColorSpace);
@@ -341,6 +342,23 @@ export function createWorld(scene:THREE.Scene){
    for(let i=0;i<5;i++){const g=chiseledRock(330+i,{detail:2,base:'#ffffff',dust:'#f4fbff',dark:'#6f98a8',cuts:7,flatTop:.7,lumpy:.1}),a=i*1.3,d=i?.55:0,s=i?.45+pr()*.2:.9;b.add(g,ice,Math.cos(a)*d,-.15,Math.sin(a)*d,s,s*(i?1.1:1.25),s*.9,(pr()-.5)*.3,pr()*6,(pr()-.5)*.3);}});
  }
  deposit('sand-a',49,59,b=>{b.add(boulders[2],rock,0,-.12,0,1.5,.45,1.3,0,.2,0,'#d3bb82');});
+ // ---------- S3 deposits: a second source of every early material, and rich far veins ----------
+ {
+  const sandHeap=(b:StaticBatch,s:number,seed:number)=>{const pr=random(seed);b.add(boulders[2],rock,0,-.12,0,1.5*s,.45*s,1.3*s,0,pr()*6,0,'#d3bb82');for(let i=0;i<5;i++){const a=pr()*6.28,d=(.7+pr()*.5)*s;b.add(boulders[i%6],rock,Math.cos(a)*d,-.1,Math.sin(a)*d,.5*s,.18*s,.45*s,0,pr()*6,0,i%2?'#cdb67f':'#dcc58f');}};
+  const scree=(b:StaticBatch,s:number,seed:number)=>{const pr=random(seed);b.add(boulders[3],rock,0,-.12,0,1.2*s,1*s,1.1*s,0,pr()*6,0,'#b5a998');for(let i=0;i<10;i++){const a=i/10*6.28+pr()*.5,d=(.8+pr()*.7)*s,k=(.25+pr()*.3)*s;b.add(boulders[i%6],rock,Math.cos(a)*d,-.08,Math.sin(a)*d,k*1.2,k,k*1.1,0,pr()*6,0,i%2?'#a89c8c':'#c2b6a4');}};
+  const iceSlab=(b:StaticBatch,s:number,seed:number)=>{const pr=random(seed);for(let i=0;i<4;i++){const g=chiseledRock(seed+i,{detail:2,base:'#ffffff',dust:'#f4fbff',dark:'#6f98a8',cuts:7,flatTop:.6,lumpy:.1}),a=i*1.6,d=i?.6*s:0,k=(i?.5+pr()*.2:.95)*s;b.add(g,ice,Math.cos(a)*d,-.15,Math.sin(a)*d,k*1.1,k*(i?1:1.1),k*.95,(pr()-.5)*.3,pr()*6,(pr()-.5)*.3);}};
+  const vein=(b:StaticBatch,metal:'iron'|'copper',s:number,seed:number,ry:number)=>{const host=metal==='iron'?{strata:3,base:'#4a4038',dust:'#8a6a50',dark:'#2a2320'}:{strata:2,base:'#3c4640',dust:'#6f8f7c',dark:'#232a27'},o=oreOutcrop(seed,host,metal==='iron'?{freq:2.3,width:.05,blobs:.74,lift:.018,crystals:.12,stain:'#7a3f22'}:{freq:1.9,width:.045,blobs:.72,lift:.02,crystals:.22,stain:'#3f8f78'});b.add(o.host,rock,0,-.1,0,1.7*s,1.5*s,1.4*s,0,ry,0);b.add(o.veins,metal==='iron'?iron:copper,0,-.1,0,1.7*s,1.5*s,1.4*s,0,ry,0);};
+  deposit('stone-b',24,25,b=>scree(b,1.05,5301));
+  deposit('sand-b',58,100,b=>sandHeap(b,1.1,5311));
+  deposit('iron-c',98,63,b=>vein(b,'iron',.9,640,1.2));
+  deposit('copper-c',92,92,b=>vein(b,'copper',.85,650,2.1));
+  deposit('ice-b',26,82,b=>iceSlab(b,1,360));
+  deposit('ice-c',35,82,b=>iceSlab(b,1,370));
+  deposit('sand-canyon',90,-100,b=>sandHeap(b,1.5,5321));
+  deposit('iron-canyon',75,-96,b=>vein(b,'iron',1.15,660,.4));
+  deposit('copper-mesa',-70,140,b=>vein(b,'copper',1.15,670,2.7));
+  deposit('ice-crater',266,262,b=>iceSlab(b,1.6,380));
+ }
  const grassHarvest=new Map<string,()=>void>();
  const grassRemaining=new Map<string,number>();
  const setNodeAmount=(id:string,left:number,amount:number)=>{grassRemaining.set(id,left/amount);grassHarvest.get(id)?.();const g=nodeGroups.get(id);if(g){g.visible=left>0;g.scale.setScalar(.42+.58*Math.max(0,left)/amount);}};
@@ -374,7 +392,7 @@ export function createWorld(scene:THREE.Scene){
   const inst=new THREE.InstancedMesh(g,m,GRASS.length);
   GRASS.forEach((p,i)=>{dummy.position.set(p.x,heightAt(p.x,p.z)-.02,p.z);dummy.scale.setScalar(p.s*1.35);dummy.rotation.set(0,p.rotation,0);dummy.updateMatrix();inst.setMatrixAt(i,dummy.matrix);inst.setColorAt(i,color.setHSL(.2+rng()*.06,.12+rng()*.1,.62+rng()*.3));});
   const originals=GRASS.map((_,i)=>{const matrix=new THREE.Matrix4();inst.getMatrixAt(i,matrix);return matrix;});
-  for(const id of ['grass-a','grass-b']){const indices=GRASS.flatMap((p,i)=>p.patch===0&&(p.x<44)===(id==='grass-a')?[i]:[]);grassHarvest.set(id,()=>{const visible=Math.ceil(indices.length*(grassRemaining.get(id)??1));indices.forEach((i,j)=>inst.setMatrixAt(i,j<visible?originals[i]:new THREE.Matrix4().makeScale(0,0,0)));inst.instanceMatrix.needsUpdate=true;});}
+  for(const [patch,ids] of PATCH_NODES)for(const id of ids){const indices=GRASS.flatMap((p,i)=>p.patch===patch&&(patch!==0||(p.x<44)===(id==='grass-a'))?[i]:[]);grassHarvest.set(id,()=>{const visible=Math.ceil(indices.length*(grassRemaining.get(id)??1));indices.forEach((i,j)=>inst.setMatrixAt(i,j<visible?originals[i]:new THREE.Matrix4().makeScale(0,0,0)));inst.instanceMatrix.needsUpdate=true;});}
   inst.name='local-grass';inst.receiveShadow=true;inst.castShadow=false;scene.add(inst);
  }
  const meshes=batch.finish(scene,m=>({cast:!noShadow.has(m)&&m!==caveInner&&m!==cliffRock,receive:!noShadow.has(m)}));
