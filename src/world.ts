@@ -1,5 +1,5 @@
 /** Hand-authored Verdana layout (B1 positions, B3 terrain detail). Metres; north is +z. No production-world generator. */
-import { NODES } from './game/resources';
+import { NODES, GRASS_PATCHES } from './game/resources';
 import { fbm, noise2, ridged } from './noise';
 /** Walkable world bounds. B4: 560 × 560 m (3.5× B3 per side); the B1–B3 arrival valley keeps its 0…160 coordinates. */
 export const MIN = -200;
@@ -176,11 +176,7 @@ export function makeColliders(){
 makeColliders();
 
 /** B1 produced 1,218 accepted tufts; B2 uses 244 (one fifth), 84% in patches. */
-export const GRASS_PATCHES = [
- {x:44,z:57,rx:4.5,rz:3.4}, {x:16,z:66,rx:4.5,rz:2.6},
- {x:70,z:90,rx:6,rz:3.8}, {x:99,z:128,rx:5,rz:3},
- {x:136,z:104,rx:4,rz:5}, {x:59,z:114,rx:4.3,rz:3.5},
-];
+export { GRASS_PATCHES };
 export const GRASS: {x:number;z:number;s:number;rotation:number;patch:number}[]=[];
 const grassRandom=random(4242);
 for(let i=0;i<244;i++){

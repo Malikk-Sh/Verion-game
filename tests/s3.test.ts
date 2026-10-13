@@ -2,12 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { newGame, cloneState, sanitizeState, type GameState } from '../src/game/state.ts';
 import { addItems, countItem } from '../src/game/inventory.ts';
-import { NODES, NODE_BY_ID } from '../src/game/resources.ts';
+import { NODES, NODE_BY_ID, PATCH_NODES, nodeCovered } from '../src/game/resources.ts';
 import { natureTick, nextRegrowSeconds } from '../src/game/nature.ts';
 import { RECIPES, RECIPE_BY_ID, WORKBENCH_UPGRADE, makeBuilding, startJob, productionTick, connect, linkSegments, insideDome, beginPassage, domeFront, telemetry, deliverPower, manualWork, queueJob } from '../src/game/production.ts';
 import { packStation } from '../src/game/worldActions.ts';
 import { TANKS } from '../src/game/defs.ts';
-import { heightAt } from '../src/world.ts';
+import { heightAt, GRASS } from '../src/world.ts';
 import { placementProblem } from '../src/buildings.ts';
 import { survivalTick } from '../src/game/survival.ts';
 import { stationStatus } from '../src/game/stationStatus.ts';
@@ -197,8 +197,15 @@ test('S3: a patch under a body does not regrow; it resumes once the body is gone
  g.world.nodes[n.id] = n.amount - 2;
  const b = makeBuilding(g, 'workbench', 17, 0, 66);
  natureTick(g, period * 5); assert.equal(g.world.nodes[n.id], n.amount - 2); assert.equal(nextRegrowSeconds(g, n.id), null);
- b.x = 20; // just outside the 3 m patch: it grows again
+ b.x = 20; // the rendered patch is an ellipse 4.5 m wide along X: still built over
+ natureTick(g, period); assert.equal(g.world.nodes[n.id], n.amount - 2);
+ b.x = 22; // clear of every tuft: it grows again
  natureTick(g, period); assert.equal(g.world.nodes[n.id], n.amount - 1);
+ // A body standing on any rendered tuft covers that tuft's deposit.
+ for (const t of GRASS) if (t.patch >= 0) {
+  const id = PATCH_NODES.get(t.patch)!.find(id => t.patch !== 0 || (t.x < 44) === (id === 'grass-a'))!;
+  assert.ok(nodeCovered(NODE_BY_ID.get(id)!, t.x, t.z, .48), `${id} tuft ${t.x.toFixed(2)}, ${t.z.toFixed(2)}`);
+ }
 });
 test('S3: a v6 world gets no new deposit under a body, the player or an airlock exit', () => {
  const g = fresh(), old: any = cloneState(g);
@@ -220,6 +227,10 @@ test('S3: a power deficit inside one class is shared in proportion to the reques
  const got = sinks.map(s => out.get(s.id)!);
  assert.equal(got.reduce((a, b) => a + b, 0), 40 * ms, 'The whole supply is used');
  for (const v of got) { assert.ok(Number.isInteger(v)); assert.ok(v >= 181 && v <= 182, String(v)); }
+ // Equal remainders rotate: over 11 shortage ticks every consumer receives exactly the same total.
+ const total = new Map(sinks.map(s => [s.id, out.get(s.id)!]));
+ for (let i = 1; i < 11; i++) { const d = deliverPower(g, [gen, ...sinks], [gen], sinks.map(b => ({ b, need: 4 * ms, priority: 2 })), ms).delivered; for (const s of sinks) total.set(s.id, total.get(s.id)! + d.get(s.id)!); }
+ assert.deepEqual(new Set(total.values()), new Set([40 * ms]));
  // Unequal requests keep their ratio: 30 vs 10 EU/s from 20 EU/s → 15 and 5.
  const h = fresh(); addItems(h.player.inventory, 'cable', 10);
  const hg = makeBuilding(h, 'biogenerator', 50, 0, 50), a = makeBuilding(h, 'distributor', 54, 0, 50), b = makeBuilding(h, 'distributor', 46, 0, 50); hg.energy = 20 * ms;

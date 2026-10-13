@@ -234,6 +234,8 @@ export const roomRate = (id: string) => (telemetry.room.get(id) ?? 0) / telemetr
  * generators (each up to 40 EU/s of its buffer) through the cable graph is filled class by class (0 → 1 → 2) on the
  * residual graph, so a lower class never takes what a higher one can still receive. Returns what each consumer
  * receives and what each generator gives, in milli-EU for this tick. */
+/** Turn for equal remainders: rotates every shared deficit, so a lasting shortage stays proportional over time. */
+let remainderTurn = 0;
 export function deliverPower(g: GameState, group: Building[], supply: Building[], requests: { b: Building; need: number; priority: number }[], ms: number) {
  const at = new Map(group.map((b, i) => [b.id, i + 2])), n = group.length + 2, cap = Array.from({ length: n }, () => new Array<number>(n).fill(0));
  for (const l of g.world.base.links) if (l.kind === 'cable') { const a = at.get(l.from), b = at.get(l.to); if (a !== undefined && b !== undefined) { cap[a][b] += 120 * ms; cap[b][a] += 120 * ms; } }
@@ -258,8 +260,9 @@ export function deliverPower(g: GameState, group: Building[], supply: Building[]
   if (best.flow < want) {
    // A deficit inside one class is shared in proportion to the requests (SYSTEMS): every consumer slows down
    // instead of the first ones found taking it all. Whole units with largest remainders keep gas amounts integer.
+   const turn = remainderTurn++, ring = (i: number) => (i - turn % cls.length + cls.length) % cls.length;
    const share = (k: number) => { const raw = cls.map(r => r.need * k / want), t = raw.map(Math.floor); let rest = k - t.reduce((s, v) => s + v, 0);
-    for (const i of raw.map((_, i) => i).sort((a, b) => (raw[b] - t[b]) - (raw[a] - t[a]))) if (rest > 0) { t[i]++; rest--; }
+    for (const i of raw.map((_, i) => i).sort((a, b) => (raw[b] - t[b]) - (raw[a] - t[a]) || ring(a) - ring(b))) if (rest > 0) { t[i]++; rest--; }
     return t; };
    let fair = route(share(best.flow));
    if (fair.flow < best.flow) { // a cable bottleneck: the largest fair share that the cables can carry
