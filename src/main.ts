@@ -71,7 +71,7 @@ function boot(){
  const viewDirection=new THREE.Vector3(),viewPos=new THREE.Vector3(),shadowAnchor=new THREE.Vector3(),tmp=new THREE.Vector3();
  const keys=new Set<string>(),input:Input={forward:0,right:0,run:false,jump:false};
  let joyX=0,joyY=0,runToggle=false,joyPointer:number|null=null,lookPointer:number|null=null,lastX=0,lastY=0;
- let started=false,running=false,selected='guide',nearest:Landmark|undefined,last=performance.now(),lastDiagnosticFrame=last,lastUI=0;
+ let started=false,running=false,selected='guide',nearest:Landmark|undefined,last=performance.now(),lastDiagnosticFrame=last,hiddenSinceFrame=false,lastUI=0;
  // ---------- S1 game state: one clock, finite deposits, inventory, saves ----------
  const clock=new SimClock(),mining:Mining={nodeId:null,ticks:0};
  let lastSurvivalEvent='none';
@@ -80,7 +80,9 @@ function boot(){
  let holdMine=false,holdRefill=false,aimNode:string|null=null,aimReason='',mineRatio=0,strikeClock=0,nearDrop:string|null=null,slots:SlotRecord[]=[],actionKind='none',hudKey='';
  let refillTanks=false;
  let refillMachine:string|null=null,nearMachine:string|null=null;
- const liveDialogs=new Set(['inventory-panel','suit-panel','production-panel']);
+ // SYSTEMS §1: inventory, crafting, the map and the landmark card keep breathing and hunger running.
+ // The journal pauses on purpose (S2.5: reading stops the clock).
+ const liveDialogs=new Set(['inventory-panel','suit-panel','production-panel','map-panel','info-panel']);
  // Where the workshop returns when it was opened from the paused journal (null: back to play).
  let workshopReturn:string|null=null;
  const hand=createViewModel();
@@ -142,7 +144,7 @@ function boot(){
   if(portrait&&started)pause('Продолжим в горизонтальном режиме');}
  addEventListener('resize',resize);
  addEventListener('blur',()=>pause('Экспедиция приостановлена'));
- document.addEventListener('visibilitychange',()=>{clearInput();if(document.hidden){clock.stop();pause('Экспедиция приостановлена');audio.suspend();}});
+ document.addEventListener('visibilitychange',()=>{clearInput();if(document.hidden){hiddenSinceFrame=true;clock.stop();pause('Экспедиция приостановлена');audio.suspend();}});
  addEventListener('pagehide',()=>{if(slotId&&store&&!saver?.halted){const id=slotId,st=store;void (saver?saver.save():Promise.resolve()).finally(()=>st.releaseLease(id,token)).catch(()=>{});}});
  canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();pause();error('Графический контекст был потерян. Перезагрузите страницу — мир сохранён на момент последнего автосохранения.');});
  installFullscreen(el<HTMLButtonElement>('fullscreen-toggle'),el('fullscreen-status'));
@@ -260,7 +262,9 @@ function boot(){
  function updateDayButton(){const day=isDay(dayPhase());if(day===shownDay)return;shownDay=day;el('light-text').textContent=day?'День':'Ночь';el('light-icon').innerHTML=`<svg><use href="#i-${day?'sun':'moon'}"/></svg>`;el('day').setAttribute('aria-pressed',String(!day));}
  function toggleDay(){if(!game||!started||saver?.halted)return;audio.tone('ui');const toNight=isDay(dayPhase());game.world.dayOffsetTicks=offsetFor(clock.activeTicks,toNight?EVENING_S:MORNING_S);world.setTime(dayPhase());updateDayButton();toast(toNight?'Ночь':'Утро',toNight?'Солнце зашло':'Рассвет');}
  el('day').onclick=toggleDay;
- el('map-button').onclick=()=>{audio.tone('ui');setDialog('map-panel');};el('close-map').onclick=resume;
+ // The map keeps time running, so it opens from play or another live panel — never out of the pause.
+ const openMap=()=>{if(started&&(running||liveDialogs.has(dialog)))setDialog('map-panel');};
+ el('map-button').onclick=()=>{audio.tone('ui');openMap();};el('close-map').onclick=resume;
  el('close-info').onclick=resume;
  function diagnosticContext(){return {quality:settings.quality,dialog,running,visible:!document.hidden,calls:renderCalls,triangles:renderTriangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures,fineBlocks:world.terrain.fineBlocks,buildings:game?.world.base.buildings.length??0,links:game?.world.base.links.length??0,activeTicks:clock.activeTicks};}
  function sceneGeometry(){const frustum=new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse)),data:{name:string;material:string;triangles:number;instances:number}[]=[];
@@ -295,7 +299,7 @@ function boot(){
   if(event.code==='Escape'){event.preventDefault();if(dialog==='quest-panel'){questBook.escape();return;}if((dialog==='hud-settings-panel'||dialog==='visor-settings-panel'||dialog==='diagnostics-panel')){setDialog('settings');return;}if(dialog==='settings'){setDialog(settingsReturn);return;}if(dialog==='production-panel'){el('close-production').click();return;}if(started){if(running)pause();else resume();}return;}
   if(event.target instanceof HTMLElement && (event.target.isContentEditable || event.target.closest('input,textarea,select')))return;
   if(event.code==='KeyJ'&&started&&!event.repeat){event.preventDefault();openQuests();return;}
-  if(event.code==='KeyM'&&started&&!event.repeat){event.preventDefault();if(dialog==='map-panel')resume();else setDialog('map-panel');return;}
+  if(event.code==='KeyM'&&started&&!event.repeat){event.preventDefault();if(dialog==='map-panel')resume();else openMap();return;}
   if(event.code==='KeyI'&&started&&!event.repeat){event.preventDefault();openPanel('inventory-panel');return;}
   if(event.code==='KeyB'&&started&&!event.repeat){event.preventDefault();if(running||liveDialogs.has(dialog))production.open();return;}
   if(event.code==='KeyC'&&started&&!event.repeat){event.preventDefault();openPanel('suit-panel');return;}
@@ -632,7 +636,8 @@ function boot(){
  let handBobX=0,handBobY=0;
  const draw=(now:number)=>{
   const workStart=diagnostics.stamp();let measured=workStart;
-  const diagnosticGapMs=now-lastDiagnosticFrame;lastDiagnosticFrame=now;
+  // The first frame after a hidden tab spans the background time: it is not a freeze and is not recorded.
+  const diagnosticGapMs=now-lastDiagnosticFrame,afterHidden=hiddenSinceFrame;lastDiagnosticFrame=now;hiddenSinceFrame=false;
   const actualFrameMs=now-last;const dt=Math.min(actualFrameMs/1000,.25);last=now;
   if(running){
    input.forward=(keys.has('KeyW')||keys.has('ArrowUp')?1:0)-(keys.has('KeyS')||keys.has('ArrowDown')?1:0)+joyY;
@@ -708,7 +713,7 @@ function boot(){
   if(game&&started)built.update(game,frozen?0:dt);
   if(running&&dt>0){frames.push(actualFrameMs);if(frames.length>180)frames.shift();}
   if(now-lastUI>150){updateUI();lastUI=now;if(showMetrics){const sorted=[...frames].sort((a,b)=>a-b),s={drawCalls:renderCalls,triangles:renderTriangles,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0};const ob=el('objective').getBoundingClientRect();el('metrics').style.top=`${Math.round(ob.bottom+8)}px`;el('metrics').textContent=`S3 / WebGL2 / DPR ${renderer.getPixelRatio()} / ${settings.quality}\nВызовы: ${s.drawCalls} · треуг.: ${s.triangles}\nКадр p95: ${s.frameP95Ms.toFixed(1)} мс\nX ${actor.x.toFixed(1)} · Z ${actor.z.toFixed(1)}\nЭто замер текущего браузера`;}}
-  diagnostics.stage('hud',measured);if(diagnostics.enabled)diagnostics.frame(diagnosticGapMs,workStart,diagnosticContext());
+  diagnostics.stage('hud',measured);if(diagnostics.enabled&&!afterHidden)diagnostics.frame(diagnosticGapMs,workStart,diagnosticContext());
   requestAnimationFrame(draw);
  };
  document.body.dataset.started='false';applyQuality(settings.quality);applySound(settings.sound);applyBob(settings.bob);applyFov(settings.fov);fov=settings.fov;world.setTime(516,true);updateUI();

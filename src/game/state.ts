@@ -184,7 +184,10 @@ function toV6(r:Obj):Obj{
     const types=body.kind==='kiln'?[['iron_raw','copper_raw','sand','ice'],['fiber']]:[['water'],Object.keys(TANKS)];
     const slots:unknown[]=Array(4).fill(null);
     types.forEach((ids,i)=>{const at=pool.findIndex(s=>isObj(s)&&ids.includes(String(s.itemId)));if(at>=0){slots[i]=pool[at];pool[at]=null;}});
-    for(const s of pool)if(s!==null){const at=slots.findIndex(s=>s===null);slots[at]=s;}
+    // Unrecognised old stock goes to the spare slots 2–3 only (0/1 are the dedicated inputs); any rest becomes a pile.
+    for(const s of pool)if(s!==null){const at=[2,3].find(i=>slots[i]===null);if(at!==undefined){slots[at]=s;continue;}
+     const drops=Array.isArray(world.drops)?world.drops:(world.drops=[]),id=Number(world.nextDropId);
+     (drops as unknown[]).push({id:'drop-'+id,x:Number(body.x??40),z:Number(body.z??42),items:[s]});world.nextDropId=id+1;}
     body.input=slots;
    }
   }
@@ -260,7 +263,7 @@ function validateBase(value: unknown, legacy = false): BaseState {
   const level=legacy?1:int(o.level,'building.level',1,2) as 1|2;
   if(level===2&&kind!=='workbench')throw new InvalidState('building.level','нет такого улучшения');
   const b:Building={level,rot:legacy&&o.rot===undefined?0:int(o.rot,'building.rot',0,3),id:register(o.id,'building.id','build'),kind:kind as Building['kind'],x:int(o.x,'building.x',-195,355),y:num(o.y,'building.y',-100,200),z:int(o.z,'building.z',-195,355),input,output,job:job(o.job,kind),queue:queue(o.queue,kind),enabled:o.enabled,lowPriority:o.lowPriority,energy:int(o.energy,'building.energy',0,400000),fuel:int(o.fuel,'building.fuel',0,200000),water:int(o.water,'building.water',0,20000),oxygen:int(o.oxygen,'building.oxygen',0,480000),zone:{q:int(z.q,'zone.q',0,960000),temperature:num(z.temperature,'zone.temperature',-150,150),purity:num(z.purity,'zone.purity',0,1),lossRemainder:int(z.lossRemainder,'zone.lossRemainder',0,999),breachMs:int(z.breachMs,'zone.breachMs',0,1000),shell:shell.map(v=>int(v,'zone.shell.HP',0,180))}};
-  if(!legacy&&kind==='workbench'&&(level===1?b.queue.length>0:b.queue.length+(b.job?1:0)>5))throw new InvalidState('building.queue','очередь недоступна/переполнена');
+  if(!legacy&&(kind==='workbench'&&level===1?b.queue.length>0:b.queue.length+(b.job?1:0)>5))throw new InvalidState('building.queue','очередь недоступна/переполнена');
   if(kind!=='biogenerator'&&(b.energy||b.fuel))throw new InvalidState('building','энергия/топливо не у генератора');if(kind!=='electrolyzer'&&b.water)throw new InvalidState('building.water','вода не у электролиза');if(!['electrolyzer','refill','distributor'].includes(kind)&&b.oxygen)throw new InvalidState('building.oxygen','нет газового буфера');if(kind!=='dome'&&b.zone.q)throw new InvalidState('zone.q','газ не у купола');return b;
  });
  const links=arr(raw.links,'base.links',128).map(v=>{const o=obj(v,'link'),kind=o.kind;if(kind!=='cable'&&kind!=='gas_pipe')throw new InvalidState('link.kind','неизвестная сеть');const from=str(o.from,'link.from',32,ID),to=str(o.to,'link.to',32,ID),a=buildings.find(b=>b.id===from),b=to==='capsule'?{x:40,y:heightAt(40,40)+.14,z:40,kind:'capsule'}:buildings.find(b=>b.id===to);

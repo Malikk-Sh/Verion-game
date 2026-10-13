@@ -57,7 +57,8 @@ test('A powered distributor fills a sealed dome; outage preserves air, breach le
  gen.enabled=false;gen.energy=0;const q=d.zone.q;advance(g,1000);assert.equal(d.zone.q,q-96);assert.ok(habitable(d));d.zone.shell[0]=0;advance(g,1000);assert.ok(d.zone.q<q);assert.equal(habitable(d),false);
 });
 test('Manual airlock charges finite air and survives a saved mid-cycle',()=>{
- const g=fresh(),d=makeBuilding(g,'dome',48,0,40);d.zone.q=500000;d.zone.purity=1;Object.assign(g.player,{x:48,y:0,z:43});assert.equal(beginPassage(g,d.id),'');assert.equal(d.zone.q,496000);advance(g,3000);const copy=sanitizeState(g);advance(copy,2950);assert.ok(copy.world.base.passage);const done=productionTick(copy,50);assert.deepEqual(done.passage,{x:48,y:.12,z:41});assert.equal(copy.world.base.passage,null);assert.equal(copy.world.base.buildings[0].zone.q,496000);
+ const g=fresh(),d=makeBuilding(g,'dome',48,0,40);d.zone.q=500000;d.zone.purity=1;Object.assign(g.player,{x:48,y:0,z:43});assert.equal(beginPassage(g,d.id),'');assert.equal(d.zone.q,496000);advance(g,3000);const copy=sanitizeState(g);advance(copy,2950);assert.ok(copy.world.base.passage);const done=productionTick(copy,50);assert.deepEqual(done.passage,{x:48,y:.12,z:41});assert.equal(copy.world.base.passage,null);// The sealed shell keeps its technical loss (0.096 GU/s) through the 6 s cycle, distributor or not.
+ assert.equal(copy.world.base.buildings[0].zone.q,496000-Math.round(.096*6000));
 });
 test('Old saves migrate only missing S2 fields; invalid network or WIP is rejected',()=>{
  const g=fresh(),old:any=cloneState(g);old.meta.stateVersion=2;delete old.world.base;delete old.world.nodes['grass-a'];delete old.world.nodes['grass-b'];delete old.world.nodes['sand-a'];old.world.capsuleMilliGU=123;assert.equal(sanitizeState(old).world.capsuleMilliGU,123);assert.equal(sanitizeState(old).world.nodes['grass-a'],50);

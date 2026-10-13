@@ -58,5 +58,9 @@ test('Legacy mixed machine inputs keep all stock and paid WIP, retire unpaid que
  // S3: the paid batch keeps one fiber; the second returns to the fuel slot.
  assert.deepEqual(kiln.input,[{itemId:'copper_raw',count:2},{itemId:'fiber',count:4},{itemId:'sand',count:4},null]);assert.deepEqual(kiln.job,{...k.job,reserved:[{itemId:'iron_raw',count:1},{itemId:'fiber',count:1}],repeat:0});assert.deepEqual(kiln.queue,[]);
  assert.deepEqual(electro.input,[{itemId:'water',count:1},{itemId:'bottle_1',count:1,milliGU:17000},{itemId:'ice',count:2},null]);assert.deepEqual(electro.queue,[]);
+ // Only unrecognised old stock: the dedicated water/tank slots stay empty, leftovers fill 2–3, the rest becomes a pile.
+ const old2:any=fresh();old2.meta.stateVersion=5;delete old2.world.crates;const e2=makeBuilding(old2,'electrolyzer',46,0,42);e2.input=[{itemId:'ice',count:2},{itemId:'fiber',count:3},{itemId:'sand',count:1},null];
+ const m2=sanitizeState(old2),el2=m2.world.base.buildings[0];
+ assert.deepEqual(el2.input,[null,null,{itemId:'ice',count:2},{itemId:'fiber',count:3}]);assert.deepEqual(m2.world.drops.at(-1)!.items,[{itemId:'sand',count:1}]);
  kiln.job=null;kiln.input[0]=null;tick(g,1000);assert.equal(kiln.job,null);assert.equal(countItem(kiln.input,'sand'),4);assert.equal(countItem(electro.input,'ice'),2);assert.deepEqual(sanitizeState(g),g);const corrupt=structuredClone(old);corrupt.world.base.buildings[0].input[2]=0;assert.throws(()=>sanitizeState(corrupt));
 });

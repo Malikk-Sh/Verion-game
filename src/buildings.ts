@@ -18,6 +18,8 @@ export function placementProblem(g: GameState, kind: BuildingKind, x: number, z:
  if(Math.abs(x-100)<12+r&&Math.abs(z-132)<10+r)return 'Здесь зарезервирован будущий водоём';
  const y=heightAt(x,z),heights=[];for(const dx of [-r,0,r])for(const dz of [-r,0,r])heights.push(heightAt(x+dx,z+dz));
  if(Math.max(...heights)-Math.min(...heights)>.5)return 'Неровное основание: перепад больше 0,5 м';
+ // Combustion needs the outside air and an exhaust: a generator inside a dome would never burn its fuel.
+ if(kind==='biogenerator'&&g.world.base.buildings.some(d=>d.kind==='dome'&&insideDome(d,x,d.y+.1,z)))return 'Генератору нужен выхлоп — ставьте его снаружи купола';
  for(const b of g.world.base.buildings){const br=b.kind==='dome'?2.5:.48;
   if(b.kind==='dome'&&kind!=='dome'&&insideDome(b,x,b.y+.1,z))continue;
   if(Math.abs(x-b.x)<r+br+.1&&Math.abs(z-b.z)<r+br+.1)return 'Место занято постройкой';
