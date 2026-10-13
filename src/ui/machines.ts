@@ -103,7 +103,11 @@ function quickLoad(ctx: Ctx, kind: string, id: string, items: string[], label: s
  const has = ctx.g.player.inventory.some(s => s && items.includes(s.itemId));
  return button(label, () => {
   const g = ctx.g; let moved = 0, err = '';
-  for (let i = 0; i < g.player.inventory.length; i++) { const s = g.player.inventory[i]; if (s && items.includes(s.itemId)) { const before = s.count; err = loadMachineSlot(g, id, i); if (!err) moved += before - (g.player.inventory[i]?.itemId === s.itemId ? g.player.inventory[i]!.count : 0); else break; } }
+  // One kind per press: keep topping up what the machine already holds, otherwise take the first kind in the backpack.
+  // Loading a second kind would swap the single slot back and forth and leave the last one loaded.
+  const held = machine(g, id)?.input.find(s => s && items.includes(s.itemId))?.itemId;
+  const pick = held && g.player.inventory.some(s => s?.itemId === held) ? held : g.player.inventory.find(s => s && items.includes(s.itemId))?.itemId;
+  for (let i = 0; i < g.player.inventory.length; i++) { const s = g.player.inventory[i]; if (s && s.itemId === pick) { const before = s.count; err = loadMachineSlot(g, id, i); if (!err) moved += before - (g.player.inventory[i]?.itemId === s.itemId ? g.player.inventory[i]!.count : 0); else break; } }
   ctx.say(moved ? '' : err || 'Нечего загрузить', 'Загружено');
  }, 'st-btn small', !has);
 }

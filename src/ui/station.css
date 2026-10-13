@@ -162,6 +162,8 @@
  .st-bag{padding-left:10px}.st-checks{grid-template-columns:1fr}
 }
 @media(max-width:700px){.cr-layout{grid-template-columns:minmax(190px,44%) 1fr}.cr-mini .art{width:14px;height:14px}.cr-badge.station{max-width:64px}.st-layout{grid-template-columns:minmax(0,1fr) minmax(180px,40%)}.st-bag-grid{grid-template-columns:repeat(4,minmax(32px,1fr))}}
-@media(prefers-reduced-motion:reduce){#production-message.show,.st-status .st-lamp,.st-arrow.active span,.st-bag-cell.fits,.cr-detail-scroll{animation:none!important}}
+/* Flying item tokens of craftMotion.ts: placed by left/top in viewport space, never part of the layout. */
+.craft-motion-token{position:fixed;z-index:2000;pointer-events:none;object-fit:contain;filter:drop-shadow(0 0 5px #6bd6d6)}
+@media(prefers-reduced-motion:reduce){.craft-motion-token{display:none}#production-message.show,.st-status .st-lamp,.st-arrow.active span,.st-bag-cell.fits,.cr-detail-scroll{animation:none!important}}
 .cr-upgrade .cr-create{flex:0 0 auto;min-height:48px}
 @media(max-height:340px){.cr-desc{display:none}.cr-req>span:nth-child(2){white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.cr-card-head{gap:8px}.cr-hero{flex-basis:38px;width:38px;height:38px}.cr-titles h3{font-size:15px}.cr-make .cr-reason{font-size:11px}}

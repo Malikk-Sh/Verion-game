@@ -1,11 +1,11 @@
 import { ITEMS } from '../game/defs';
 import { itemArt } from './art';
+import { reducedMotion as reduced } from '../motion';
 /**
  * Pickup feed (S3 motion): gained items stack near the hotbar as "+N Камень · 12", while the icon
  * flies from the reticle into the hotbar cell that now holds it (or the backpack button).
  * Visual only; never touches the game state. Honours prefers-reduced-motion.
  */
-const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 type Entry = { item: string; count: number; el: HTMLElement; num: HTMLElement; total: HTMLElement; timer: number };
 export function createFeed() {
  const box = document.getElementById('pickup-feed')!;

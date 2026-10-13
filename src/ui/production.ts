@@ -39,6 +39,8 @@ export function createProductionPanel(host: Host) {
   const at = performance.now(); const g = host.game(); if (!g) return;
   const focus = document.activeElement as HTMLInputElement | null, search = focus?.id === 'craft-search', cursor = search ? [focus.selectionStart, focus.selectionEnd] : null;
   const b = machine(g, station), craft = station === 'hand' || b?.kind === 'workbench', panel = el('production-panel'), content = el('production-content');
+  // The station was packed into the backpack ("Забрать"): nothing left to show, close the window.
+  if (!b && station !== 'hand' && station !== 'capsule' && !station.startsWith('crate-')) { host.refill(null); if (!panel.hidden) host.close(); return; }
   panel.classList.toggle('crafting-panel', craft); panel.classList.toggle('machine-panel', !craft);
   // Entrance motion plays once per opening, not on every live redraw.
   panel.classList.toggle('redraw', !fresh); fresh = false;

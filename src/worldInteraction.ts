@@ -24,11 +24,12 @@ export function createWorldInteraction(scene: THREE.Scene, camera: THREE.Camera)
  const isBody = (id: string) => (BUILDABLE as readonly string[]).includes(id);
  function aim(g: GameState, reach: number) {
   camera.getWorldDirection(direction); ray.set(camera.position, direction);
-  let best = reach, dome: string | null = null, domeDist = reach; target = null;
+  let best = reach, dome: string | null = null, domeDist = reach, around: string | null = null; target = null;
   const p = g.player;
   for (const b of g.world.base.buildings) {
    const isDome = b.kind === 'dome';
-   if (isDome && insideDome(b, p.x, p.y + .1, p.z)) continue;
+   // Inside a dome its glass never blocks the machines; the dome itself stays the fallback target (to exit).
+   if (isDome && insideDome(b, p.x, p.y + .1, p.z)) { around = b.id; continue; }
    const r = isDome ? 2.5 : .6, h = isDome ? 3.1 : b.kind === 'workbench' && b.level === 2 ? 1.6 : 1.5;
    box.set(lo.set(b.x - r, b.y, b.z - r), hi.set(b.x + r, b.y + h, b.z + r));
    // Standing in the airlock vestibule (inside the dome's aim box, outside its cells) faces the dome directly.
@@ -44,6 +45,7 @@ export function createWorldInteraction(scene: THREE.Scene, camera: THREE.Camera)
   }
   // Glass: the dome is a target only when no machine is seen through or in front of it.
   if (!target && dome) target = dome;
+  if (!target && around) target = around;
   if (!target) {
    const inside = p.x > 37.5 && p.x < 42.5 && p.z > 37 && p.z < 43.1;
    const hit = ray.ray.intersectBox(CAPSULE_BOX(heightAt(40, 40)), hitPoint);

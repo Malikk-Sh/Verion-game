@@ -4,7 +4,7 @@ import { newGame, cloneState, sanitizeState, type GameState } from '../src/game/
 import { addItems, countItem } from '../src/game/inventory.ts';
 import { NODES, NODE_BY_ID } from '../src/game/resources.ts';
 import { natureTick } from '../src/game/nature.ts';
-import { RECIPES, RECIPE_BY_ID, WORKBENCH_UPGRADE, makeBuilding, startJob, productionTick, connect, linkSegments, insideDome } from '../src/game/production.ts';
+import { RECIPES, RECIPE_BY_ID, WORKBENCH_UPGRADE, makeBuilding, startJob, productionTick, connect, linkSegments, insideDome, beginPassage, domeFront } from '../src/game/production.ts';
 import { packStation } from '../src/game/worldActions.ts';
 import { TANKS } from '../src/game/defs.ts';
 import { heightAt } from '../src/world.ts';
@@ -79,4 +79,18 @@ test('S3: the whole start-to-base path fits the valley deposits with margin', ()
  assert.ok(TANKS.bottle_1.capacity >= 600000);
  assert.ok(RECIPE_BY_ID.get('electrolysis'));
  assert.equal(insideDome({ kind: 'dome', x: 0, y: 0, z: 0 } as any, 1, .5, 1), true);
+});
+test('S3: a turned dome keeps its airlock on the turned side, in and out', () => {
+ const g = fresh(), d = makeBuilding(g, 'dome', 60, 0, 40, 1);
+ assert.deepEqual(domeFront(d), { x: 1, z: 0 });
+ Object.assign(g.player, { x: 60, y: 0, z: 42.8 });
+ assert.equal(beginPassage(g, d.id), 'Подойдите к шлюзу купола');
+ Object.assign(g.player, { x: 62.8, z: 40 });
+ assert.equal(beginPassage(g, d.id), '');
+ const enter = productionTick(g, 6000).passage!;
+ assert.ok(insideDome(d, enter.x, enter.y, enter.z)); assert.equal(Math.round(enter.x), 61); assert.equal(enter.z, 40);
+ Object.assign(g.player, { x: enter.x, y: enter.y, z: enter.z });
+ assert.equal(beginPassage(g, d.id), '');
+ const leave = productionTick(g, 6000).passage!;
+ assert.ok(!insideDome(d, leave.x, leave.y, leave.z)); assert.ok(leave.x > 63); assert.equal(leave.z, 40);
 });

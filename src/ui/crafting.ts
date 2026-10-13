@@ -187,12 +187,14 @@ export function createCraftingView() {
   const pocket = r.station === 'hand', owner = pocket ? 'hand' : id, ob = pocket ? undefined : b, obAuto = !pocket && auto;
   const job = ob ? ob.job : g.world.base.hand, queueFree = obAuto ? 5 - ob!.queue.length - (ob!.job ? 1 : 0) : MAX_REPEAT + 1;
   const max = Math.max(1, Math.min(can, queueFree));
-  quantity = Math.max(1, Math.min(quantity, obAuto ? Math.max(1, queueFree) : 99));
+  // Never offer more batches than the backpack can pay for (and, for II, than the queue holds).
+  const canPay = pocket ? affordable(g, r) : can, limit = Math.max(1, Math.min(obAuto ? queueFree : MAX_REPEAT + 1, canPay));
+  quantity = Math.max(1, Math.min(quantity, limit));
   const make = h('footer', '', 'cr-make');
   if (here) {
    const qty = h('div', '', 'cr-qty');
    const out2 = h('output', String(quantity)); out2.setAttribute('aria-label', 'Количество партий');
-   qty.append(button('−', () => { quantity = Math.max(1, quantity - 1); redraw(); }, 'cr-step', quantity <= 1), out2, button('+', () => { quantity = Math.min(obAuto ? queueFree : 99, quantity + 1); redraw(); }, 'cr-step', quantity >= (obAuto ? queueFree : 99)), button('Макс', () => { quantity = max; redraw(); }, 'cr-max', can < 2));
+   qty.append(button('−', () => { quantity = Math.max(1, quantity - 1); redraw(); }, 'cr-step', quantity <= 1), out2, button('+', () => { quantity = Math.min(limit, quantity + 1); redraw(); }, 'cr-step', quantity >= limit), button('Макс', () => { quantity = limit; redraw(); }, 'cr-max', limit < 2));
    const missing = Object.entries(r.inputs).filter(([id, k]) => countItem(g.player.inventory, id) + countItem(ob?.input ?? [], id) < k);
    const reason = ob && !near ? 'Подойдите к верстаку' : !obAuto && job ? 'Идёт работа — дождитесь или отмените' : obAuto && queueFree < 1 ? 'Очередь заполнена' : missing.length ? 'Не хватает: ' + missing.map(([id]) => name(id)).join(', ') : '';
    const create = button(obAuto ? `В очередь ×${quantity}` : quantity > 1 ? `Создать ×${quantity}` : 'Создать', () => {
@@ -203,7 +205,7 @@ export function createCraftingView() {
     else {
      if (ob) error = loadRecipeInputs(g, r.id, owner);
      if (!error) error = startJob(g, r.id, owner, !!ob);
-     if (!error) { const j = ob ? ob.job : g.world.base.hand; if (j) j.repeat = Math.max(0, Math.min(MAX_REPEAT, quantity - 1, affordable(g, r, ob))); }
+     if (!error) { const j = ob ? ob.job : g.world.base.hand; if (j) j.repeat = Math.max(0, Math.min(MAX_REPEAT, quantity - 1)); }
     }
     notify(error, obAuto ? 'Добавлено в очередь' : 'Сборка начата');
     if (!error) transferCraft(tokens, '.cr-work');

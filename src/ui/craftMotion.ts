@@ -1,9 +1,9 @@
+import { reducedMotion as reduced } from '../motion';
 /** Short visual feedback; simulation, payment and saving never depend on animation. */
 type Token = { src: string; x: number; y: number; size: number };
 export function captureTokens(elements: Iterable<Element>,fallback?:Element|null): Token[] {
  return [...elements].slice(0,4).flatMap(e=>{const img=e.querySelector('img');if(!img)return [];const imageRect=img.getBoundingClientRect(),r=imageRect.width&&imageRect.height?imageRect:fallback?.getBoundingClientRect();if(!r?.width||!r.height)return [];return [{src:img.src,x:r.x+r.width/2,y:r.y+r.height/2,size:Math.max(24,Math.min(imageRect.width?48:36,r.width))}];});
 }
-const reduced=()=>window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 function visibleTarget(selector:string,fallback?:string){const e=document.querySelector<HTMLElement>(selector),r=e?.getBoundingClientRect();if(r?.width&&r.height)return e;const other=fallback?document.querySelector<HTMLElement>(fallback):null,rect=other?.getBoundingClientRect();return rect?.width&&rect.height?other:null;}
 export function pulseCraft(selector:string,fallback?:string){
  if(reduced())return;const e=visibleTarget(selector,fallback);if(!e)return;

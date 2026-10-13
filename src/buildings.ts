@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { reducedMotion } from './motion';
 import { boxes, box, heightAt } from './world';
 import { BUILDABLE, ITEMS, TANKS, type BuildingKind } from './game/defs';
 import { insideDome, makeBuilding, domeFaces, habitable, telemetry, RECIPE_BY_ID, nearby, poweredComponent, type Building } from './game/production';
@@ -146,15 +147,17 @@ export function createBuildings(scene: THREE.Scene, fx?: Fx) {
  /** Animates stations and flow; `dt` is real frame time (0 while frozen). */
  function update(g: GameState | null, dt: number) {
   if (!g) return; time += dt;
-  cableFlow.offset.x -= dt * 1.6; pipeFlow.offset.x -= dt * 1.2;
+  // Reduced motion: no flow, spin, drop-in, draw-in or smoke; lamps and colours still show the state.
+  const still = reducedMotion(), m = still ? 0 : dt;
+  cableFlow.offset.x -= m * 1.6; pipeFlow.offset.x -= m * 1.2;
   for (const s of stations.values()) {
    const b = g.world.base.buildings.find(v => v.id === s.b.id); if (!b) continue;
-   s.v.update(dt, stationLook(g, b));
+   s.v.update(dt, stationLook(g, b), still);
    const t = born.get(b.id);
-   if (t !== undefined) { const k = Math.min(1, t + dt * 2.4); born.set(b.id, k); const e = 1 - Math.pow(1 - k, 3), over = Math.sin(k * Math.PI) * .08; s.v.group.scale.set(1 + over, e + over * .5, 1 + over); s.v.group.position.y = (1 - e) * .6; if (t < .55 && k >= .55) fx?.land(b.x, b.y, b.z, b.kind === 'dome' ? 2.3 : .6); if (k >= 1) { born.delete(b.id); s.v.group.scale.setScalar(1); s.v.group.position.y = 0; } }
-   if (fx && dt > 0) emitFrom(g, b, dt);
+   if (t !== undefined) { const k = still ? 1 : Math.min(1, t + dt * 2.4); born.set(b.id, k); const e = 1 - Math.pow(1 - k, 3), over = Math.sin(k * Math.PI) * .08; s.v.group.scale.set(1 + over, e + over * .5, 1 + over); s.v.group.position.y = (1 - e) * .6; if (t < .55 && k >= .55 && !still) fx?.land(b.x, b.y, b.z, b.kind === 'dome' ? 2.3 : .6); if (k >= 1) { born.delete(b.id); s.v.group.scale.setScalar(1); s.v.group.position.y = 0; } }
+   if (fx && m > 0) emitFrom(g, b, dt);
   }
-  for (const l of lines) if (l.grow < 1) { l.grow = Math.min(1, l.grow + dt * 1.8); const idx = l.mesh.geometry.index; l.mesh.geometry.setDrawRange(0, Math.floor((idx ? idx.count : l.mesh.geometry.attributes.position.count) * l.grow / 3) * 3); if (l.grow >= 1) for (const e of l.extra) e.visible = true; }
+  for (const l of lines) if (l.grow < 1) { l.grow = still ? 1 : Math.min(1, l.grow + dt * 1.8); const idx = l.mesh.geometry.index; l.mesh.geometry.setDrawRange(0, Math.floor((idx ? idx.count : l.mesh.geometry.attributes.position.count) * l.grow / 3) * 3); if (l.grow >= 1) for (const e of l.extra) e.visible = true; }
  const powered = new Set<string>();
   for (const b of g.world.base.buildings) if ((telemetry.supply.get(b.id) ?? 0) > 0) for (const id of poweredComponent(g, b.id)) powered.add(id);
   for (const l of lines) {

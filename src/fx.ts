@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { reducedMotion } from './motion';
 /**
  * Pooled world particles (S3 motion design): mining chips and dust, landing rings, smoke from
  * chimneys and exhausts, sparks along a new line. One draw call per blending mode; CPU update
@@ -67,36 +68,38 @@ export function createFx(scene: THREE.Scene) {
  const solid = new Pool(700, THREE.NormalBlending, false), soft = new Pool(500, THREE.NormalBlending, true), glow = new Pool(240, THREE.AdditiveBlending, true);
  scene.add(solid.points, soft.points, glow.points);
  let enabled = true;
+ // Particles are pure motion: prefers-reduced-motion switches every emitter off.
+ const on = () => enabled && !reducedMotion();
  const api = {
   set enabled(v: boolean) { enabled = v; }, get enabled() { return enabled; },
   /** Small chips off a deposit at each tool strike. */
   strike(x: number, y: number, z: number, material: string) {
-   if (!enabled) return; const c = MATERIAL_FX[material] ?? '#b9b0a2';
+   if (!on()) return; const c = MATERIAL_FX[material] ?? '#b9b0a2';
    solid.emit({ x, y, z, color: c, count: material === 'grass' ? 5 : 9, spread: 2.4, up: 2.8, size: material === 'ice' ? .1 : .09, life: .6, gravity: 9, drag: .6 });
    soft.emit({ x, y, z, color: material === 'ice' ? '#ffffff' : '#c9b79c', count: 3, spread: .7, up: .5, size: .4, grow: 1.8, life: .8, gravity: -.2, drag: 1.4, alpha: .45 });
    if (material === 'ice') glow.emit({ x, y, z, color: '#bff6ff', count: 3, spread: 1.6, up: 1.4, size: .05, life: .4, gravity: 4 });
   },
   /** A finished block: a heavier burst and a dust cloud. */
   block(x: number, y: number, z: number, material: string) {
-   if (!enabled) return; const c = MATERIAL_FX[material] ?? '#b9b0a2';
+   if (!on()) return; const c = MATERIAL_FX[material] ?? '#b9b0a2';
    solid.emit({ x, y, z, color: c, count: 22, spread: 3.2, up: 3.6, size: .11, life: .95, gravity: 10, drag: .4 });
    soft.emit({ x, y: y - .2, z, color: material === 'ice' ? '#f4fbff' : material === 'grass' ? '#a7b07a' : '#cbb89a', count: 8, spread: 1.4, up: .7, size: .55, grow: 2.2, life: 1.3, gravity: -.15, drag: 1.2, alpha: .4 });
   },
   /** A placed station settles: a ring of dust at its footprint. */
   land(x: number, y: number, z: number, radius: number) {
-   if (!enabled) return;
+   if (!on()) return;
    for (let i = 0; i < 26; i++) { const a = i / 26 * Math.PI * 2; soft.emit({ x: x + Math.cos(a) * radius, y: y + .08, z: z + Math.sin(a) * radius, vx: Math.cos(a) * 1.8, vz: Math.sin(a) * 1.8, color: '#cdb796', size: .45, grow: 2, life: 1.2, gravity: -.1, drag: 1.6, alpha: .45 }); }
    glow.emit({ x, y: y + .2, z, color: '#7fe6da', count: 14, spread: 2.4, up: 2, size: .06, life: .7, gravity: 3 });
   },
   /** Sparks travelling along a new cable or pipe. */
   connect(points: THREE.Vector3[], kind: 'cable' | 'gas_pipe') {
-   if (!enabled) return; const c = kind === 'cable' ? '#ffb46a' : '#9ff1ff';
+   if (!on()) return; const c = kind === 'cable' ? '#ffb46a' : '#9ff1ff';
    points.forEach((p, i) => { if (i % 2) return; glow.emit({ x: p.x, y: p.y, z: p.z, color: c, count: 3, spread: .8, up: .8, size: .07, life: .5 + i * .02, gravity: 2 }); });
   },
-  smoke(x: number, y: number, z: number, dark = false) { if (enabled) soft.emit({ x, y, z, color: dark ? '#35312e' : '#625c56', count: 2, spread: .3, up: .9, size: .42, grow: 3.2, life: 2.6, gravity: -.35, drag: .8, alpha: dark ? .75 : .68, vx: .25 }); },
-  steam(x: number, y: number, z: number) { if (enabled) soft.emit({ x, y, z, color: '#f2fbff', count: 1, spread: .2, up: .7, size: .18, grow: 2.4, life: 1.4, gravity: -.3, drag: 1, alpha: .28 }); },
-  ember(x: number, y: number, z: number) { if (enabled) glow.emit({ x, y, z, color: '#ff9a4a', count: 1, spread: .5, up: 1.4, size: .04, life: .9, gravity: -.4, drag: .9 }); },
-  hiss(x: number, y: number, z: number) { if (enabled) soft.emit({ x, y, z, color: '#e9f3f2', count: 3, spread: 1.4, up: .3, size: .25, grow: 2.5, life: .9, gravity: 0, drag: 1.8, alpha: .3 }); },
+  smoke(x: number, y: number, z: number, dark = false) { if (on()) soft.emit({ x, y, z, color: dark ? '#35312e' : '#625c56', count: 2, spread: .3, up: .9, size: .42, grow: 3.2, life: 2.6, gravity: -.35, drag: .8, alpha: dark ? .75 : .68, vx: .25 }); },
+  steam(x: number, y: number, z: number) { if (on()) soft.emit({ x, y, z, color: '#f2fbff', count: 1, spread: .2, up: .7, size: .18, grow: 2.4, life: 1.4, gravity: -.3, drag: 1, alpha: .28 }); },
+  ember(x: number, y: number, z: number) { if (on()) glow.emit({ x, y, z, color: '#ff9a4a', count: 1, spread: .5, up: 1.4, size: .04, life: .9, gravity: -.4, drag: .9 }); },
+  hiss(x: number, y: number, z: number) { if (on()) soft.emit({ x, y, z, color: '#e9f3f2', count: 3, spread: 1.4, up: .3, size: .25, grow: 2.5, life: .9, gravity: 0, drag: 1.8, alpha: .3 }); },
   update(dt: number, camera: THREE.PerspectiveCamera, height: number) { solid.update(dt, camera, height); soft.update(dt, camera, height); glow.update(dt, camera, height); },
   stats: () => ({ solid: solid.alive, soft: soft.alive, glow: glow.alive }),
  };

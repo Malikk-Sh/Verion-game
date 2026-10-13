@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { reducedMotion } from './motion';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import type { BuildingKind } from './game/defs';
@@ -11,7 +12,8 @@ import type { BuildingKind } from './game/defs';
  */
 export type StationStatus = 'work' | 'idle' | 'warn' | 'off';
 export type StationLook = { status: StationStatus; working: number; habitable?: boolean; door?: number; level?: number };
-export type StationVisual = { group: THREE.Group; update(dt: number, look: StationLook): void; dispose(): void };
+/** `still` (prefers-reduced-motion): parts stop moving; lamps and glow still report the state. */
+export type StationVisual = { group: THREE.Group; update(dt: number, look: StationLook, still?: boolean): void; dispose(): void };
 
 const M = (() => {
  let cache: ReturnType<typeof make> | null = null;
@@ -238,13 +240,13 @@ export function buildStation(kind: BuildingKind, level: number): StationVisual {
   const light = new THREE.PointLight('#cdf7f0', 0, 6, 1.6); light.position.set(0, 2.6, 0); group.add(light); a.parts.light = light;
  }
  let t = Math.random() * 10, spin = 0, heat = 0;
- function update(dt: number, look: StationLook) {
-  t += dt; const w = look.working;
+ function update(dt: number, look: StationLook, still = false) {
+  const m = still ? 0 : dt; t += m; const w = look.working;
   status.mat.emissive.set(LAMP_COLOR[look.status]); status.mat.emissiveIntensity = look.status === 'warn' ? 1.2 + Math.max(0, Math.sin(t * 6)) * 2.4 : look.status === 'off' ? .2 : 2.2;
-  if (a.mats.fire) { heat = THREE.MathUtils.clamp(heat + (w ? dt * 1.5 : -dt * .6), 0, 1); const f = heat * (.9 + Math.sin(t * 13) * .25 + Math.sin(t * 7.3) * .2); a.mats.fire.emissiveIntensity = f * 2.2; (a.parts.light as THREE.PointLight).intensity = f * 3.2; }
-  if (a.parts.wheel) { spin = THREE.MathUtils.lerp(spin, w ? 9 : 0, Math.min(1, dt * 1.5)); a.parts.wheel.rotation.x += spin * dt; }
-  if (a.parts.fan) { spin = THREE.MathUtils.lerp(spin, w ? 14 : 0, Math.min(1, dt * 1.2)); a.parts.fan.rotation.y += spin * dt; }
-  if (a.parts.bubbles) { a.mats.glow.emissiveIntensity = THREE.MathUtils.lerp(a.mats.glow.emissiveIntensity, w ? 1.4 + Math.sin(t * 5) * .2 : .12, Math.min(1, dt * 3)); a.parts.bubbles.visible = w > 0; if (w) for (const b of a.parts.bubbles.children) { b.position.y += b.userData.speed * dt; if (b.position.y > .43) b.position.y = 0; } }
+  if (a.mats.fire) { heat = still ? (w ? 1 : 0) : THREE.MathUtils.clamp(heat + (w ? dt * 1.5 : -dt * .6), 0, 1); const f = heat * (.9 + Math.sin(t * 13) * .25 + Math.sin(t * 7.3) * .2); a.mats.fire.emissiveIntensity = f * 2.2; (a.parts.light as THREE.PointLight).intensity = f * 3.2; }
+  if (a.parts.wheel) { spin = THREE.MathUtils.lerp(spin, w ? 9 : 0, Math.min(1, dt * 1.5)); a.parts.wheel.rotation.x += spin * m; }
+  if (a.parts.fan) { spin = THREE.MathUtils.lerp(spin, w ? 14 : 0, Math.min(1, dt * 1.2)); a.parts.fan.rotation.y += spin * m; }
+  if (a.parts.bubbles) { a.mats.glow.emissiveIntensity = THREE.MathUtils.lerp(a.mats.glow.emissiveIntensity, w ? 1.4 + Math.sin(t * 5) * .2 : .12, Math.min(1, dt * 3)); a.parts.bubbles.visible = w > 0; if (w) for (const b of a.parts.bubbles.children) { b.position.y += b.userData.speed * m; if (b.position.y > .43) b.position.y = 0; } }
   if (a.mats.screen) a.mats.screen.emissiveIntensity = w ? .9 + Math.sin(t * 2) * .15 : .25;
   if (a.parts.head) a.parts.head.position.x = .2 + (w ? Math.sin(t * 3.1) * .22 : 0);
   if (a.parts.door) { const open = look.door ?? 0; a.parts.door.position.x = open * 1.0; a.parts.door.visible = open < .99; }
@@ -270,7 +272,7 @@ export function createGhost(scene: THREE.Scene) {
   show(kind: BuildingKind, x: number, y: number, z: number, rot: number, valid: boolean, dt: number) {
    const g = model(kind); if (current && current !== g) current.visible = false; current = g; g.visible = true;
    for (const c of g.children) (c as THREE.Mesh).material = valid ? ok : bad;
-   pulse += dt; const a = .3 + Math.sin(pulse * 4) * .08; ok.opacity = bad.opacity = a;
+   if (!reducedMotion()) pulse += dt; const a = .3 + Math.sin(pulse * 4) * .08; ok.opacity = bad.opacity = a;
    ringMat.color.set(valid ? 0x64e6bd : 0xe76d62);
    root.position.set(x, y, z); root.visible = true; g.rotation.y = rot * Math.PI / 2;
    const size = kind === 'dome' ? 2.25 : .62; ring.scale.setScalar(size * 1.414); ring.position.y = .03;

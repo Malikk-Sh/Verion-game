@@ -3,6 +3,7 @@ import { sceneInterval } from './renderPolicy';
 import { createWorldInteraction } from './worldInteraction';
 import { stationStatus } from './game/stationStatus';
 import { createFx } from './fx';
+import { reducedMotion } from './motion';
 import { createFeed } from './ui/feed';
 import { packStation } from './game/worldActions';
 import { countItem } from './game/inventory';
@@ -80,6 +81,8 @@ function boot(){
  let refillTanks=false;
  let refillMachine:string|null=null,nearMachine:string|null=null;
  const liveDialogs=new Set(['inventory-panel','suit-panel','production-panel']);
+ // Where the workshop returns when it was opened from the paused journal (null: back to play).
+ let workshopReturn:string|null=null;
  const hand=createViewModel();
  const TITLE_OFFSET=-.42;
  let captureRequested:((data:string)=>void)|null=null;
@@ -103,8 +106,10 @@ function boot(){
  function setDialog(which:string|null){
   if(game?.player.vitals.health===0&&(which===null||liveDialogs.has(which)||['map-panel','info-panel','quest-panel'].includes(which)))which='death-panel';
   clearInput();if(which)el('target-marker').hidden=true;last=performance.now();running=which===null;dialog=which||'';
+  if(which!=='production-panel')workshopReturn=null;
   // The clock runs in play and in the inventory (time does not stop there, SYSTEMS §1); every other dialog freezes it.
-  if(started&&(running||liveDialogs.has(dialog))&&!saver?.halted)clock.start();else clock.stop();
+  // A workshop opened from the paused journal stays frozen and closes back into the pause.
+  if(started&&(running||(liveDialogs.has(dialog)&&!workshopReturn))&&!saver?.halted)clock.start();else clock.stop();
   el('veil').hidden=which===null;
   for(const id of ALL_DIALOGS)el(id).hidden=id!==which;
   el('veil').classList.toggle('live',liveDialogs.has(dialog));
@@ -160,11 +165,11 @@ function boot(){
  el('close-inventory').onclick=()=>{audio.tone('ui');void saver?.save();resume();};
  let questReturn:string|null=null;
  const questBook=createQuestBook({game:()=>game,show:()=>{questReturn=dialog==='paused'?'paused':null;setDialog('quest-panel');},close:()=>{void saver?.save();if(questReturn)setDialog(questReturn);else resume();},changed:()=>{lastObjective='';updateUI();void saver?.save();},tone:()=>audio.tone('ui'),
-  craft:recipeId=>{production.openRecipe(recipeId);},
+  craft:recipeId=>{workshopReturn=questReturn;production.openRecipe(recipeId);},
   navigate:target=>{guideOverride=target;selected='guide';updateUI();}});
  const openQuests=()=>{if(!started||!game||game.player.vitals.health<=0||saver?.halted)return;if(dialog==='quest-panel'){questBook.escape();return;}if(running||liveDialogs.has(dialog)||dialog==='paused')questBook.open();};
  el('quests-button').onclick=openQuests;
- const production=createProductionPanel({game:()=>game,show:()=>setDialog('production-panel'),close:()=>{void saver?.save();resume();},changed:()=>{if(game)built.sync(game);world.invalidateShadows();syncDrops();hudKey='';updateHotbar();void saver?.save();},measure:(name,ms)=>{diagnostics.span(name,ms);diagnostics.event(name,ms,{dialog,quality:settings.quality});},refill:id=>{const wasRefilling=refillMachine!==null;refillMachine=id;if(wasRefilling&&!id)void saver?.save();},tone:ok=>audio.tone(ok?'item':'warn'),
+ const production=createProductionPanel({game:()=>game,show:()=>setDialog('production-panel'),close:()=>{void saver?.save();const back=workshopReturn;if(back)setDialog(back);else resume();},changed:()=>{if(game)built.sync(game);world.invalidateShadows();syncDrops();hudKey='';updateHotbar();void saver?.save();},measure:(name,ms)=>{diagnostics.span(name,ms);diagnostics.event(name,ms,{dialog,quality:settings.quality});},refill:id=>{const wasRefilling=refillMachine!==null;refillMachine=id;if(wasRefilling&&!id)void saver?.save();},tone:ok=>audio.tone(ok?'item':'warn'),
   navigate:t=>{guideOverride=t;selected='guide';audio.tone('ui');void saver?.save();resume();updateUI();}});
  el('craft-button').onclick=()=>production.open();
 
@@ -676,7 +681,7 @@ function boot(){
    viewDirection.set(Math.sin(actor.yaw)*Math.cos(pitch),Math.sin(pitch),Math.cos(actor.yaw)*Math.cos(pitch));camera.lookAt(tmp.copy(viewPos).add(viewDirection));
    if(ease>0)camera.rotateZ(Math.sin(ease*3)*.06*ease);
    // Short tool-impact shake; decays in ~0.2 s and respects the camera-bob setting.
-   if(shake>0&&settings.bob){camera.rotateX((Math.random()-.5)*shake*.06);camera.rotateY((Math.random()-.5)*shake*.06);}shake=Math.max(0,shake-dt*.5);
+   if(shake>0&&settings.bob&&!reducedMotion()){camera.rotateX((Math.random()-.5)*shake*.06);camera.rotateY((Math.random()-.5)*shake*.06);}shake=Math.max(0,shake-dt*.5);
    const targetFov=settings.fov+(Math.hypot(actor.vx,actor.vz)>4&&running&&settings.bob?6:0);fov+=(targetFov-fov)*Math.min(1,dt*6);if(Math.abs(camera.fov-fov)>.01){camera.fov=fov;camera.updateProjectionMatrix();}
   }
   // Explicit pause (and settings opened from it) freezes the whole scene, not only the controller.

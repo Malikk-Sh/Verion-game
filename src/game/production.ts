@@ -205,10 +205,12 @@ export function linkOptions(g: GameState, id: string) {
 export function poweredComponent(g: GameState, id: string) {
  const seen=new Set([id]),q=[id];while(q.length){const v=q.shift()!;for(const l of g.world.base.links)if(l.kind==='cable'){const n=l.from===v?l.to:l.to===v?l.from:null;if(n&&!seen.has(n)){seen.add(n);q.push(n);}}}return seen;
 }
+/** Unit vector of the airlock side: the model's +z turned by `rot` quarter turns. */
+export const domeFront = (b: { rot: number }) => ({ x: Math.round(Math.sin(b.rot * Math.PI / 2)), z: Math.round(Math.cos(b.rot * Math.PI / 2)) });
 export function beginPassage(g: GameState, id: string): string {
  const b=machine(g,id);if(!b||b.kind!=='dome')return 'Нужен купол';if(g.world.base.passage)return 'Шлюз занят';
- const inside=insideDome(b,g.player.x,g.player.y,g.player.z);
- if(!inside&&Math.hypot(g.player.x-b.x,g.player.z-(b.z+2.8))>3)return 'Подойдите к переднему шлюзу';
+ const inside=insideDome(b,g.player.x,g.player.y,g.player.z),f=domeFront(b);
+ if(!inside&&Math.hypot(g.player.x-(b.x+f.x*2.8),g.player.z-(b.z+f.z*2.8))>3)return 'Подойдите к шлюзу купола';
  const cost=Math.min(b.zone.q,4000);b.zone.q-=cost;
  g.world.base.passage={domeId:id,direction:inside?'out':'in',remainingMs:6000};
  return ''; 
@@ -271,7 +273,7 @@ export function productionTick(g: GameState, ms: number, refillId: string | null
  const refill=refillId&&machine(g,refillId);if(refill&&Math.hypot(refill.x-g.player.x,refill.z-g.player.z)<=3.2){let budget=Math.min(refill.oxygen,(power.get(refill.id)??0)*10);for(const t of g.player.bottles)if(t){const n=Math.min(budget,TANKS[t.itemId].capacity-(t.milliGU??0));t.milliGU=(t.milliGU??0)+n;refill.oxygen-=n;budget-=n;if(n>0)changed=recordQuestFact(g,'system:refill')||changed;}}
  if(automaticWork&&g.progress.quests.facts.includes('system:auto')&&base.buildings.some(habitable))changed=recordQuestFact(g,'system:base')||changed;
  let passage:ProductionTick['passage']=null;
- if(base.passage){base.passage.remainingMs=Math.max(0,base.passage.remainingMs-ms);if(!base.passage.remainingMs){const d=machine(g,base.passage.domeId)!;passage={x:d.x,y:d.y+.12,z:d.z+(base.passage.direction==='in'?1:3.5)};base.passage=null;changed=true;}}
+ if(base.passage){base.passage.remainingMs=Math.max(0,base.passage.remainingMs-ms);if(!base.passage.remainingMs){const d=machine(g,base.passage.domeId)!,f=domeFront(d),k=base.passage.direction==='in'?1:3.5;passage={x:d.x+f.x*k,y:d.y+.12,z:d.z+f.z*k};base.passage=null;changed=true;}}
  return {changed,passage};
 }
 
