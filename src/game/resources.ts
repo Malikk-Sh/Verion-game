@@ -47,17 +47,10 @@ export const GRASS_PATCHES = [
  {x:136,z:104,rx:4,rz:5}, {x:59,z:114,rx:4.3,rz:3.5},
 ];
 export const SHARED_PATCH_SPLIT = 44;
-/** Whether a square footprint (centre x, z, half-size h) covers part of a deposit: its collider box, its rendered
- *  grass patch, else its radius. */
+/** Whether a square footprint (centre x, z, half-size h) covers part of a deposit: its collider box, else its radius.
+ *  Grass is drawn as tufts: `covers` in nature.ts checks those. */
 export function nodeCovered(n: ResourceNode, x: number, z: number, h: number): boolean {
  if (n.box) return Math.abs(x - n.x) < h + n.box[0] / 2 && Math.abs(z - n.z) < h + n.box[2] / 2;
- if (n.patch !== undefined) {
-  const p = GRASS_PATCHES[n.patch]; let x0 = x - h, x1 = x + h;
-  if (n.patch === 0) { if (n.id === 'grass-a') x1 = Math.min(x1, SHARED_PATCH_SPLIT); else x0 = Math.max(x0, SHARED_PATCH_SPLIT); }
-  if (x0 >= x1) return false;
-  const dx = p.x < x0 ? x0 - p.x : p.x > x1 ? p.x - x1 : 0, dz = Math.max(0, Math.abs(z - p.z) - h);
-  return (dx / p.rx) ** 2 + (dz / p.rz) ** 2 < 1;
- }
  return Math.hypot(Math.max(0, Math.abs(x - n.x) - h), Math.max(0, Math.abs(z - n.z) - h)) < n.radius;
 }
 /** Half-size of a placed body's footprint (as in placement). */

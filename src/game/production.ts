@@ -235,7 +235,8 @@ export const roomRate = (id: string) => (telemetry.room.get(id) ?? 0) / telemetr
  * residual graph, so a lower class never takes what a higher one can still receive. Returns what each consumer
  * receives and what each generator gives, in milli-EU for this tick. */
 /** Unit fractions each consumer is still owed (+) or got ahead (−) from earlier shared deficits, per base. Whole-unit
- *  shares then stay proportional over time; nothing is saved (a reload restarts from zero, off by less than a unit). */
+ *  shares then stay proportional over time, also across full ticks in between; nothing is saved (a reload restarts
+ *  from zero, off by less than a unit per consumer). */
 const powerDebt = new WeakMap<object, Map<string, number>>();
 export function deliverPower(g: GameState, group: Building[], supply: Building[], requests: { b: Building; need: number; priority: number }[], ms: number) {
  const at = new Map(group.map((b, i) => [b.id, i + 2])), n = group.length + 2, cap = Array.from({ length: n }, () => new Array<number>(n).fill(0));
@@ -278,7 +279,7 @@ export function deliverPower(g: GameState, group: Building[], supply: Building[]
    best = fair;
    const given = sinks.map(v => best.c[1][v]), total = given.reduce((s, v) => s + v, 0);
    cls.forEach((r, i) => debt.set(r.b.id, Math.max(-1, Math.min(1, r.need * total / want + (debt.get(r.b.id) ?? 0) - given[i]))));
-  } else for (const r of cls) debt.delete(r.b.id);
+  } // a full tick serves the requests without touching the carried fractions: only a later shared deficit settles them
   for (let i = 0; i < n; i++) cap[i] = best.c[i];
   for (const v of sinks) cap[v][1] = 0; // this class is served; its unmet need is not offered to the next one
  }

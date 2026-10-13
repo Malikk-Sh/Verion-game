@@ -4,6 +4,7 @@ import { freshBase, RECIPE_BY_ID, domeFaces, domeFront, LINK_RANGE, MAX_REPEAT, 
 import { BASIC_SUIT, BUILDABLE, CONTENT_VERSION, GENERATOR_VERSION, ITEMS, LEGACY_CONTENT_VERSIONS, SUIT_PARTS, TANKS, TOOLS, type SuitPart } from './defs';
 import { emptyInventory, INVENTORY_SIZE, type Slot } from './inventory';
 import { NODES, NODE_BY_ID, LATER_NODES, S3_NODES, nodeCovered, bodyHalf } from './resources';
+import { covers } from './nature';
 import { CYCLE_TICKS, START_OFFSET_TICKS } from './daycycle';
 import { freshQuestProgress, QUEST_FACTS, type QuestProgress } from './questFacts';
 import { QUEST_IDS, type QuestId } from './questCatalog';
@@ -156,7 +157,7 @@ function toV7(r:Obj):Obj{
  const base=obj(world.base,'world.base'),pl=obj(next.player,'player'),bodies=arr(base.buildings,'buildings',64).filter(isObj);
  // The old world never saw these deposits. One that would appear under a body arrives empty (no collider, no stock);
  // a solid one also stays clear of the player and of each airlock's exit cells, where a collider would trap them.
- const blocks=(n:typeof NODES[number])=>bodies.some(b=>nodeCovered(n,Number(b.x),Number(b.z),bodyHalf(String(b.kind))))||!!n.box&&(nodeCovered(n,Number(pl.x),Number(pl.z),.4)||
+ const blocks=(n:typeof NODES[number])=>bodies.some(b=>covers(n,Number(b.x),Number(b.z),bodyHalf(String(b.kind))))||!!n.box&&(nodeCovered(n,Number(pl.x),Number(pl.z),.4)||
   bodies.some(b=>{if(b.kind!=='dome')return false;const f=domeFront({rot:Number(b.rot??0)}),x=Number(b.x),z=Number(b.z);return nodeCovered(n,x+f.x,z+f.z,.45)||nodeCovered(n,x+f.x*3.5,z+f.z*3.5,.45);}));
  // Only deposits new in S3 arrive full; a missing older one stays missing and fails validation (no refill by deletion).
  for(const n of NODES)if(S3_NODES.has(n.id)&&!(n.id in nodes))nodes[n.id]=blocks(n)?0:n.amount;

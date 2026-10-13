@@ -2,8 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { newGame, cloneState, sanitizeState, type GameState } from '../src/game/state.ts';
 import { addItems, countItem } from '../src/game/inventory.ts';
-import { NODES, NODE_BY_ID, PATCH_NODES, nodeCovered } from '../src/game/resources.ts';
-import { natureTick, nextRegrowSeconds } from '../src/game/nature.ts';
+import { NODES, NODE_BY_ID, PATCH_NODES } from '../src/game/resources.ts';
+import { natureTick, nextRegrowSeconds, covers } from '../src/game/nature.ts';
 import { RECIPES, RECIPE_BY_ID, WORKBENCH_UPGRADE, makeBuilding, startJob, productionTick, connect, linkSegments, insideDome, beginPassage, domeFront, telemetry, deliverPower, manualWork, queueJob } from '../src/game/production.ts';
 import { packStation } from '../src/game/worldActions.ts';
 import { TANKS } from '../src/game/defs.ts';
@@ -197,14 +197,16 @@ test('S3: a patch under a body does not regrow; it resumes once the body is gone
  g.world.nodes[n.id] = n.amount - 2;
  const b = makeBuilding(g, 'workbench', 17, 0, 66);
  natureTick(g, period * 5); assert.equal(g.world.nodes[n.id], n.amount - 2); assert.equal(nextRegrowSeconds(g, n.id), null);
- b.x = 20; // the rendered patch is an ellipse 4.5 m wide along X: still built over
+ b.x = 20; // tufts reach 4.5 m and more along X from the patch centre: still built over
  natureTick(g, period); assert.equal(g.world.nodes[n.id], n.amount - 2);
- b.x = 22; // clear of every tuft: it grows again
+ // The leaves count, not only tuft centres: a tuft at (20.28, 65.48) reaches into a body standing at (21, 65).
+ assert.ok(covers(n, 21, 65, .48));
+ b.x = 22; // clear of every tuft's leaves: it grows again
  natureTick(g, period); assert.equal(g.world.nodes[n.id], n.amount - 1);
- // A body standing on any rendered tuft covers that tuft's deposit.
+ // A body touching any rendered tuft's leaves covers that tuft's deposit.
  for (const t of GRASS) if (t.patch >= 0) {
-  const id = PATCH_NODES.get(t.patch)!.find(id => t.patch !== 0 || (t.x < 44) === (id === 'grass-a'))!;
-  assert.ok(nodeCovered(NODE_BY_ID.get(id)!, t.x, t.z, .48), `${id} tuft ${t.x.toFixed(2)}, ${t.z.toFixed(2)}`);
+  const id = PATCH_NODES.get(t.patch)!.find(id => t.patch !== 0 || (t.x < 44) === (id === 'grass-a'))!, reach = .48 * t.s * 1.35;
+  assert.ok(covers(NODE_BY_ID.get(id)!, t.x + reach + .47, t.z, .48), `${id} tuft ${t.x.toFixed(2)}, ${t.z.toFixed(2)}`);
  }
 });
 test('S3: a v6 world gets no new deposit under a body, the player or an airlock exit', () => {
@@ -239,6 +241,14 @@ test('S3: a power deficit inside one class is shared in proportion to the reques
  const sum = us.map(() => 0);
  for (let i = 0; i < 50; i++) { const d = deliverPower(u, [ug, ...us], [ug], us.map((b, j) => ({ b, need: needs[j], priority: 0 })), ms).delivered; us.forEach((b, j) => { sum[j] += d.get(b.id)!; }); }
  needs.forEach((n, j) => assert.ok(Math.abs(sum[j] - 50 * 2000 * n / 2175) < 1, `${n}: ${sum[j]}`));
+ // Full ticks in between keep what a deficit still owes: 3 × 900 from 2000, then from 4000, repeated.
+ const w = fresh(); addItems(w.player.inventory, 'cable', 20);
+ const [w1, w2] = [[50, 50], [50, 54]].map(([x, z]) => makeBuilding(w, 'biogenerator', x, 0, z)), ws = [[54, 50], [46, 50], [50, 46]].map(([x, z]) => makeBuilding(w, 'distributor', x, 0, z));
+ for (const gen of [w1, w2]) gen.energy = 400000;
+ for (const s of ws) assert.equal(connect(w, 'cable', w1.id, s.id), ''); assert.equal(connect(w, 'cable', w1.id, w2.id), '');
+ const got3 = ws.map(() => 0);
+ for (let i = 0; i < 60; i++) { const d = deliverPower(w, [w1, w2, ...ws], i % 2 ? [w1, w2] : [w1], ws.map(b => ({ b, need: 900, priority: 0 })), ms).delivered; ws.forEach((b, j) => { got3[j] += d.get(b.id)!; }); }
+ assert.ok(Math.max(...got3) - Math.min(...got3) <= 1, String(got3));
  // Unequal requests keep their ratio: 30 vs 10 EU/s from 20 EU/s → 15 and 5.
  const h = fresh(); addItems(h.player.inventory, 'cable', 10);
  const hg = makeBuilding(h, 'biogenerator', 50, 0, 50), a = makeBuilding(h, 'distributor', 54, 0, 50), b = makeBuilding(h, 'distributor', 46, 0, 50); hg.energy = 20 * ms;
