@@ -40,6 +40,13 @@ export const NODES: ResourceNode[] = [
  { id: 'ice-crater', name: 'Ледяное дно кратера', material: 'ice', itemId: 'ice', x: 266, z: 262, amount: 160, radius: 2, height: 1.4, outcrop: 'ice', box: [3.4, 1.4, 3.4], far: true },
 ];
 export const NODE_BY_ID = new Map(NODES.map(n => [n.id, n]));
+/** Whether a square footprint (centre x, z, half-size h) covers part of a deposit: its collider box, else its radius. */
+export function nodeCovered(n: ResourceNode, x: number, z: number, h: number): boolean {
+ if (n.box) return Math.abs(x - n.x) < h + n.box[0] / 2 && Math.abs(z - n.z) < h + n.box[2] / 2;
+ return Math.hypot(Math.max(0, Math.abs(x - n.x) - h), Math.max(0, Math.abs(z - n.z) - h)) < n.radius;
+}
+/** Half-size of a placed body's footprint (as in placement). */
+export const bodyHalf = (kind: string) => kind === 'dome' ? 2.5 : .48;
 /** Grass patch index of the vegetation instances → its harvestable nodes. */
 export const PATCH_NODES = new Map<number, string[]>();
 for (const n of NODES) if (n.patch !== undefined) PATCH_NODES.set(n.patch, [...(PATCH_NODES.get(n.patch) ?? []), n.id]);

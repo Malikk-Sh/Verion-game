@@ -239,16 +239,37 @@ export function deliverPower(g: GameState, group: Building[], supply: Building[]
  for (const l of g.world.base.links) if (l.kind === 'cable') { const a = at.get(l.from), b = at.get(l.to); if (a !== undefined && b !== undefined) { cap[a][b] += 120 * ms; cap[b][a] += 120 * ms; } }
  const offered = new Map(supply.map(b => [b.id, Math.min(b.energy, 40 * ms)]));
  for (const [id, v] of offered) cap[0][at.get(id)!] += v;
- for (const p of [0, 1, 2]) {
-  const sinks = requests.filter(r => r.priority === p && r.need > 0).map(r => at.get(r.b.id)!);
-  requests.forEach(r => { if (r.priority === p && r.need > 0) cap[at.get(r.b.id)!][1] += r.need; });
+ const maxflow = (c: number[][]) => {
+  let total = 0;
   for (;;) {
    const prev = new Array<number>(n).fill(-1), queue = [0]; prev[0] = 0;
-   while (queue.length && prev[1] < 0) { const u = queue.shift()!; for (let v = 1; v < n; v++) if (prev[v] < 0 && cap[u][v] > 0) { prev[v] = u; queue.push(v); } }
-   if (prev[1] < 0) break;
-   let push = Infinity; for (let v = 1; v !== 0; v = prev[v]) push = Math.min(push, cap[prev[v]][v]);
-   for (let v = 1; v !== 0; v = prev[v]) { cap[prev[v]][v] -= push; cap[v][prev[v]] += push; }
+   while (queue.length && prev[1] < 0) { const u = queue.shift()!; for (let v = 1; v < n; v++) if (prev[v] < 0 && c[u][v] > 0) { prev[v] = u; queue.push(v); } }
+   if (prev[1] < 0) return total;
+   let push = Infinity; for (let v = 1; v !== 0; v = prev[v]) push = Math.min(push, c[prev[v]][v]);
+   for (let v = 1; v !== 0; v = prev[v]) { c[prev[v]][v] -= push; c[v][prev[v]] += push; }
+   total += push;
   }
+ };
+ for (const p of [0, 1, 2]) {
+  const cls = requests.filter(r => r.priority === p && r.need > 0), want = cls.reduce((s, r) => s + r.need, 0), sinks = cls.map(r => at.get(r.b.id)!);
+  if (!want) continue;
+  const route = (targets: number[]) => { const c = cap.map(row => row.slice()); sinks.forEach((v, i) => { c[v][1] += targets[i]; }); return { c, flow: maxflow(c), targets }; };
+  let best = route(cls.map(r => r.need));
+  if (best.flow < want) {
+   // A deficit inside one class is shared in proportion to the requests (SYSTEMS): every consumer slows down
+   // instead of the first ones found taking it all. Whole units with largest remainders keep gas amounts integer.
+   const share = (k: number) => { const raw = cls.map(r => r.need * k / want), t = raw.map(Math.floor); let rest = k - t.reduce((s, v) => s + v, 0);
+    for (const i of raw.map((_, i) => i).sort((a, b) => (raw[b] - t[b]) - (raw[a] - t[a]))) if (rest > 0) { t[i]++; rest--; }
+    return t; };
+   let fair = route(share(best.flow));
+   if (fair.flow < best.flow) { // a cable bottleneck: the largest fair share that the cables can carry
+    let lo = 0, hi = best.flow - 1; fair = route(share(0));
+    while (lo < hi) { const mid = Math.ceil((lo + hi) / 2), tried = route(share(mid)); if (tried.flow === mid) { lo = mid; fair = tried; } else hi = mid - 1; }
+    sinks.forEach((v, i) => { fair.c[v][1] += cls[i].need - fair.targets[i]; }); maxflow(fair.c); // what only some consumers can reach still goes to them
+   }
+   best = fair;
+  }
+  for (let i = 0; i < n; i++) cap[i] = best.c[i];
   for (const v of sinks) cap[v][1] = 0; // this class is served; its unmet need is not offered to the next one
  }
  const delivered = new Map(requests.map(r => [r.b.id, cap[1][at.get(r.b.id)!]])), drawn = new Map([...offered].map(([id, v]) => [id, v - cap[0][at.get(id)!]]));
