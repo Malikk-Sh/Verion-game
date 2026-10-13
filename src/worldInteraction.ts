@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { BUILDABLE, ITEMS, type BuildingKind } from './game/defs';
-import { electricPort, endpoint, connect, machine, insideDome, gasDirection, linkSegments, LINK_RANGE } from './game/production';
+import { electricPort, endpoint, connect, machine, insideDome, nearby, gasDirection, linkSegments, LINK_RANGE } from './game/production';
 import { countItem } from './game/inventory';
 import { placementProblem, place } from './buildings';
 import { heightAt, boxes } from './world';
@@ -30,6 +30,8 @@ export function createWorldInteraction(scene: THREE.Scene, camera: THREE.Camera)
    const isDome = b.kind === 'dome';
    // Inside a dome its glass never blocks the machines; the dome itself stays the fallback target (to exit).
    if (isDome && insideDome(b, p.x, p.y + .1, p.z)) { around = b.id; continue; }
+   // A window opens only where its actions work (nearby(): 3.2 m to the centre); line ends may be farther.
+   if (!isDome && reach <= OPEN_REACH && !nearby(g, b)) continue;
    const r = isDome ? 2.5 : .6, h = isDome ? 3.1 : b.kind === 'workbench' && b.level === 2 ? 1.6 : 1.5;
    box.set(lo.set(b.x - r, b.y, b.z - r), hi.set(b.x + r, b.y + h, b.z + r));
    // Standing in the airlock vestibule (inside the dome's aim box, outside its cells) faces the dome directly.
@@ -76,7 +78,7 @@ export function createWorldInteraction(scene: THREE.Scene, camera: THREE.Camera)
    let hit: THREE.Vector3 | undefined;
    for (let d = .5; d <= 12; d += .1) { const q = ray.ray.at(d, new THREE.Vector3()); if (q.y <= heightAt(q.x, q.z) + .12) { hit = q; break; } }
    if (hit) {
-    x = Math.round(hit.x); z = Math.round(hit.z); problem = placementProblem(g, id as BuildingKind, x, z);
+    x = Math.round(hit.x); z = Math.round(hit.z); problem = placementProblem(g, id as BuildingKind, x, z, rot);
     const inDome = g.world.base.buildings.find(b => b.kind === 'dome' && id !== 'dome' && insideDome(b, x, b.y + .1, z));
     ghost.show(id as BuildingKind, x, inDome ? inDome.y : heightAt(x, z) + .12, z, rot, !problem, dt);
    } else problem = 'Наведите на землю в пределах 12 м';

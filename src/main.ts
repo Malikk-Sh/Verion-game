@@ -27,7 +27,7 @@ import { Character, type Input } from './controller';
 import { Ambience } from './audio';
 import { boxes, EYE, FIXED_DT, heightAt, LANDMARKS, ROUTE, MIN, MAX, SIZE, type Landmark } from './world';
 import { SimClock } from './game/clock';
-import { ITEMS, MATERIALS, TOOLS } from './game/defs';
+import { ITEMS, MATERIALS, TANKS, TOOLS } from './game/defs';
 import { phaseSeconds, isDay, offsetFor, MORNING_S, EVENING_S } from './game/daycycle';
 import { selectHotbar, oxygenGU, wornParts } from './game/backpack';
 import { survivalTick, survivalSpeed, eatPulp, refillCapsule, refillFromCapsule, loseCargo, respawnAtCapsule, accessibleOxygen, CAPSULE_CAPACITY } from './game/survival';
@@ -645,7 +645,9 @@ function boot(){
     Object.assign(game.player,{x:actor.x,y:actor.y,z:actor.z});
     const produced=productionTick(game,50,refillMachine,isDay(dayPhase())?10:-10);
     if(natureTick(game,50).length)regrown=true;
-    if(dialog==='production-panel'&&insideCapsule()&&refillMachine==='capsule-out')refillFromCapsule(game,FIXED_DT);if(dialog==='production-panel'&&insideCapsule()&&refillMachine==='capsule-in')refillCapsule(game,FIXED_DT);
+    // A finished transfer ends its mode: a tank installed later never starts filling (or draining) without a new press.
+    const port=dialog==='production-panel'&&insideCapsule();
+    if(port&&refillMachine==='capsule-out'&&!refillFromCapsule(game,FIXED_DT)||port&&refillMachine==='capsule-in'&&!refillCapsule(game,FIXED_DT)||refillMachine&&!refillMachine.startsWith('capsule')&&game.player.bottles.every(t=>!t||(t.milliGU??0)>=TANKS[t.itemId].capacity)){refillMachine=null;void saver?.save();}
     if(produced.passage){Object.assign(actor,produced.passage);actor.previous={x:actor.x,y:actor.y,z:actor.z};Object.assign(game.player,produced.passage);}
     if(produced.changed)productionChanged=true;
     const survival=survivalTick(game,FIXED_DT,insideCapsule(),(input.run||(!actor.grounded&&actor.airSpeed>3.5*survivalSpeed(game)+.01))&&moved>0);

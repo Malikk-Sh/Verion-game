@@ -53,7 +53,7 @@ try{
  const cells=await page.evaluate(()=>{
   const c=document.querySelector('#hotbar-slots .cell'),render=window.hudTest.cellContent;
   render(c,{itemId:'tool_stone',count:1,durability:0},0);const broken=c.classList.contains('broken');
-  render(c,{itemId:'bottle_1',count:1,milliGU:120000},0);const bottle={broken:c.classList.contains('broken'),bar:getComputedStyle(c.querySelector('.cell-bar')).backgroundImage};
+  render(c,{itemId:'bottle_1',count:1,milliGU:300000},0);const bottle={broken:c.classList.contains('broken'),bar:getComputedStyle(c.querySelector('.cell-bar')).backgroundImage};
   render(c,null,0);const empty=c.classList.contains('broken');render(c,{itemId:'tool_stone',count:1,durability:106},0);
   return{broken,bottle,empty,repaired:c.classList.contains('broken')};
  });
@@ -63,7 +63,7 @@ try{
   const l=document.querySelector('#vitals').getBoundingClientRect(),r=document.querySelector('#hud-buttons').getBoundingClientRect();
   return{sameFrame:l.width===r.width&&l.height===r.height,controls:[...document.querySelectorAll('#hud-buttons button')].map(e=>({name:e.getAttribute('aria-label'),width:e.getBoundingClientRect().width})),rails:document.querySelectorAll('.visor-rail').length};
  });
- assert.ok(wings.sameFrame&&wings.controls.length===5&&wings.controls.every(c=>c.name&&c.width>=32)&&wings.rails===2);report.wings=wings;check('Mirrored visor frames have equal dimensions and five named controls; resizing does not duplicate artwork');
+ assert.ok(wings.sameFrame&&wings.controls.length===4&&wings.controls.every(c=>c.name&&c.width>=32)&&wings.rails===2);report.wings=wings;check('Mirrored visor frames have equal dimensions and four named controls; resizing does not duplicate artwork');
  const art=await page.evaluate(()=>({buttonBlur:getComputedStyle(document.querySelector('#inventory-button')).backdropFilter,glassStroke:getComputedStyle(document.querySelector('.visor-glass')).stroke,segmentStroke:getComputedStyle(document.querySelector('.vital-fill path')).stroke,food:getComputedStyle(document.querySelector('#g-satiety .vital-fill path')).fill,oxygen:getComputedStyle(document.querySelector('#g-oxygen .vital-fill path')).fill}));
  assert.equal(art.buttonBlur,'none');assert.equal(art.glassStroke,'none');assert.equal(art.segmentStroke,'none');assert.notEqual(art.food,art.oxygen);report.art=art;check('Native visor artwork keeps translucent glass and distinct segment colors without inherited white strokes');
  const fills=await page.evaluate(()=>{
@@ -113,7 +113,7 @@ print(json.dumps({n:{k:list(im.getpixel(p)) for k,p in points.items()} for n,im 
   const [{newGame},{SaveStore},{heightAt}]=await Promise.all([import('/src/game/state.ts'),import('/src/persist/store.ts'),import('/src/world.ts')]);
   const g=newGame('w-hud-settings',12345,Date.now(),heightAt(40,42),'HUD settings');g.player.inventory[0].durability=0;g.player.vitals.health=18;g.player.vitals.satiety=80;
   [['iron_raw',4],['copper_raw',13],['ice',24],['stone',13]].forEach(([itemId,count],i)=>g.player.inventory[i+2]={itemId,count});
-  g.player.inventory[10]={itemId:'bottle_1',count:1,milliGU:120000};g.player.inventory[11]={itemId:'tool_stone',count:1,durability:106};
+  g.player.inventory[10]={itemId:'bottle_1',count:1,milliGU:300000};g.player.inventory[11]={itemId:'tool_stone',count:1,durability:106};
   const st=await SaveStore.open();await st.createSlot(g,null);st.close();
  });
  await game.reload();await ready();await continueAfterReload();await game.waitForFunction(()=>!document.body.classList.contains('booting'));

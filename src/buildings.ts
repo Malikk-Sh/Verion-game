@@ -2,12 +2,12 @@ import * as THREE from 'three';
 import { reducedMotion } from './motion';
 import { boxes, box, heightAt } from './world';
 import { BUILDABLE, ITEMS, TANKS, type BuildingKind } from './game/defs';
-import { insideDome, makeBuilding, domeFaces, habitable, telemetry, RECIPE_BY_ID, nearby, poweredComponent, type Building } from './game/production';
+import { insideDome, domeFront, makeBuilding, domeFaces, habitable, telemetry, RECIPE_BY_ID, nearby, poweredComponent, type Building } from './game/production';
 import { countItem } from './game/inventory';
 import type { GameState } from './game/state';
 import { buildStation, PORT_HEIGHT, type StationLook, type StationVisual } from './stationModels';
 import type { Fx } from './fx';
-export function placementProblem(g: GameState, kind: BuildingKind, x: number, z: number): string {
+export function placementProblem(g: GameState, kind: BuildingKind, x: number, z: number, rot = 0): string {
  if(!(BUILDABLE as readonly string[]).includes(kind)||!Number.isInteger(x)||!Number.isInteger(z))return 'Выберите корпус и клетку';
  if(g.world.base.buildings.length>=64)return 'Достигнут предел 64 корпусов';
  if(x < -195 || x > 355 || z < -195 || z > 355)return 'За границей участка';
@@ -22,11 +22,15 @@ export function placementProblem(g: GameState, kind: BuildingKind, x: number, z:
   if(b.kind==='dome'&&kind!=='dome'&&insideDome(b,x,b.y+.1,z))continue;
   if(Math.abs(x-b.x)<r+br+.1&&Math.abs(z-b.z)<r+br+.1)return 'Место занято постройкой';
  }
+ // The airlock sets the player down one cell inside and 3.5 m outside its door; a body there would trap them in its collider.
+ const spots=(d:{x:number;z:number;rot:number})=>{const f=domeFront(d);return [[d.x+f.x,d.z+f.z],[d.x+f.x*3.5,d.z+f.z*3.5]];};
+ if(kind==='dome'){const [,[px,pz]]=spots({x,z,rot});if(g.world.base.buildings.some(b=>b.kind!=='dome'&&Math.abs(b.x-px)<.93&&Math.abs(b.z-pz)<.93))return 'Перед шлюзом стоит постройка — поверните купол';}
+ else for(const d of g.world.base.buildings)if(d.kind==='dome')for(const [px,pz] of spots(d))if(Math.abs(x-px)<r+.45&&Math.abs(z-pz)<r+.45)return 'Здесь проход шлюза — оставьте его свободным';
  for(const b of boxes)if(!b.id.startsWith('build-')&&x+r>b.minX&&x-r<b.maxX&&z+r>b.minZ&&z-r<b.maxZ&&y+3>b.minY&&y<b.maxY)return 'Место занято объектом';
  return '';
 }
 export function place(g: GameState, kind: BuildingKind, x: number, z: number, rot = 0): string {
- const problem=placementProblem(g,kind,x,z);if(problem)return problem;
+ const problem=placementProblem(g,kind,x,z,rot);if(problem)return problem;
  const inv=g.player.inventory,index=inv[g.player.hotbar]?.itemId===kind?g.player.hotbar:inv.findIndex(s=>s?.itemId===kind&&!s.packed);
  const selected=inv[index];if(!selected)return 'В рюкзаке нет: '+ITEMS[kind].name;
  const packed=selected.packed;if(--selected.count===0)inv[index]=null;

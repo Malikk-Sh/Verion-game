@@ -4,10 +4,12 @@ import { newGame, cloneState, sanitizeState, type GameState } from '../src/game/
 import { addItems, countItem } from '../src/game/inventory.ts';
 import { NODES, NODE_BY_ID } from '../src/game/resources.ts';
 import { natureTick } from '../src/game/nature.ts';
-import { RECIPES, RECIPE_BY_ID, WORKBENCH_UPGRADE, makeBuilding, startJob, productionTick, connect, linkSegments, insideDome, beginPassage, domeFront } from '../src/game/production.ts';
+import { RECIPES, RECIPE_BY_ID, WORKBENCH_UPGRADE, makeBuilding, startJob, productionTick, connect, linkSegments, insideDome, beginPassage, domeFront, telemetry } from '../src/game/production.ts';
 import { packStation } from '../src/game/worldActions.ts';
 import { TANKS } from '../src/game/defs.ts';
 import { heightAt } from '../src/world.ts';
+import { placementProblem } from '../src/buildings.ts';
+import { survivalTick } from '../src/game/survival.ts';
 
 const fresh = () => newGame('w-s3', 7, 1, heightAt(40, 42));
 const advance = (g: GameState, ms: number) => { for (let n = 0; n < ms; n += 50) { productionTick(g, 50); natureTick(g, 50); g.meta.activeTicks++; } };
@@ -93,4 +95,29 @@ test('S3: a turned dome keeps its airlock on the turned side, in and out', () =>
  assert.equal(beginPassage(g, d.id), '');
  const leave = productionTick(g, 6000).passage!;
  assert.ok(!insideDome(d, leave.x, leave.y, leave.z)); assert.ok(leave.x > 63); assert.equal(leave.z, 40);
+});
+test('S3: the airlock landing spots stay free and its 6 s cycle is breathable', () => {
+ const g = fresh(), y = heightAt(60, 40), d = makeBuilding(g, 'dome', 60, y, 40, 1);
+ Object.assign(g.player, { x: 58, y, z: 37 });
+ assert.match(placementProblem(g, 'distributor', 61, 40), /шлюза/);
+ assert.equal(placementProblem(g, 'distributor', 59, 40), '');
+ Object.assign(g.player, { x: 66, y, z: 37 });
+ assert.match(placementProblem(g, 'kiln', 64, 40), /шлюза/);
+ const g2 = fresh(); makeBuilding(g2, 'kiln', 64, heightAt(64, 40), 40); Object.assign(g2.player, { x: 58, y, z: 35 });
+ assert.match(placementProblem(g2, 'dome', 60, 40, 1), /Перед шлюзом/);
+ // Entering from outside with empty tanks: the chamber's dome air carries the player through the cycle.
+ Object.assign(g.player, { x: 62.8, y: d.y, z: 40 }); for (const t of g.player.bottles) if (t) t.milliGU = 0;
+ d.zone.q = 20000; assert.equal(beginPassage(g, d.id), '');
+ const before = d.zone.q;
+ for (let i = 0; i < 100; i++) survivalTick(g, .05, false);
+ assert.equal(g.player.survival.suffocationMs, 0); assert.ok(d.zone.q < before);
+});
+test('S3: in a power shortage the dome distributor is served before workbench II (SYSTEMS energy classes)', () => {
+ const g = fresh(), gen = makeBuilding(g, 'biogenerator', 44, 0, 40), dist = makeBuilding(g, 'distributor', 52, 0, 40), bench = makeBuilding(g, 'workbench', 46, 0, 44);
+ makeBuilding(g, 'dome', 52, 0, 40); bench.level = 2;
+ addItems(g.player.inventory, 'cable', 9); assert.equal(connect(g, 'cable', gen.id, dist.id), ''); assert.equal(connect(g, 'cable', gen.id, bench.id), '');
+ Object.assign(g.player, { x: 46, z: 45 }); addItems(g.player.inventory, 'copper', 4); assert.equal(startJob(g, 'craft_wire', bench.id), '');
+ gen.energy = 600; productionTick(g, 50, null, 10);
+ assert.equal(telemetry.power.get(dist.id), Math.round((10 + Math.abs(10 - 20) / 20) * 50));
+ assert.equal(telemetry.power.get(bench.id), 600 - Math.round((10 + Math.abs(10 - 20) / 20) * 50));
 });
