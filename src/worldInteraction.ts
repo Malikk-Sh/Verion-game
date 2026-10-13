@@ -51,7 +51,8 @@ export function createWorldInteraction(scene: THREE.Scene, camera: THREE.Camera)
   if (!target) {
    const inside = p.x > 37.5 && p.x < 42.5 && p.z > 37 && p.z < 43.1;
    const hit = ray.ray.intersectBox(CAPSULE_BOX(heightAt(40, 40)), hitPoint);
-   if (inside || (hit && hit.distanceTo(camera.position) < Math.min(reach, 6))) target = 'capsule';
+   // Its port window works only from inside (refill needs insideCapsule()); from outside the hull is just a line end.
+   if (inside || (reach > OPEN_REACH && hit && hit.distanceTo(camera.position) < Math.min(reach, 6))) target = 'capsule';
   }
  }
  function linkCheck(g: GameState, kind: 'cable' | 'gas_pipe', from: string, to: string | null) {

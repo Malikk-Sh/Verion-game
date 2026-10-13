@@ -103,12 +103,12 @@ function quickLoad(ctx: Ctx, kind: string, id: string, items: string[], label: s
  const has = ctx.g.player.inventory.some(s => s && items.includes(s.itemId));
  return button(label, () => {
   const g = ctx.g; let moved = 0, err = '';
-  // One kind per press: keep topping up what the machine already holds, otherwise take the first kind in the backpack.
-  // Loading a second kind would swap the single slot back and forth and leave the last one loaded.
+  // One kind per press: a slot that already holds a kind is only topped up with it, an empty one takes the first kind
+  // in the backpack. Swapping kinds stays a deliberate tap on a backpack stack.
   const held = machine(g, id)?.input.find(s => s && items.includes(s.itemId))?.itemId;
-  const pick = held && g.player.inventory.some(s => s?.itemId === held) ? held : g.player.inventory.find(s => s && items.includes(s.itemId))?.itemId;
+  const pick = held ?? g.player.inventory.find(s => s && items.includes(s.itemId))?.itemId;
   for (let i = 0; i < g.player.inventory.length; i++) { const s = g.player.inventory[i]; if (s && s.itemId === pick) { const before = s.count; err = loadMachineSlot(g, id, i); if (!err) moved += before - (g.player.inventory[i]?.itemId === s.itemId ? g.player.inventory[i]!.count : 0); else break; } }
-  ctx.say(moved ? '' : err || 'Нечего загрузить', 'Загружено');
+  ctx.say(moved ? '' : err || (held && !g.player.inventory.some(s => s?.itemId === held) ? `В рюкзаке нет: ${ITEMS[held].name}. Сменить сырьё — нажмите на стак` : 'Нечего загрузить'), 'Загружено');
  }, 'st-btn small', !has);
 }
 export function machineView(g: GameState, id: string, say: Say, changed: () => void, draw: () => void, refill: (id: string | null) => void, nav?: (t: GuideTarget) => void): HTMLElement {

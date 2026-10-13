@@ -11,7 +11,8 @@ export type Tone = 'ok' | 'idle' | 'warn' | 'off';
 export type Check = { ok: boolean; label: string; fix: string };
 export type StationStatus = { tone: Tone; title: string; hint: string; checks?: Check[] };
 const generatorIn = (g: GameState, b: Building) => { const net = poweredComponent(g, b.id); return g.world.base.buildings.filter(v => v.kind === 'biogenerator' && net.has(v.id)); };
-const hasPower = (g: GameState, b: Building) => generatorIn(g, b).some(v => v.enabled && (v.energy > 0 || v.fuel > 0 || countItem(v.input, 'fiber') > 0));
+// A generator inside a dome may still spend its stored energy, but never burns fuel there (productionTick).
+const hasPower = (g: GameState, b: Building) => generatorIn(g, b).some(v => v.enabled && (v.energy > 0 || !roomOf(g, v) && (v.fuel > 0 || countItem(v.input, 'fiber') > 0)));
 const roomOf = (g: GameState, b: Building) => g.world.base.buildings.find(d => d.kind === 'dome' && insideDome(d, b.x, b.y, b.z));
 export function stationStatus(g: GameState, b: Building): StationStatus {
  if (!b.enabled) return { tone: 'off', title: 'Выключено', hint: 'Нажмите «Включить», чтобы станция снова работала.' };

@@ -138,6 +138,10 @@ test('S3: the dome checklist wants pipe and power at the same distributor; an id
  const bench = makeBuilding(g, 'workbench', 46, 0, 44); bench.level = 2;
  assert.equal(stationStatus(g, bench).title, 'Не подключён');
  assert.equal(connect(g, 'cable', gen.id, bench.id), ''); assert.match(stationStatus(g, bench).title, /Питание есть/);
+ // A generator inside a dome burns nothing there: fuel alone is no power for the network.
+ const g2 = fresh(), d2 = makeBuilding(g2, 'dome', 52, 0, 40), inGen = makeBuilding(g2, 'biogenerator', 51, 0, 40), b2 = makeBuilding(g2, 'workbench', 46, 0, 44);
+ b2.level = 2; addItems(inGen.input, 'fiber', 5); addItems(g2.player.inventory, 'cable', 9); assert.equal(connect(g2, 'cable', inGen.id, b2.id), '');
+ void d2; assert.equal(stationStatus(g2, b2).title, 'Нет питания');
 });
 test('S3: beside a far deposit the compass points at it, not back to the valley', () => {
  const g = fresh(), far = NODE_BY_ID.get('iron-canyon')!;
