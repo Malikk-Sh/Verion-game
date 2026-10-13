@@ -234,21 +234,53 @@ export const roomRate = (id: string) => (telemetry.room.get(id) ?? 0) / telemetr
  * generators (each up to 40 EU/s of its buffer) through the cable graph is filled class by class (0 → 1 → 2) on the
  * residual graph, so a lower class never takes what a higher one can still receive. Returns what each consumer
  * receives and what each generator gives, in milli-EU for this tick. */
+/** Unit fractions each consumer is still owed (+) or got ahead (−) from earlier shared deficits, per base. Whole-unit
+ *  shares then stay proportional over time, also across full ticks in between; nothing is saved (a reload restarts
+ *  from zero, off by less than a unit per consumer). */
+const powerDebt = new WeakMap<object, Map<string, number>>();
 export function deliverPower(g: GameState, group: Building[], supply: Building[], requests: { b: Building; need: number; priority: number }[], ms: number) {
  const at = new Map(group.map((b, i) => [b.id, i + 2])), n = group.length + 2, cap = Array.from({ length: n }, () => new Array<number>(n).fill(0));
  for (const l of g.world.base.links) if (l.kind === 'cable') { const a = at.get(l.from), b = at.get(l.to); if (a !== undefined && b !== undefined) { cap[a][b] += 120 * ms; cap[b][a] += 120 * ms; } }
- const offered = new Map(supply.map(b => [b.id, Math.min(b.energy, 40 * ms)]));
+ const offered = new Map(supply.map(b => [b.id, Math.min(b.energy, 40 * ms)])), debt = powerDebt.get(g.world.base) ?? new Map<string, number>();
+ powerDebt.set(g.world.base, debt);
  for (const [id, v] of offered) cap[0][at.get(id)!] += v;
- for (const p of [0, 1, 2]) {
-  const sinks = requests.filter(r => r.priority === p && r.need > 0).map(r => at.get(r.b.id)!);
-  requests.forEach(r => { if (r.priority === p && r.need > 0) cap[at.get(r.b.id)!][1] += r.need; });
+ const maxflow = (c: number[][]) => {
+  let total = 0;
   for (;;) {
    const prev = new Array<number>(n).fill(-1), queue = [0]; prev[0] = 0;
-   while (queue.length && prev[1] < 0) { const u = queue.shift()!; for (let v = 1; v < n; v++) if (prev[v] < 0 && cap[u][v] > 0) { prev[v] = u; queue.push(v); } }
-   if (prev[1] < 0) break;
-   let push = Infinity; for (let v = 1; v !== 0; v = prev[v]) push = Math.min(push, cap[prev[v]][v]);
-   for (let v = 1; v !== 0; v = prev[v]) { cap[prev[v]][v] -= push; cap[v][prev[v]] += push; }
+   while (queue.length && prev[1] < 0) { const u = queue.shift()!; for (let v = 1; v < n; v++) if (prev[v] < 0 && c[u][v] > 0) { prev[v] = u; queue.push(v); } }
+   if (prev[1] < 0) return total;
+   let push = Infinity; for (let v = 1; v !== 0; v = prev[v]) push = Math.min(push, c[prev[v]][v]);
+   for (let v = 1; v !== 0; v = prev[v]) { c[prev[v]][v] -= push; c[v][prev[v]] += push; }
+   total += push;
   }
+ };
+ for (const p of [0, 1, 2]) {
+  const cls = requests.filter(r => r.priority === p && r.need > 0), want = cls.reduce((s, r) => s + r.need, 0), sinks = cls.map(r => at.get(r.b.id)!);
+  if (!want) continue;
+  const route = (targets: number[]) => { const c = cap.map(row => row.slice()); sinks.forEach((v, i) => { c[v][1] += targets[i]; }); return { c, flow: maxflow(c), targets }; };
+  let best = route(cls.map(r => r.need));
+  if (best.flow < want) {
+   // A deficit inside one class is shared in proportion to the requests (SYSTEMS): every consumer slows down
+   // instead of the first ones found taking it all. Whole units (gas amounts stay integer) by largest remainder,
+   // with each consumer's carried fraction, so the split stays proportional over many ticks.
+   const share = (k: number) => {
+    const raw = cls.map(r => Math.min(r.need, Math.max(0, r.need * k / want + (debt.get(r.b.id) ?? 0)))), t = raw.map(Math.floor);
+    let rest = k - t.reduce((s, v) => s + v, 0); const order = raw.map((_, i) => i).sort((a, b) => (raw[b] - t[b]) - (raw[a] - t[a]));
+    while (rest > 0 && order.some(i => t[i] < cls[i].need)) for (const i of order) if (rest > 0 && t[i] < cls[i].need) { t[i]++; rest--; }
+    while (rest < 0 && order.some(i => t[i] > 0)) for (const i of [...order].reverse()) if (rest < 0 && t[i] > 0) { t[i]--; rest++; }
+    return t; };
+   let fair = route(share(best.flow));
+   if (fair.flow < best.flow) { // a cable bottleneck: the largest fair share that the cables can carry
+    let lo = 0, hi = best.flow - 1; fair = route(share(0));
+    while (lo < hi) { const mid = Math.ceil((lo + hi) / 2), tried = route(share(mid)); if (tried.flow === mid) { lo = mid; fair = tried; } else hi = mid - 1; }
+    sinks.forEach((v, i) => { fair.c[v][1] += cls[i].need - fair.targets[i]; }); maxflow(fair.c); // what only some consumers can reach still goes to them
+   }
+   best = fair;
+   const given = sinks.map(v => best.c[1][v]), total = given.reduce((s, v) => s + v, 0);
+   cls.forEach((r, i) => debt.set(r.b.id, Math.max(-1, Math.min(1, r.need * total / want + (debt.get(r.b.id) ?? 0) - given[i]))));
+  } // a full tick serves the requests without touching the carried fractions: only a later shared deficit settles them
+  for (let i = 0; i < n; i++) cap[i] = best.c[i];
   for (const v of sinks) cap[v][1] = 0; // this class is served; its unmet need is not offered to the next one
  }
  const delivered = new Map(requests.map(r => [r.b.id, cap[1][at.get(r.b.id)!]])), drawn = new Map([...offered].map(([id, v]) => [id, v - cap[0][at.get(id)!]]));

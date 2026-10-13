@@ -40,6 +40,21 @@ export const NODES: ResourceNode[] = [
  { id: 'ice-crater', name: 'Ледяное дно кратера', material: 'ice', itemId: 'ice', x: 266, z: 262, amount: 160, radius: 2, height: 1.4, outcrop: 'ice', box: [3.4, 1.4, 3.4], far: true },
 ];
 export const NODE_BY_ID = new Map(NODES.map(n => [n.id, n]));
+/** Rendered grass patches (ellipses of tufts, `world.ts`). Patch 0 is shared: tufts with x < 44 belong to grass-a. */
+export const GRASS_PATCHES = [
+ {x:44,z:57,rx:4.5,rz:3.4}, {x:16,z:66,rx:4.5,rz:2.6},
+ {x:70,z:90,rx:6,rz:3.8}, {x:99,z:128,rx:5,rz:3},
+ {x:136,z:104,rx:4,rz:5}, {x:59,z:114,rx:4.3,rz:3.5},
+];
+export const SHARED_PATCH_SPLIT = 44;
+/** Whether a square footprint (centre x, z, half-size h) covers part of a deposit: its collider box, else its radius.
+ *  Grass is drawn as tufts: `covers` in nature.ts checks those. */
+export function nodeCovered(n: ResourceNode, x: number, z: number, h: number): boolean {
+ if (n.box) return Math.abs(x - n.x) < h + n.box[0] / 2 && Math.abs(z - n.z) < h + n.box[2] / 2;
+ return Math.hypot(Math.max(0, Math.abs(x - n.x) - h), Math.max(0, Math.abs(z - n.z) - h)) < n.radius;
+}
+/** Half-size of a placed body's footprint (as in placement). */
+export const bodyHalf = (kind: string) => kind === 'dome' ? 2.5 : .48;
 /** Grass patch index of the vegetation instances → its harvestable nodes. */
 export const PATCH_NODES = new Map<number, string[]>();
 for (const n of NODES) if (n.patch !== undefined) PATCH_NODES.set(n.patch, [...(PATCH_NODES.get(n.patch) ?? []), n.id]);

@@ -8,7 +8,7 @@ import { groundTextures, hullTextures, gratingTexture, consoleScreen, panelTextu
 import { createSky, createDust } from './sky';
 import { Terrain, createShadeBaker, useBakedShade } from './terrain';
 import { CYCLE_S, nightAmount, sunDirection } from './game/daycycle';
-import { PATCH_NODES } from './game/resources';
+import { PATCH_NODES, SHARED_PATCH_SPLIT } from './game/resources';
 
 export type Quality = 'low'|'standard'|'high';
 const lin=(r:number,g:number,b:number)=>new THREE.Color().setRGB(r,g,b,THREE.LinearSRGBColorSpace);
@@ -392,7 +392,7 @@ export function createWorld(scene:THREE.Scene){
   const inst=new THREE.InstancedMesh(g,m,GRASS.length);
   GRASS.forEach((p,i)=>{dummy.position.set(p.x,heightAt(p.x,p.z)-.02,p.z);dummy.scale.setScalar(p.s*1.35);dummy.rotation.set(0,p.rotation,0);dummy.updateMatrix();inst.setMatrixAt(i,dummy.matrix);inst.setColorAt(i,color.setHSL(.2+rng()*.06,.12+rng()*.1,.62+rng()*.3));});
   const originals=GRASS.map((_,i)=>{const matrix=new THREE.Matrix4();inst.getMatrixAt(i,matrix);return matrix;});
-  for(const [patch,ids] of PATCH_NODES)for(const id of ids){const indices=GRASS.flatMap((p,i)=>p.patch===patch&&(patch!==0||(p.x<44)===(id==='grass-a'))?[i]:[]);grassHarvest.set(id,()=>{const visible=Math.ceil(indices.length*(grassRemaining.get(id)??1));indices.forEach((i,j)=>inst.setMatrixAt(i,j<visible?originals[i]:new THREE.Matrix4().makeScale(0,0,0)));inst.instanceMatrix.needsUpdate=true;});}
+  for(const [patch,ids] of PATCH_NODES)for(const id of ids){const indices=GRASS.flatMap((p,i)=>p.patch===patch&&(patch!==0||(p.x<SHARED_PATCH_SPLIT)===(id==='grass-a'))?[i]:[]);grassHarvest.set(id,()=>{const visible=Math.ceil(indices.length*(grassRemaining.get(id)??1));indices.forEach((i,j)=>inst.setMatrixAt(i,j<visible?originals[i]:new THREE.Matrix4().makeScale(0,0,0)));inst.instanceMatrix.needsUpdate=true;});}
   inst.name='local-grass';inst.receiveShadow=true;inst.castShadow=false;scene.add(inst);
  }
  const meshes=batch.finish(scene,m=>({cast:!noShadow.has(m)&&m!==caveInner&&m!==cliffRock,receive:!noShadow.has(m)}));

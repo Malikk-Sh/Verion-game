@@ -1,9 +1,10 @@
 import { electricPort } from './production';
 import { heightAt } from '../world';
-import { freshBase, RECIPE_BY_ID, domeFaces, LINK_RANGE, MAX_REPEAT, type BaseState, type Job, type Building, type Link } from './production';
+import { freshBase, RECIPE_BY_ID, domeFaces, domeFront, LINK_RANGE, MAX_REPEAT, type BaseState, type Job, type Building, type Link } from './production';
 import { BASIC_SUIT, BUILDABLE, CONTENT_VERSION, GENERATOR_VERSION, ITEMS, LEGACY_CONTENT_VERSIONS, SUIT_PARTS, TANKS, TOOLS, type SuitPart } from './defs';
 import { emptyInventory, INVENTORY_SIZE, type Slot } from './inventory';
-import { NODES, NODE_BY_ID, LATER_NODES, S3_NODES } from './resources';
+import { NODES, NODE_BY_ID, LATER_NODES, S3_NODES, nodeCovered, bodyHalf } from './resources';
+import { covers } from './nature';
 import { CYCLE_TICKS, START_OFFSET_TICKS } from './daycycle';
 import { freshQuestProgress, QUEST_FACTS, type QuestProgress } from './questFacts';
 import { QUEST_IDS, type QuestId } from './questCatalog';
@@ -153,17 +154,21 @@ function kilnFuelFix(b:Obj,world:Obj,at?:{x:number;z:number}){
 /** v6 → v7 (S3): new deposits arrive full, regrowth starts empty, bodies face north, jobs do not repeat. */
 function toV7(r:Obj):Obj{
  const next=structuredClone(r),world=obj(next.world,'world'),nodes=obj(world.nodes,'world.nodes');
+ const base=obj(world.base,'world.base'),pl=obj(next.player,'player'),bodies=arr(base.buildings,'buildings',64).filter(isObj);
+ // The old world never saw these deposits. One that would appear under a body arrives empty (no collider, no stock);
+ // a solid one also stays clear of the player and of each airlock's exit cells, where a collider would trap them.
+ const blocks=(n:typeof NODES[number])=>bodies.some(b=>covers(n,Number(b.x),Number(b.z),bodyHalf(String(b.kind))))||!!n.box&&(nodeCovered(n,Number(pl.x),Number(pl.z),.4)||
+  bodies.some(b=>{if(b.kind!=='dome')return false;const f=domeFront({rot:Number(b.rot??0)}),x=Number(b.x),z=Number(b.z);return nodeCovered(n,x+f.x,z+f.z,.45)||nodeCovered(n,x+f.x*3.5,z+f.z*3.5,.45);}));
  // Only deposits new in S3 arrive full; a missing older one stays missing and fails validation (no refill by deletion).
- for(const n of NODES)if(S3_NODES.has(n.id)&&!(n.id in nodes))nodes[n.id]=n.amount;
+ for(const n of NODES)if(S3_NODES.has(n.id)&&!(n.id in nodes))nodes[n.id]=blocks(n)?0:n.amount;
  world.regrow={};
  const drops=Array.isArray(world.drops)?world.drops:[];
  const body=(b:unknown,at?:{x:number;z:number})=>{if(!isObj(b))return;if(!('rot' in b))b.rot=0;if(isObj(b.job)&&!('repeat' in b.job))b.job.repeat=0;
   kilnFuelFix(b,world,at);
  };
- const base=obj(world.base,'world.base');
  for(const b of arr(base.buildings,'buildings',64))body(b);
  if(isObj(base.hand)&&!('repeat' in base.hand))base.hand.repeat=0;
- const pl=obj(next.player,'player'),here={x:Number(pl.x),z:Number(pl.z)};
+ const here={x:Number(pl.x),z:Number(pl.z)};
  const packed=(slots:unknown)=>{if(Array.isArray(slots))for(const s of slots)if(isObj(s)&&isObj(s.packed))body(s.packed,here);};
  packed(pl.inventory);
  if(isObj(world.crates))for(const c of Object.values(world.crates))packed(c);

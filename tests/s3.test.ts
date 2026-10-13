@@ -2,12 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { newGame, cloneState, sanitizeState, type GameState } from '../src/game/state.ts';
 import { addItems, countItem } from '../src/game/inventory.ts';
-import { NODES, NODE_BY_ID } from '../src/game/resources.ts';
-import { natureTick } from '../src/game/nature.ts';
+import { NODES, NODE_BY_ID, PATCH_NODES } from '../src/game/resources.ts';
+import { natureTick, nextRegrowSeconds, covers } from '../src/game/nature.ts';
 import { RECIPES, RECIPE_BY_ID, WORKBENCH_UPGRADE, makeBuilding, startJob, productionTick, connect, linkSegments, insideDome, beginPassage, domeFront, telemetry, deliverPower, manualWork, queueJob } from '../src/game/production.ts';
 import { packStation } from '../src/game/worldActions.ts';
 import { TANKS } from '../src/game/defs.ts';
-import { heightAt } from '../src/world.ts';
+import { heightAt, GRASS } from '../src/world.ts';
 import { placementProblem } from '../src/buildings.ts';
 import { survivalTick } from '../src/game/survival.ts';
 import { stationStatus } from '../src/game/stationStatus.ts';
@@ -190,4 +190,69 @@ test('S3: a finished but blocked bench I frees the hands; every queue counts its
  const v = fresh(), vk = makeBuilding(v, 'kiln', 50, 0, 46);
  vk.job = { recipeId: 'smelt_iron_raw', workMs: 0, reserved: [{ itemId: 'iron_raw', count: 1 }, { itemId: 'fiber', count: 1 }], water: 0, repeat: 0 } as any; vk.queue = Array(5).fill('smelt_iron_raw');
  assert.throws(() => sanitizeState(JSON.parse(JSON.stringify(v))), /очередь/, 'Five queued plus the active batch is six');
+});
+
+test('S3: a patch under a body does not regrow; it resumes once the body is gone', () => {
+ const g = fresh(), n = NODE_BY_ID.get('grass-c')!, period = n.regrowSeconds! * 1000;
+ g.world.nodes[n.id] = n.amount - 2;
+ const b = makeBuilding(g, 'workbench', 17, 0, 66);
+ natureTick(g, period * 5); assert.equal(g.world.nodes[n.id], n.amount - 2); assert.equal(nextRegrowSeconds(g, n.id), null);
+ b.x = 20; // tufts reach 4.5 m and more along X from the patch centre: still built over
+ natureTick(g, period); assert.equal(g.world.nodes[n.id], n.amount - 2);
+ // The leaves count, not only tuft centres: a tuft at (20.28, 65.48) reaches into a body standing at (21, 65).
+ assert.ok(covers(n, 21, 65, .48));
+ b.x = 22; // clear of every tuft's leaves: it grows again
+ natureTick(g, period); assert.equal(g.world.nodes[n.id], n.amount - 1);
+ // A body touching any rendered tuft's leaves covers that tuft's deposit.
+ for (const t of GRASS) if (t.patch >= 0) {
+  const id = PATCH_NODES.get(t.patch)!.find(id => t.patch !== 0 || (t.x < 44) === (id === 'grass-a'))!, reach = .48 * t.s * 1.35;
+  assert.ok(covers(NODE_BY_ID.get(id)!, t.x + reach + .47, t.z, .48), `${id} tuft ${t.x.toFixed(2)}, ${t.z.toFixed(2)}`);
+ }
+});
+test('S3: a v6 world gets no new deposit under a body, the player or an airlock exit', () => {
+ const g = fresh(), old: any = cloneState(g);
+ old.meta.stateVersion = 6; delete old.world.regrow;
+ for (const id of ['stone-b', 'grass-c', 'iron-c', 'ice-crater']) delete old.world.nodes[id];
+ const d = makeBuilding(old, 'dome', 24, 0, 21); delete d.rot; // door north: its outer exit (24, 24.5) is inside stone-b
+ makeBuilding(old, 'workbench', 16, 0, 66); // on grass-c
+ Object.assign(old.player, { x: 98, z: 63 }); // inside iron-c
+ const m = sanitizeState(old);
+ for (const id of ['stone-b', 'grass-c', 'iron-c']) assert.equal(m.world.nodes[id], 0, id);
+ assert.equal(m.world.nodes['ice-crater'], NODE_BY_ID.get('ice-crater')!.amount);
+});
+test('S3: a power deficit inside one class is shared in proportion to the requests', () => {
+ const g = fresh(), ms = 50; addItems(g.player.inventory, 'cable', 40);
+ const gen = makeBuilding(g, 'biogenerator', 50, 0, 50); gen.energy = 400000;
+ const sinks = [...Array(11)].map((_, i) => makeBuilding(g, 'distributor', Math.round(50 + 5 * Math.cos(i / 11 * 2 * Math.PI)), 0, Math.round(50 + 5 * Math.sin(i / 11 * 2 * Math.PI))));
+ for (const s of sinks) assert.equal(connect(g, 'cable', gen.id, s.id), '');
+ const out = deliverPower(g, [gen, ...sinks], [gen], sinks.map(b => ({ b, need: 4 * ms, priority: 2 })), ms).delivered;
+ const got = sinks.map(s => out.get(s.id)!);
+ assert.equal(got.reduce((a, b) => a + b, 0), 40 * ms, 'The whole supply is used');
+ for (const v of got) { assert.ok(Number.isInteger(v)); assert.ok(v >= 181 && v <= 182, String(v)); }
+ // Carried fractions: over 11 shortage ticks every consumer receives exactly the same total.
+ const total = new Map(sinks.map(s => [s.id, out.get(s.id)!]));
+ for (let i = 1; i < 11; i++) { const d = deliverPower(g, [gen, ...sinks], [gen], sinks.map(b => ({ b, need: 4 * ms, priority: 2 })), ms).delivered; for (const s of sinks) total.set(s.id, total.get(s.id)! + d.get(s.id)!); }
+ assert.deepEqual(new Set(total.values()), new Set([40 * ms]));
+ // Unequal requests stay proportional over time too: 600 and 3 × 525 from 2000 per tick, 50 ticks.
+ const u = fresh(); addItems(u.player.inventory, 'cable', 20);
+ const ug = makeBuilding(u, 'biogenerator', 50, 0, 50); ug.energy = 400000;
+ const us = [[54, 50], [46, 50], [50, 54], [50, 46]].map(([x, z]) => makeBuilding(u, 'distributor', x, 0, z)), needs = [600, 525, 525, 525];
+ for (const s of us) assert.equal(connect(u, 'cable', ug.id, s.id), '');
+ const sum = us.map(() => 0);
+ for (let i = 0; i < 50; i++) { const d = deliverPower(u, [ug, ...us], [ug], us.map((b, j) => ({ b, need: needs[j], priority: 0 })), ms).delivered; us.forEach((b, j) => { sum[j] += d.get(b.id)!; }); }
+ needs.forEach((n, j) => assert.ok(Math.abs(sum[j] - 50 * 2000 * n / 2175) < 1, `${n}: ${sum[j]}`));
+ // Full ticks in between keep what a deficit still owes: 3 × 900 from 2000, then from 4000, repeated.
+ const w = fresh(); addItems(w.player.inventory, 'cable', 20);
+ const [w1, w2] = [[50, 50], [50, 54]].map(([x, z]) => makeBuilding(w, 'biogenerator', x, 0, z)), ws = [[54, 50], [46, 50], [50, 46]].map(([x, z]) => makeBuilding(w, 'distributor', x, 0, z));
+ for (const gen of [w1, w2]) gen.energy = 400000;
+ for (const s of ws) assert.equal(connect(w, 'cable', w1.id, s.id), ''); assert.equal(connect(w, 'cable', w1.id, w2.id), '');
+ const got3 = ws.map(() => 0);
+ for (let i = 0; i < 60; i++) { const d = deliverPower(w, [w1, w2, ...ws], i % 2 ? [w1, w2] : [w1], ws.map(b => ({ b, need: 900, priority: 0 })), ms).delivered; ws.forEach((b, j) => { got3[j] += d.get(b.id)!; }); }
+ assert.ok(Math.max(...got3) - Math.min(...got3) <= 1, String(got3));
+ // Unequal requests keep their ratio: 30 vs 10 EU/s from 20 EU/s → 15 and 5.
+ const h = fresh(); addItems(h.player.inventory, 'cable', 10);
+ const hg = makeBuilding(h, 'biogenerator', 50, 0, 50), a = makeBuilding(h, 'distributor', 54, 0, 50), b = makeBuilding(h, 'distributor', 46, 0, 50); hg.energy = 20 * ms;
+ assert.equal(connect(h, 'cable', hg.id, a.id), ''); assert.equal(connect(h, 'cable', hg.id, b.id), '');
+ const r = deliverPower(h, [hg, a, b], [hg], [{ b: a, need: 30 * ms, priority: 0 }, { b, need: 10 * ms, priority: 0 }], ms).delivered;
+ assert.equal(r.get(a.id), 15 * ms); assert.equal(r.get(b.id), 5 * ms);
 });
