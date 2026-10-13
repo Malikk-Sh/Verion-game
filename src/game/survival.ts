@@ -13,13 +13,9 @@ const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(ma
 const elapsedAfter = (before: number, elapsed: number, grace: number) => Math.max(0, before + elapsed - grace) - Math.max(0, before - grace);
 
 /** Advances only accepted active time. Oxygen is conserved even across source exhaustion. */
-/** Air around the player: a habitable dome, or the airlock chamber during its 6 s cycle, which shares the dome's air
- * (beginPassage charges it), so a paid passage is never a suffocation trap. */
-function airRoom(state: GameState) {
-  const room = breathingDome(state); if (room) return room;
-  const p = state.world.base.passage, lock = p ? machine(state, p.domeId) : undefined;
-  return lock && lock.zone.q > 0 ? lock : undefined;
-}
+/** The dome whose airlock is cycling. Its chamber was charged when the cycle started (beginPassage: up to 4 GU of dome
+ * air), so the 6 s cycle is breathable without drawing any source again: a paid passage is never a suffocation trap. */
+const cyclingDome = (state: GameState) => { const p = state.world.base.passage; return p ? machine(state, p.domeId) : undefined; };
 export function survivalTick(state: GameState, dt: number, insideCapsule: boolean, running = false): SurvivalEvent {
   if (state.player.vitals.health <= 0) return 'death';
   const ms = Math.max(0, Math.round(dt * 1000));
@@ -37,14 +33,15 @@ export function survivalTick(state: GameState, dt: number, insideCapsule: boolea
   s.starvationMs = v.satiety === 0 ? Math.min(TIMER_MAX, s.starvationMs + starving) : 0;
 
   // Personal emergency air replaces consumption; it cannot refill any transferable source.
-  const emergency = Math.min(ms, s.emergencyMs);
+  const lock = !!cyclingDome(state);
+  const emergency = lock ? 0 : Math.min(ms, s.emergencyMs);
   s.emergencyMs -= emergency;
-  let missing = ms - emergency;
+  let missing = lock ? 0 : ms - emergency;
   if (insideCapsule) {
     const used = Math.min(state.world.capsuleMilliGU, missing);
     state.world.capsuleMilliGU -= used; missing -= used;
   }
-  const room = airRoom(state);
+  const room = breathingDome(state);
   if (room && missing > 0) { const used = Math.min(room.zone.q, missing); room.zone.q -= used; missing -= used; }
   if (wornParts(state) === 4) {
     for (const b of state.player.bottles) if (b && missing > 0) {
@@ -119,7 +116,7 @@ export function respawnAtCapsule(state: GameState, y: number) {
 export function accessibleOxygen(state: GameState, insideCapsule: boolean) {
   const emergency = state.player.survival.emergencyMs;
   if (emergency > 0) return { amount: emergency / 1000, capacity: EMERGENCY_MS / 1000, unit: 'с', emergency: true };
-  const room = airRoom(state);
+  const room = breathingDome(state) ?? cyclingDome(state);
   if (room) return { amount: room.zone.q / 1000, capacity: DOME_CAPACITY / 1000, unit: 'GU', emergency: false };
   const sealed = wornParts(state) === 4;
   return {

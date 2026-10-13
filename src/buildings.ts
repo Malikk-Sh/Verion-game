@@ -24,7 +24,8 @@ export function placementProblem(g: GameState, kind: BuildingKind, x: number, z:
  }
  // The airlock sets the player down one cell inside and 3.5 m outside its door; a body there would trap them in its collider.
  const spots=(d:{x:number;z:number;rot:number})=>{const f=domeFront(d);return [[d.x+f.x,d.z+f.z],[d.x+f.x*3.5,d.z+f.z*3.5]];};
- if(kind==='dome'){const [,[px,pz]]=spots({x,z,rot});if(g.world.base.buildings.some(b=>b.kind!=='dome'&&Math.abs(b.x-px)<.93&&Math.abs(b.z-pz)<.93))return 'Перед шлюзом стоит постройка — поверните купол';}
+ if(kind==='dome'){const [,[px,pz]]=spots({x,z,rot}),py=heightAt(px,pz);if(g.world.base.buildings.some(b=>b.kind!=='dome'&&Math.abs(b.x-px)<.93&&Math.abs(b.z-pz)<.93))return 'Перед шлюзом стоит постройка — поверните купол';
+  if(boxes.some(b=>!b.id.startsWith('build-')&&px+.45>b.minX&&px-.45<b.maxX&&pz+.45>b.minZ&&pz-.45<b.maxZ&&py+1.8>b.minY&&py<b.maxY))return 'Перед шлюзом препятствие — поверните купол';}
  else for(const d of g.world.base.buildings)if(d.kind==='dome')for(const [px,pz] of spots(d))if(Math.abs(x-px)<r+.45&&Math.abs(z-pz)<r+.45)return 'Здесь проход шлюза — оставьте его свободным';
  for(const b of boxes)if(!b.id.startsWith('build-')&&x+r>b.minX&&x-r<b.maxX&&z+r>b.minZ&&z-r<b.maxZ&&y+3>b.minY&&y<b.maxY)return 'Место занято объектом';
  return '';

@@ -39,6 +39,8 @@ test('S3: a version 6 save migrates to 7 without losing anything; new deposits a
  const m = sanitizeState(old);
  assert.equal(m.meta.stateVersion, 7);
  for (const id of ['stone-b', 'iron-c', 'ice-crater', 'grass-g']) assert.equal(m.world.nodes[id], NODE_BY_ID.get(id)!.amount);
+ const forged: any = cloneState(g); forged.meta.stateVersion = 6; delete forged.world.regrow; delete forged.world.nodes['iron-a'];
+ assert.throws(() => sanitizeState(forged), 'A deleted pre-S3 deposit is not refilled by migration');
  assert.deepEqual(m.world.regrow, {});
  const kiln = m.world.base.buildings[0];
  assert.equal(kiln.rot, 0); assert.equal(kiln.job!.repeat, 0);
@@ -107,12 +109,14 @@ test('S3: the airlock landing spots stay free and its 6 s cycle is breathable', 
  assert.match(placementProblem(g, 'kiln', 64, 40), /шлюза/);
  const g2 = fresh(); makeBuilding(g2, 'kiln', 64, heightAt(64, 40), 40); Object.assign(g2.player, { x: 58, y, z: 35 });
  assert.match(placementProblem(g2, 'dome', 60, 40, 1), /Перед шлюзом/);
- // Entering from outside with empty tanks: the chamber's dome air carries the player through the cycle.
+ // A rock or deposit in front of the door counts too: the stone pile X24/Z25 blocks a dome at X24/Z21 facing it.
+ Object.assign(g2.player, { x: 18, z: 15 }); assert.match(placementProblem(g2, 'dome', 24, 21, 0), /препятствие/); assert.equal(placementProblem(g2, 'dome', 24, 21, 1), '');
+ // Entering from outside with empty tanks: the paid chamber air carries the player through the cycle.
  Object.assign(g.player, { x: 62.8, y: d.y, z: 40 }); for (const t of g.player.bottles) if (t) t.milliGU = 0;
- d.zone.q = 20000; assert.equal(beginPassage(g, d.id), '');
- const before = d.zone.q;
+ d.zone.q = 20000; assert.equal(beginPassage(g, d.id), ''); assert.equal(d.zone.q, 16000);
  for (let i = 0; i < 100; i++) survivalTick(g, .05, false);
- assert.equal(g.player.survival.suffocationMs, 0); assert.ok(d.zone.q < before);
+ // The 4 GU paid at the start carry the cycle: no suffocation and no second charge from the dome.
+ assert.equal(g.player.survival.suffocationMs, 0); assert.equal(d.zone.q, 16000);
 });
 test('S3: in a power shortage the dome distributor is served before workbench II (SYSTEMS energy classes)', () => {
  const g = fresh(), gen = makeBuilding(g, 'biogenerator', 44, 0, 40), dist = makeBuilding(g, 'distributor', 52, 0, 40), bench = makeBuilding(g, 'workbench', 46, 0, 44);

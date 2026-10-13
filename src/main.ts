@@ -648,7 +648,7 @@ function boot(){
     if(natureTick(game,50).length)regrown=true;
     // A finished transfer ends its mode: a tank installed later never starts filling (or draining) without a new press.
     const port=dialog==='production-panel'&&insideCapsule();
-    if(port&&refillMachine==='capsule-out'&&!refillFromCapsule(game,FIXED_DT)||port&&refillMachine==='capsule-in'&&!refillCapsule(game,FIXED_DT)||refillMachine&&!refillMachine.startsWith('capsule')&&game.player.bottles.every(t=>!t||(t.milliGU??0)>=TANKS[t.itemId].capacity)){refillMachine=null;void saver?.save();}
+    if(port&&refillMachine==='capsule-out'&&!refillFromCapsule(game,FIXED_DT)||port&&refillMachine==='capsule-in'&&!refillCapsule(game,FIXED_DT)||refillMachine&&!refillMachine.startsWith('capsule')&&(game.player.bottles.every(t=>!t||(t.milliGU??0)>=TANKS[t.itemId].capacity)||(machine(game,refillMachine)?.oxygen??0)<=0)){refillMachine=null;void saver?.save();}
     if(produced.passage){Object.assign(actor,produced.passage);actor.previous={x:actor.x,y:actor.y,z:actor.z};Object.assign(game.player,produced.passage);}
     if(produced.changed)productionChanged=true;
     const survival=survivalTick(game,FIXED_DT,insideCapsule(),(input.run||(!actor.grounded&&actor.airSpeed>3.5*survivalSpeed(game)+.01))&&moved>0);

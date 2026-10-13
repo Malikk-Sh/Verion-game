@@ -3,7 +3,7 @@ import { heightAt } from '../world';
 import { freshBase, RECIPE_BY_ID, domeFaces, LINK_RANGE, MAX_REPEAT, type BaseState, type Job, type Building, type Link } from './production';
 import { BASIC_SUIT, BUILDABLE, CONTENT_VERSION, GENERATOR_VERSION, ITEMS, LEGACY_CONTENT_VERSIONS, SUIT_PARTS, TANKS, TOOLS, type SuitPart } from './defs';
 import { emptyInventory, INVENTORY_SIZE, type Slot } from './inventory';
-import { NODES, NODE_BY_ID, LATER_NODES } from './resources';
+import { NODES, NODE_BY_ID, LATER_NODES, S3_NODES } from './resources';
 import { CYCLE_TICKS, START_OFFSET_TICKS } from './daycycle';
 import { freshQuestProgress, QUEST_FACTS, type QuestProgress } from './questFacts';
 import { QUEST_IDS, type QuestId } from './questCatalog';
@@ -153,7 +153,8 @@ function kilnFuelFix(b:Obj,world:Obj,at?:{x:number;z:number}){
 /** v6 → v7 (S3): new deposits arrive full, regrowth starts empty, bodies face north, jobs do not repeat. */
 function toV7(r:Obj):Obj{
  const next=structuredClone(r),world=obj(next.world,'world'),nodes=obj(world.nodes,'world.nodes');
- for(const n of NODES)if(!(n.id in nodes))nodes[n.id]=n.amount;
+ // Only deposits new in S3 arrive full; a missing older one stays missing and fails validation (no refill by deletion).
+ for(const n of NODES)if(S3_NODES.has(n.id)&&!(n.id in nodes))nodes[n.id]=n.amount;
  world.regrow={};
  const drops=Array.isArray(world.drops)?world.drops:[];
  const body=(b:unknown,at?:{x:number;z:number})=>{if(!isObj(b))return;if(!('rot' in b))b.rot=0;if(isObj(b.job)&&!('repeat' in b.job))b.job.repeat=0;

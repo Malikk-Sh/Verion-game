@@ -45,3 +45,6 @@ export const PATCH_NODES = new Map<number, string[]>();
 for (const n of NODES) if (n.patch !== undefined) PATCH_NODES.set(n.patch, [...(PATCH_NODES.get(n.patch) ?? []), n.id]);
 /** Deposits introduced after the save format was created; older worlds receive them full. */
 export const LATER_NODES = new Set(['sand-a', 'grass-a', 'grass-b']);
+/** Deposits that S3 (state v7) adds; a v6 world receives exactly these full, never a missing older one. */
+export const BASE_NODES = new Set(['iron-a', 'iron-b', 'copper-a', 'copper-b', 'stone-a', 'ice-a', 'sand-a', 'grass-a', 'grass-b']);
+export const S3_NODES = new Set(NODES.filter(n => !BASE_NODES.has(n.id)).map(n => n.id));
