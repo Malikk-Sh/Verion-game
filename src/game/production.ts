@@ -332,7 +332,7 @@ export function productionTick(g: GameState, ms: number, refillId: string | null
  }
  const refill=refillId&&machine(g,refillId);if(refill&&Math.hypot(refill.x-g.player.x,refill.z-g.player.z)<=3.2){let budget=Math.min(refill.oxygen,(power.get(refill.id)??0)*10);for(const t of g.player.bottles)if(t){const n=Math.min(budget,TANKS[t.itemId].capacity-(t.milliGU??0));t.milliGU=(t.milliGU??0)+n;refill.oxygen-=n;budget-=n;if(n>0)changed=recordQuestFact(g,'system:refill')||changed;}}
  let passage:ProductionTick['passage']=null;
- if(base.passage){base.passage.remainingMs=Math.max(0,base.passage.remainingMs-ms);if(!base.passage.remainingMs){const d=machine(g,base.passage.domeId)!,f=domeFront(d),k=base.passage.direction==='in'?1:3.5;passage={x:d.x+f.x*k,y:d.y+.12,z:d.z+f.z*k};base.passage=null;changed=true;}}
+ if(base.passage){base.passage.remainingMs=Math.max(0,base.passage.remainingMs-ms);if(!base.passage.remainingMs){const d=machine(g,base.passage.domeId)!,f=domeFront(d),inward=base.passage.direction==='in',k=inward?1:3.5,x=d.x+f.x*k,z=d.z+f.z*k;passage={x,y:inward?d.y+.12:heightAt(x,z),z};base.passage=null;changed=true;}}
  return {changed,passage};
 }
 

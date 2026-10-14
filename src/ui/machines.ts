@@ -181,7 +181,8 @@ export function machineView(g: GameState, id: string, say: Say, changed: () => v
  }
  left.append(connections(ctx, b));
  const footer = h('div', '', 'st-actions st-foot');
- footer.append(button(b.enabled ? 'Выключить' : 'Включить', () => { b.enabled = !b.enabled; change(); }, 'st-btn small ghost'));
+ // The dome is a passive shell: no switch (its air, leak and airlock never depended on it).
+ if (b.kind !== 'dome') footer.append(button(b.enabled ? 'Выключить' : 'Включить', () => { b.enabled = !b.enabled; change(); }, 'st-btn small ghost'));
  if (b.job && b.kind !== 'workbench') footer.append(button('Отменить обработку', () => say(cancelJob(g, id), 'Оплаченное сырьё возвращено'), 'st-btn small ghost'));
  footer.append(button('Забрать станцию', () => { const e = packStation(g, id); say(e, 'Станция в рюкзаке'); }, 'st-btn small ghost'));
  if (b.input.slice(2).some(Boolean) || b.output.slice(1).some(Boolean)) { const legacy = h('details', '', 'st-legacy'); legacy.append(h('summary', 'Другие сохранённые ячейки')); for (const [source, from] of [[b.input, 2], [b.output, 1]] as const) source.forEach((v, i) => { if (v && i >= from) legacy.append(button(ITEMS[v.itemId].name + ' ×' + v.count, () => say(takeSlot(g, source, i), 'Предмет забран'), 'st-btn small')); }); footer.append(legacy); }

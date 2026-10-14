@@ -11,7 +11,7 @@ import { heightAt, GRASS } from '../src/world.ts';
 import { placementProblem } from '../src/buildings.ts';
 import { survivalTick } from '../src/game/survival.ts';
 import { stationStatus } from '../src/game/stationStatus.ts';
-import { nearestNode } from '../src/game/guide.ts';
+import { nearestNode, guideStep } from '../src/game/guide.ts';
 import { refreshQuestProgress } from '../src/game/quests.ts';
 
 const fresh = () => newGame('w-s3', 7, 1, heightAt(40, 42));
@@ -255,4 +255,29 @@ test('S3: a power deficit inside one class is shared in proportion to the reques
  assert.equal(connect(h, 'cable', hg.id, a.id), ''); assert.equal(connect(h, 'cable', hg.id, b.id), '');
  const r = deliverPower(h, [hg, a, b], [hg], [{ b: a, need: 30 * ms, priority: 0 }, { b, need: 10 * ms, priority: 0 }], ms).delivered;
  assert.equal(r.get(a.id), 15 * ms); assert.equal(r.get(b.id), 5 * ms);
+});
+
+test('S3: leaving through the airlock lands on the ground in front of the door, not at the dome floor height', () => {
+ const g = fresh(), x = 70, z = 44, d = makeBuilding(g, 'dome', x, heightAt(x, z) + .12, z, 0), f = domeFront(d), out = { x: x + f.x * 3.5, z: z + f.z * 3.5 };
+ assert.ok(Math.abs(heightAt(out.x, out.z) - (d.y + .12)) > .05, 'the outer pad must sit at another height for this check');
+ Object.assign(g.player, { x: x + 1, y: d.y + .1, z: z + .5 });
+ assert.equal(beginPassage(g, d.id), '');
+ const leave = productionTick(g, 6000).passage!;
+ assert.deepEqual([leave.x, leave.z], [out.x, out.z]); assert.equal(leave.y, heightAt(out.x, out.z));
+});
+
+test('S3: the dome is passive — no on/off switch, an old "off" flag changes nothing', async () => {
+ const g = fresh(), d = makeBuilding(g, 'dome', 58, heightAt(58, 42) + .12, 42, 0); d.enabled = false;
+ const { stationStatus } = await import('../src/game/stationStatus.ts');
+ assert.notEqual(stationStatus(g, d).title, 'Выключено');
+});
+
+test('S3: the journal follows the distributor inside the dome where the pipe and the cable meet', () => {
+ const g = fresh(), y = heightAt(58, 42) + .12, dome = makeBuilding(g, 'dome', 58, y, 42, 0);
+ const outside = makeBuilding(g, 'distributor', 46, heightAt(46, 46) + .12, 46, 0), inside = makeBuilding(g, 'distributor', 57, y, 42, 0);
+ const gen = makeBuilding(g, 'biogenerator', 51, heightAt(51, 40) + .12, 40, 0), el = makeBuilding(g, 'electrolyzer', 51, heightAt(51, 43) + .12, 43, 0);
+ assert.ok(g.world.base.buildings.indexOf(outside) < g.world.base.buildings.indexOf(inside) && insideDome(dome, inside.x, inside.y, inside.z) && !insideDome(dome, outside.x, outside.y, outside.z));
+ g.world.base.links.push({ id: 'l-pipe', kind: 'gas_pipe', from: el.id, to: inside.id }, { id: 'l-cable', kind: 'cable', from: inside.id, to: gen.id });
+ const tasks = guideStep(g, 'air').tasks;
+ assert.equal(tasks[0].done, true, 'pipe to the distributor in the dome'); assert.equal(tasks[1].done, true, 'cable to the same distributor');
 });
