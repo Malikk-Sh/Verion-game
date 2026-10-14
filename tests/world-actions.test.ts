@@ -109,4 +109,7 @@ test('tankGap: only taking the last gas off a sealed suit with no other air is a
  // The move helper picks the tank that replaces the worn one: the charging tank for a swap, nothing for a plain move.
  assert.equal(moveTankGap(g,false,{kind:'worn',b:0},{kind:'station',id:e.id}),true);e.input[1]=tank(9000);assert.equal(moveTankGap(g,false,{kind:'worn',b:0},{kind:'station',id:e.id}),false);
  assert.equal(moveTankGap(g,false,{kind:'worn',b:0},{kind:'worn',b:1}),false);e.input[1]=tank(0);assert.equal(moveTankGap(g,false,{kind:'station',id:e.id},{kind:'worn',b:0}),true);
+ // A move that is refused anyway (out of reach, a dead player) never asks to confirm the last air.
+ Object.assign(g.player,{x:50,z:50});assert.equal(tankGap(g,false,0,tank(0)),true);assert.equal(moveTankGap(g,false,{kind:'station',id:e.id},{kind:'worn',b:0}),false);
+ Object.assign(g.player,{x:44,z:43});g.player.vitals.health=0;assert.equal(moveTankGap(g,false,{kind:'worn',b:0},{kind:'station',id:e.id}),false);
 });

@@ -38,7 +38,13 @@ function tankCell(g:GameState,p:TankPlace):{slots:Slot[];i:number}|string{
  const b=machine(g,p.id);if(!b||b.kind!=='electrolyzer')return 'Баллоны заправляет генератор кислорода';if(!nearby(g,b))return 'Подойдите к станции';
  return {slots:b.input,i:1};
 }
-const tankAt=(g:GameState,p:TankPlace)=>{const c=tankCell(g,p);return typeof c==='string'?null:c.slots[c.i];};
+/** Both cells of an allowed tank move, or the reason it is refused. */
+function tankMoveCells(g:GameState,from:TankPlace,to:TankPlace):{a:{slots:Slot[];i:number};b:{slots:Slot[];i:number}}|string{
+ if(g.player.vitals.health<=0)return 'Персонаж погиб';
+ const a=tankCell(g,from),b=tankCell(g,to);if(typeof a==='string')return a;if(typeof b==='string')return b;
+ const s=a.slots[a.i],t=b.slots[b.i];if(!s)return 'Слот пуст';if(!isTank(s))return 'Это не баллон';if(t&&!isTank(t))return 'Освободите ячейку';
+ return {a,b};
+}
 /**
  * Moves one real tank between the suit, the backpack and an oxygen generator's charging slot (S4). An empty target takes
  * it, a tank there swaps by reference, so the gas travels with the object; anything else, a station out of reach or a dead
@@ -46,10 +52,8 @@ const tankAt=(g:GameState,p:TankPlace)=>{const c=tankCell(g,p);return typeof c==
  * worn at once (D08).
  */
 export function moveTank(g:GameState,from:TankPlace,to:TankPlace):string{
- if(g.player.vitals.health<=0)return 'Персонаж погиб';
- const a=tankCell(g,from),b=tankCell(g,to);if(typeof a==='string')return a;if(typeof b==='string')return b;
- const s=a.slots[a.i],t=b.slots[b.i];if(!s)return 'Слот пуст';if(!isTank(s))return 'Это не баллон';if(t&&!isTank(t))return 'Освободите ячейку';
- a.slots[a.i]=t;b.slots[b.i]=s;return '';
+ const c=tankMoveCells(g,from,to);if(typeof c==='string')return c;
+ const {a,b}=c,s=a.slots[a.i];a.slots[a.i]=b.slots[b.i];b.slots[b.i]=s;return '';
 }
 /** Tap on a worn tank in the generator window: into the charging slot, swapping with a tank that is charging there. */
 export const chargeWornTank=(g:GameState,id:string,b:0|1)=>moveTank(g,{kind:'worn',b},{kind:'station',id});
@@ -57,9 +61,10 @@ export const chargeWornTank=(g:GameState,id:string,b:0|1)=>moveTank(g,{kind:'wor
 export const wearSlot=(g:GameState):0|1=>{const [a,c]=g.player.bottles;return !a?0:!c?1:(c.milliGU??0)<(a.milliGU??0)?1:0;};
 /** Tap on the charging slot: the tank goes straight onto the suit (see wearSlot). */
 export const wearStationTank=(g:GameState,id:string)=>moveTank(g,{kind:'station',id},{kind:'worn',b:wearSlot(g)});
-/** True when this move would take the player's last breathable gas off the suit right now (survival tankGap). */
+/** True when this allowed move would take the player's last breathable gas off the suit right now (survival tankGap);
+ * a move that is refused anyway never asks for a confirmation. */
 export function moveTankGap(g:GameState,insideCapsule:boolean,from:TankPlace,to:TankPlace):boolean{
  if(from.kind==='worn'&&to.kind==='worn')return false;
- const worn=from.kind==='worn'?from:to.kind==='worn'?to:null;if(!worn)return false;
- return tankGap(g,insideCapsule,worn.b,tankAt(g,worn===from?to:from));
+ const worn=from.kind==='worn'?from:to.kind==='worn'?to:null,c=tankMoveCells(g,from,to);if(!worn||typeof c==='string')return false;
+ const other=worn===from?c.b:c.a;return tankGap(g,insideCapsule,worn.b,other.slots[other.i]);
 }
