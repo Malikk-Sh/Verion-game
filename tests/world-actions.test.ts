@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {newGame,sanitizeState} from '../src/game/state';
 import {addItems,transferSlot,countItem} from '../src/game/inventory';
 import {makeBuilding,productionTick,connect,startJob} from '../src/game/production';
-import {packStation,loadMachineSlot} from '../src/game/worldActions';
+import {packStation,loadMachineSlot,takeSlot,moveTank,chargeWornTank,wearStationTank,moveTankGap} from '../src/game/worldActions';
+import {tankGap} from '../src/game/survival';
 import {place} from '../src/buildings';
 import {heightAt} from '../src/world';
 import {Character} from '../src/controller';
@@ -63,4 +64,49 @@ test('Legacy mixed machine inputs keep all stock and paid WIP, retire unpaid que
  const m2=sanitizeState(old2),el2=m2.world.base.buildings[0];
  assert.deepEqual(el2.input,[null,null,{itemId:'ice',count:2},{itemId:'fiber',count:3}]);assert.deepEqual(m2.world.drops.at(-1)!.items,[{itemId:'sand',count:1}]);
  kiln.job=null;kiln.input[0]=null;tick(g,1000);assert.equal(kiln.job,null);assert.equal(countItem(kiln.input,'sand'),4);assert.equal(countItem(electro.input,'ice'),2);assert.deepEqual(sanitizeState(g),g);const corrupt=structuredClone(old);corrupt.world.base.buildings[0].input[2]=0;assert.throws(()=>sanitizeState(corrupt));
+});
+// ---------- S4: worn tanks and the oxygen generator's charging slot ----------
+const tank=(milliGU:number)=>({itemId:'bottle_1',count:1,milliGU});
+const charger=()=>{const g=fresh(),e=makeBuilding(g,'electrolyzer',44,0,42);Object.assign(g.player,{x:44,z:43});return {g,e};};
+test('A worn tank moves into the charging slot with its gas; refusals change nothing',()=>{
+ const {g,e}=charger(),worn=g.player.bottles[0]!;worn.milliGU=123456;
+ assert.equal(chargeWornTank(g,e.id,0),'');assert.equal(e.input[1],worn);assert.equal(e.input[1]!.milliGU,123456);assert.equal(g.player.bottles[0],null);assert.deepEqual(sanitizeState(g),g);
+ const refused=(prepare:(g:ReturnType<typeof fresh>)=>void,run:(g:ReturnType<typeof fresh>)=>string,reason:RegExp)=>{const c=charger();c.g.player.bottles[1]=tank(5000);prepare(c.g);const before=structuredClone(c.g);assert.match(run(c.g),reason);assert.deepEqual(c.g,before);};
+ refused(g=>Object.assign(g.player,{x:50,z:50}),g=>chargeWornTank(g,'build-1',0),/Подойдите/);
+ refused(g=>{g.player.vitals.health=0;},g=>chargeWornTank(g,'build-1',0),/погиб/);
+ refused(g=>{const r=makeBuilding(g,'refill',44,0,44);r.input[1]=null;},g=>chargeWornTank(g,'build-2',0),/генератор кислорода/);
+ refused(g=>{g.player.inventory[8]={itemId:'stone',count:3};},g=>moveTank(g,{kind:'pack',i:8},{kind:'station',id:'build-1'}),/не баллон/);
+ refused(g=>{g.world.base.buildings[0].input[1]={itemId:'stone',count:1};},g=>chargeWornTank(g,'build-1',0),/Освободите/);
+ refused(()=>{},g=>moveTank(g,{kind:'pack',i:30},{kind:'worn',b:0}),/Нет такой/);
+});
+test('Swapping a worn tank with the charging one conserves gas; the charged tank goes straight onto the suit',()=>{
+ const {g,e}=charger(),a=tank(100000),b=tank(500000);g.player.bottles=[a,null];e.input[1]=b;
+ assert.equal(chargeWornTank(g,e.id,0),'');assert.equal(g.player.bottles[0],b);assert.equal(e.input[1],a);assert.equal(g.player.bottles[0]!.milliGU!+e.input[1]!.milliGU!,600000);
+ // An empty worn connector takes the charging tank.
+ assert.equal(wearStationTank(g,e.id),'');assert.equal(g.player.bottles[1],a);assert.equal(e.input[1],null);assert.equal(wearStationTank(g,e.id),'Слот пуст');
+ // Both connectors full: the worn tank with less gas swaps with the charging one.
+ const c=tank(600000);e.input[1]=c;a.milliGU=300000;b.milliGU=200000;assert.equal(wearStationTank(g,e.id),'');assert.equal(g.player.bottles[0],c);assert.equal(e.input[1],b);assert.equal(g.player.bottles[1],a);
+ // Backpack tanks still load by tap; a tank taken back by hand skips the quick-access row.
+ const spare=tank(42000);g.player.inventory[10]=spare;assert.equal(loadMachineSlot(g,e.id,10),'');assert.equal(e.input[1],spare);assert.equal(g.player.inventory[10],b);
+ g.player.inventory[1]=null;assert.equal(takeSlot(g,e.input,1),'');assert.equal(g.player.inventory[1],null);assert.equal(g.player.inventory.findIndex(s=>s?.milliGU===42000)>=6,true);assert.deepEqual(sanitizeState(g),g);
+});
+test('After a move the generator charges the tank with paid power and records the refill fact',()=>{
+ const {g,e}=charger(),gen=makeBuilding(g,'biogenerator',42,0,42);addItems(g.player.inventory,'cable',1);assert.equal(connect(g,'cable',gen.id,e.id),'');gen.energy=100000;e.oxygen=300000;g.player.bottles[0]!.milliGU=0;
+ assert.equal(chargeWornTank(g,e.id,0),'');assert.equal(g.progress.quests.facts.includes('system:refill'),false);tick(g,1000);assert.equal(e.input[1]!.milliGU,20000);assert.equal(e.oxygen,280000);assert.ok(g.progress.quests.facts.includes('system:refill'));
+ assert.equal(wearStationTank(g,e.id),'');assert.equal(g.player.bottles[0]!.milliGU,20000);assert.deepEqual(sanitizeState(g),g);
+});
+test('tankGap: only taking the last gas off a sealed suit with no other air is a gap',()=>{
+ const {g,e}=charger(),ask=(b:0|1=0,incoming:any=null,inside=false)=>tankGap(g,inside,b,incoming);
+ assert.equal(ask(),true,'outside with one tank');assert.equal(ask(1),false,'the empty connector holds nothing');
+ assert.equal(ask(0,tank(1)),false,'incoming tank has gas');assert.equal(ask(0,tank(0)),true,'incoming tank is empty');
+ g.player.bottles[1]=tank(1);assert.equal(ask(),false,'the other worn tank breathes');g.player.bottles[1]=tank(0);assert.equal(ask(),true);
+ assert.equal(ask(0,null,true),false,'inside the capsule with gas');g.world.capsuleMilliGU=0;assert.equal(ask(0,null,true),true,'an empty capsule');
+ g.player.survival.emergencyMs=1000;assert.equal(ask(),false,'emergency air');g.player.survival.emergencyMs=0;
+ g.player.suit.helmet=null;assert.equal(ask(),false,'an open suit does not breathe tanks');g.player.suit.helmet={itemId:'suit_helmet',count:1};
+ const d=makeBuilding(g,'dome',44,0,43);d.zone.q=500000;d.zone.purity=1;assert.equal(ask(),false,'a breathable dome');
+ d.zone.q=0;assert.equal(ask(),true);g.world.base.passage={domeId:d.id,direction:'in',remainingMs:3000};assert.equal(ask(),false,'a paid airlock cycle');g.world.base.passage.direction='out';assert.equal(ask(),true);g.world.base.passage=null;
+ g.player.bottles[0]!.milliGU=0;assert.equal(ask(),false,'the removed tank is already empty');g.player.bottles[0]!.milliGU=600000;
+ // The move helper picks the tank that replaces the worn one: the charging tank for a swap, nothing for a plain move.
+ assert.equal(moveTankGap(g,false,{kind:'worn',b:0},{kind:'station',id:e.id}),true);e.input[1]=tank(9000);assert.equal(moveTankGap(g,false,{kind:'worn',b:0},{kind:'station',id:e.id}),false);
+ assert.equal(moveTankGap(g,false,{kind:'worn',b:0},{kind:'worn',b:1}),false);e.input[1]=tank(0);assert.equal(moveTankGap(g,false,{kind:'station',id:e.id},{kind:'worn',b:0}),true);
 });

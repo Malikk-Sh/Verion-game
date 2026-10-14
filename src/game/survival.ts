@@ -127,6 +127,15 @@ export function accessibleOxygen(state: GameState, insideCapsule: boolean) {
   };
 }
 export const tankCapacity = (slot: NonNullable<Slot>) => TANKS[slot.itemId].capacity / 1000;
+/** True when taking worn tank `b` off — `incoming` takes its place — would leave nothing to breathe right now (S4): the
+ * suit is sealed, no emergency air, capsule gas, breathable dome or paid airlock cycle covers the player, the other worn
+ * tank is empty, the incoming tank brings no gas and the removed one still had some. */
+export function tankGap(state: GameState, insideCapsule: boolean, b: 0 | 1, incoming: Slot = null): boolean {
+  if (wornParts(state) < 4 || state.player.survival.emergencyMs > 0) return false;
+  if ((insideCapsule && state.world.capsuleMilliGU > 0) || breathingDome(state) || cyclingDome(state)) return false;
+  if ((state.player.bottles[b ? 0 : 1]?.milliGU ?? 0) > 0 || (incoming?.milliGU ?? 0) > 0) return false;
+  return (state.player.bottles[b]?.milliGU ?? 0) > 0;
+}
 
 /** Built-in capsule manual port also fills empty installed tanks, without power. */
 export function refillFromCapsule(state: GameState, dt: number): number {
