@@ -1,0 +1,95 @@
+/* ---------- S3 expedition journal ---------- */
+.sr-only{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.journal-panel{gap:10px}
+.journal-head{display:flex;align-items:center;gap:18px;padding-bottom:10px;border-bottom:1px solid var(--glow-soft)}
+.journal-titles{display:flex;flex-direction:column;gap:2px;min-width:0}.journal-titles .kicker{color:var(--cyan)}
+.journal-meter{display:flex;align-items:center;gap:10px;margin-left:auto;font-size:13px;color:var(--muted)}
+.journal-meter b{color:var(--text);font-size:16px}
+.journal-meter i{display:block;width:clamp(80px,16vw,180px);height:6px;background:rgba(255,255,255,.08);box-shadow:inset 0 0 0 1px var(--glow-soft);overflow:hidden}
+.journal-meter i b{display:block;height:100%;background:linear-gradient(90deg,var(--aqua),var(--amber-hi));transform-origin:left;transform:scaleX(0);transition:transform .8s cubic-bezier(.2,.8,.2,1)}
+.journal-head .ui-close{margin-left:0}
+.journal-body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(210px,34%) 1fr;gap:16px}
+#journal-list{min-height:0;overflow:auto;padding-right:6px;display:flex;flex-direction:column;gap:12px;scrollbar-width:thin;touch-action:pan-y}
+.journal-chapter{display:flex;flex-direction:column;gap:4px}
+.journal-chapter-head{display:flex;align-items:baseline;justify-content:space-between;padding:0 4px 2px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--cyan)}
+.journal-chapter-head small{color:var(--muted);letter-spacing:0}
+.journal-step{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:4px 10px 4px 6px;text-align:left;border:0;background:rgba(6,28,33,.62);box-shadow:inset 0 0 0 1px var(--line-soft);clip-path:polygon(0 0,calc(100% - 8px) 0,100% 8px,100% 100%,0 100%);transition:background .2s,box-shadow .2s,transform .15s}
+.journal-step:hover{background:rgba(16,58,64,.75)}
+.journal-step[aria-pressed=true]{background:linear-gradient(90deg,rgba(18,74,82,.95),rgba(8,36,42,.9));box-shadow:inset 3px 0 0 var(--aqua),inset 0 0 0 1px var(--glow)}
+.journal-step.current{box-shadow:inset 3px 0 0 var(--amber-hi),inset 0 0 0 1px rgba(255,180,60,.45)}
+.journal-step[data-status=locked]{opacity:.55}
+.journal-step[data-status=done] .journal-step-text b{color:rgba(233,245,241,.7)}
+.journal-step-mark{flex:0 0 18px;height:18px;display:grid;place-items:center;font-style:normal;font-size:11px;font-weight:800;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--line)}
+.journal-step[data-status=done] .journal-step-mark{color:#06201c;background:var(--cyan);box-shadow:none}
+.journal-step.current .journal-step-mark{color:var(--amber-hi);box-shadow:inset 0 0 0 1.5px var(--amber-hi);animation:mark-pulse 1.8s ease-in-out infinite}
+@keyframes mark-pulse{50%{box-shadow:inset 0 0 0 1.5px var(--amber-hi),0 0 10px rgba(255,180,60,.6)}}
+.journal-step-art{flex:0 0 30px;width:30px;height:30px}.journal-step-art img,.journal-step-art svg{width:100%;height:100%;object-fit:contain}
+.journal-step-text{display:flex;flex-direction:column;min-width:0}.journal-step-text b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.journal-step-text small{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#journal-detail{min-height:0;overflow:auto;padding:4px 6px 12px 16px;border-left:1px solid var(--glow-soft);scrollbar-width:thin;touch-action:pan-y;animation:journal-in .35s cubic-bezier(.2,.8,.2,1)}
+@keyframes journal-in{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:none}}
+.journal-detail-head{display:flex;align-items:center;gap:14px;margin-bottom:8px}
+.journal-hero{flex:0 0 64px;width:64px;height:64px;padding:6px;background:radial-gradient(circle,rgba(84,226,236,.22),transparent 70%)}.journal-hero img,.journal-hero svg{width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 4px 8px rgba(0,0,0,.4))}
+.journal-detail-head h3{font-size:22px;margin-top:2px}
+.journal-chip{margin-left:auto;padding:4px 10px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;box-shadow:inset 0 0 0 1px var(--line)}
+.journal-chip.current{color:var(--amber-hi);box-shadow:inset 0 0 0 1px rgba(255,180,60,.7);background:rgba(255,180,60,.1)}
+.journal-chip.done{color:var(--cyan);box-shadow:inset 0 0 0 1px var(--glow)}.journal-chip.locked{color:var(--muted)}
+.journal-why{margin:0 0 10px;font-size:14px;line-height:1.5;color:rgba(233,245,241,.86)}
+#journal-detail h4{margin:12px 0 6px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--cyan)}
+.journal-tasks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.journal-task{display:flex;align-items:center;gap:10px;min-height:36px;padding:4px 6px 4px 8px;background:rgba(6,28,33,.55);box-shadow:inset 0 0 0 1px var(--line-soft)}
+.journal-task.done{opacity:.72}
+.journal-check{flex:0 0 18px;height:18px;display:grid;place-items:center;font-style:normal;font-size:11px;font-weight:800;box-shadow:inset 0 0 0 1.5px var(--line);border-radius:3px}
+.journal-task.done .journal-check{color:#06201c;background:var(--cyan);box-shadow:none}
+.journal-task-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.journal-task-head{display:flex;align-items:baseline;gap:8px}.journal-task-label{font-size:13px;flex:1;min-width:0}
+.journal-count{font-size:13px;font-variant-numeric:tabular-nums;color:var(--amber-hi)}.journal-task.done .journal-count{color:var(--cyan)}
+.journal-bar{display:block;height:3px;background:rgba(255,255,255,.08)}.journal-bar b{display:block;height:100%;background:var(--amber-hi);transform-origin:left;transition:transform .6s ease}.journal-task.done .journal-bar b{background:var(--cyan)}
+.journal-go{display:flex;align-items:center;gap:6px;min-height:34px;padding:0 10px;font-size:12px;font-weight:700;color:var(--amber-hi);border:0;background:rgba(255,180,60,.1);box-shadow:inset 0 0 0 1px rgba(255,180,60,.5);clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px)}
+.journal-go svg{width:12px;height:12px;fill:currentColor;transform:rotate(45deg)}
+.journal-how{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:5px;font-size:13px;line-height:1.45;color:rgba(233,245,241,.85)}
+.journal-how li::marker{color:var(--amber-hi);font-weight:700}
+.journal-recipes{display:flex;flex-direction:column;gap:6px}
+.journal-recipe{display:flex;align-items:center;gap:10px;padding:6px 8px;background:rgba(6,28,33,.55);box-shadow:inset 0 0 0 1px var(--line-soft)}
+.journal-recipe-art{flex:0 0 40px;width:40px;height:40px}.journal-recipe-art img,.journal-recipe-art svg{width:100%;height:100%;object-fit:contain}
+.journal-recipe-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.journal-recipe-name{font-size:13px;font-weight:700}.journal-recipe-station{font-size:11px;color:var(--muted)}
+.journal-ingredients{display:flex;flex-wrap:wrap;gap:4px}
+.journal-ingredient{display:flex;align-items:center;gap:3px;padding:1px 6px 1px 2px;font-size:11px;color:var(--warn);background:rgba(255,138,92,.08);box-shadow:inset 0 0 0 1px rgba(255,138,92,.35)}
+.journal-ingredient.ok{color:var(--cyan);background:rgba(84,226,236,.08);box-shadow:inset 0 0 0 1px var(--glow-soft)}
+.journal-ingredient .art{width:20px;height:20px}.journal-ingredient .art img,.journal-ingredient .art svg{width:100%;height:100%;object-fit:contain}
+.journal-craft{min-height:34px;padding:0 12px;font-size:12px;font-weight:700}
+.journal-actions{display:flex;gap:8px;margin-top:14px}
+.journal-pin{min-height:36px;font-size:13px;font-weight:700;color:var(--amber-hi);border:0;background:linear-gradient(180deg,rgba(70,52,14,.6),rgba(40,30,8,.7));box-shadow:inset 0 0 0 1px rgba(255,180,60,.6);clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
+@media(max-height:500px){
+ .journal-head{padding-bottom:6px;gap:10px}.journal-head .kicker{display:none}.journal-body{gap:10px;grid-template-columns:minmax(170px,36%) 1fr}
+ .journal-step{min-height:38px;gap:8px}.journal-step-art{flex-basis:24px;width:24px;height:24px}.journal-step-text b{font-size:12.5px}.journal-step-text small{font-size:10px}
+ .journal-detail-head{gap:10px;margin-bottom:4px}.journal-hero{flex-basis:44px;width:44px;height:44px}.journal-detail-head h3{font-size:17px}
+ .journal-why{font-size:12.5px;margin-bottom:6px}.journal-how{font-size:12px}#journal-detail h4{margin:8px 0 4px}
+}
+@media(max-width:700px){.journal-meter i{display:none}}
+/* ---------- HUD objective tracker ---------- */
+#hud #objective{display:flex;align-items:center;gap:calc(8px * var(--hud-info));padding:calc(4px * var(--hud-info)) calc(10px * var(--hud-info)) calc(6px * var(--hud-info)) calc(6px * var(--hud-info));text-align:left;overflow:hidden}
+#hud #objective-icon{flex:0 0 auto;width:calc(34px * var(--hud-info));height:calc(34px * var(--hud-info));display:grid;place-items:center;background:radial-gradient(circle,rgba(255,180,60,.18),transparent 70%)}
+#hud #objective-icon .art,#hud #objective-icon img{width:100%;height:100%;object-fit:contain}
+#hud .obj-body{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.15}
+#hud #objective-kicker{font-size:calc(9.5px * var(--hud-info));font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--amber-hi)}
+#hud #objective-text{font-size:max(12px,calc(13.5px * var(--hud-info)));font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#hud #objective-task{font-size:max(10px,calc(11px * var(--hud-info)));color:rgba(233,245,241,.8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+#hud #objective-task b{color:var(--amber-hi);font-weight:700}
+#hud #objective-bar{position:absolute;left:0;right:0;bottom:0;height:2px;background:rgba(255,255,255,.06)}#objective-bar b{display:block;height:100%;background:linear-gradient(90deg,var(--amber-hi),#ffe0a0);transform-origin:left;transform:scaleX(var(--p,0));transition:transform .6s ease}
+#hud #objective.advance{animation:objective-advance .9s cubic-bezier(.2,.8,.2,1)}
+@keyframes objective-advance{0%{filter:brightness(2.2);transform:translateX(-10px)}35%{filter:brightness(1.4)}100%{filter:none;transform:none}}
+#hud #objective.tick #objective-task{animation:task-tick .5s ease}@keyframes task-tick{40%{color:#fff;text-shadow:0 0 8px rgba(255,180,60,.9)}}
+/* ---------- Step completion banner ---------- */
+#step-banner{position:absolute;left:50%;top:26%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:4px;padding:14px 46px 16px;pointer-events:none;z-index:7;text-align:center;overflow:hidden;
+ background:linear-gradient(180deg,rgba(13,48,54,.92),rgba(5,22,26,.9));box-shadow:inset 0 0 0 1px var(--glow),0 0 40px rgba(67,227,238,.25);clip-path:polygon(18px 0,calc(100% - 18px) 0,100% 50%,calc(100% - 18px) 100%,18px 100%,0 50%);animation:banner 3.6s cubic-bezier(.2,.8,.2,1) forwards}
+/* overflow:hidden above keeps the finished sweep (translateX 100%) out of the page's scroll width; clip-path alone does not. */
+#step-banner:before{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.22) 50%,transparent 70%);transform:translateX(-100%);animation:banner-sweep 1.1s .25s ease-out forwards}
+.banner-kicker{font-size:11px;font-weight:800;letter-spacing:.24em;color:var(--amber-hi)}
+#step-banner-title{font-size:22px;letter-spacing:.02em}
+#step-banner-next{font-size:12px;color:var(--muted)}
+@keyframes banner{0%{opacity:0;transform:translate(-50%,-50%) scale(.86);filter:blur(4px)}9%{opacity:1;transform:translate(-50%,-50%) scale(1.03);filter:none}14%{transform:translate(-50%,-50%) scale(1)}84%{opacity:1;transform:translate(-50%,-50%)}100%{opacity:0;transform:translate(-50%,-62%)}}
+@keyframes banner-sweep{to{transform:translateX(100%)}}
+@media(max-height:420px){#step-banner{top:30%;padding:10px 34px 12px}#step-banner-title{font-size:18px}}
+@media(prefers-reduced-motion:reduce){#step-banner,#step-banner:before,#objective.advance,.journal-step.current .journal-step-mark,#journal-detail{animation:none!important}}

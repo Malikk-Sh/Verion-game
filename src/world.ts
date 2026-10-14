@@ -1,4 +1,5 @@
 /** Hand-authored Verdana layout (B1 positions, B3 terrain detail). Metres; north is +z. No production-world generator. */
+import { NODES, GRASS_PATCHES } from './game/resources';
 import { fbm, noise2, ridged } from './noise';
 /** Walkable world bounds. B4: 560 × 560 m (3.5× B3 per side); the B1–B3 arrival valley keeps its 0…160 coordinates. */
 export const MIN = -200;
@@ -12,19 +13,19 @@ export const FIXED_DT = 1 / 20;
 export type Point = { x: number; z: number };
 export type Landmark = Point & { id: string; name: string; short: string; kind: string; radius: number; description: string };
 export const LANDMARKS: Landmark[] = [
- {id:'capsule', name:'Посадочная капсула',short:'КАПСУЛА',kind:'Убежище',x:40,z:40,radius:7,description:'Убежище и точка сохранения. Слева от выхода — каменная осыпь (48 блоков камня). Кислород и герметичность появятся на этапе выживания.'},
+ {id:'capsule', name:'Посадочная капсула',short:'КАПСУЛА',kind:'Убежище',x:40,z:40,radius:7,description:'Убежище и точка сохранения. Слева от выхода — каменная осыпь (48 блоков камня), к юго-западу — ещё 60 в россыпи. В капсуле дышится и заправляются баллоны, пока в ней есть кислород.'},
  {id:'base',name:'Площадка будущей базы',short:'БАЗА',kind:'16 × 16 м',x:58,z:44,radius:11,description:'Ровный участок 16 × 16 метров. Угловые метки показывают место для строительства; база здесь ещё не построена.'},
- {id:'grass',name:'Местная трава',short:'ТРАВА',kind:'Растительность',x:44,z:57,radius:5,description:'Первый заметный ресурс. Пучки служат проверкой силуэта и масштаба. Сбор пищи в этом макете ещё не подключён.'},
- {id:'iron',name:'Железный выход',short:'ЖЕЛЕЗО',kind:'Поверхностная руда',x:67,z:65,radius:6,description:'Бурая порода с тёмными металлическими прожилками и ржавыми потёками. Два выхода: 32 и 16 блоков железной руды. Добыча мультитулом — 4 с на блок; запас не восстанавливается.'},
- {id:'copper',name:'Медный выход',short:'МЕДЬ',kind:'Поверхностная руда',x:83,z:55,radius:6,description:'Тёмно-зелёная порода с медными жилами и зелёной патиной. Два выхода: 22 и 10 блоков медной руды, 4 с на блок. Запас конечен.'},
- {id:'ice',name:'Ледяное углубление',short:'ЛЁД',kind:'Будущий источник воды',x:30,z:80,radius:8,description:'Вмёрзшие плиты и осколки в низине. На краю — отдельная глыба чистого льда: 24 куска, 1,5 с на кусок. Электролиз появится на этапе выживания.'},
+ {id:'grass',name:'Местная трава',short:'ТРАВА',kind:'Растительность',x:44,z:57,radius:5,description:'Собирается рукой. В кармане разбирается на волокно для топлива и пищевую массу. Собранные растения отрастают в активное время; ещё пять участков разбросаны по долине.'},
+ {id:'iron',name:'Железный выход',short:'ЖЕЛЕЗО',kind:'Поверхностная руда',x:67,z:65,radius:6,description:'Бурая порода с тёмными металлическими прожилками и ржавыми потёками. Два выхода: 32 и 16 блоков железной руды. Добыча мультитулом — 4 с на блок; запас не восстанавливается. Ещё 32 блока — в жиле у входа в пещеру.'},
+ {id:'copper',name:'Медный выход',short:'МЕДЬ',kind:'Поверхностная руда',x:83,z:55,radius:6,description:'Тёмно-зелёная порода с медными жилами и зелёной патиной. Два выхода: 22 и 10 блоков медной руды, 4 с на блок. Запас конечен; ещё 24 блока — в жиле у раздвоенной скалы.'},
+ {id:'ice',name:'Ледяное углубление',short:'ЛЁД',kind:'Источник воды',x:30,z:80,radius:8,description:'Вмёрзшие плиты и осколки в низине. Глыба чистого льда (24 куска) и две ледяные плиты по 40. Мультитулом быстрее, руками тоже можно. В печи лёд с волокном даёт воду для генератора кислорода.'},
  {id:'spire',name:'Раздвоенная скала',short:'ОРИЕНТИР',kind:'Дальний ориентир',x:102,z:104,radius:15,description:'Узнаваемый силуэт для возвращения и исследования. Камни имеют упрощённые столкновения; на вершину идти не требуется.'},
  {id:'cave',name:'Вход в пещеру',short:'ПЕЩЕРА',kind:'Пробный проход',x:115,z:72,radius:9,description:'Внутрь можно войти. Короткий закрытый проход проверяет высоту и ширину; шахта, раскопки и враги появятся позже.'},
  {id:'basin',name:'Будущий водоём',short:'НИЗИНА',kind:'Сухая низина',x:100,z:132,radius:14,description:'Зарезервированная сухая область 24 × 20 метров. В макете воды нет; место не пересекается с пещерой или базой.'},
 
- {id:'canyon',name:'Сухое русло',short:'РУСЛО',kind:'Каньон',x:110,z:-104,radius:16,description:'Длинный врез с отвесным южным берегом и пологим северным. Около 165 м от капсулы: пешком долго, для ровера — первый дальний маршрут. Ресурсов и событий здесь пока нет.'},
- {id:'mesa',name:'Столовая гора',short:'ПЛАТО',kind:'Дальний ориентир',x:-105,z:165,radius:18,description:'Плоская вершина над долиной, подъём по пологому восточному склону. Около 190 м от капсулы. Отсюда виден весь запад участка. Ресурсов и событий здесь пока нет.'},
- {id:'crater',name:'Старый кратер',short:'КРАТЕР',kind:'Дальний ориентир',x:265,z:255,radius:24,description:'Размытый ударный кратер около 85 м в поперечнике. Самая дальняя точка участка — около 310 м от капсулы. Ресурсов и событий здесь пока нет.'},
+ {id:'canyon',name:'Сухое русло',short:'РУСЛО',kind:'Каньон',x:110,z:-104,radius:16,description:'Длинный врез с отвесным южным берегом и пологим северным. Около 165 м от капсулы: пешком долго, для ровера — первый дальний маршрут. На дне — песчаное русло (120 песка) и богатая железная жила (64 блока).'},
+ {id:'mesa',name:'Столовая гора',short:'ПЛАТО',kind:'Дальний ориентир',x:-105,z:165,radius:18,description:'Плоская вершина над долиной, подъём по пологому восточному склону. Около 190 м от капсулы. Отсюда виден весь запад участка. У подножия — медная жила на 56 блоков.'},
+ {id:'crater',name:'Старый кратер',short:'КРАТЕР',kind:'Дальний ориентир',x:265,z:255,radius:24,description:'Размытый ударный кратер около 85 м в поперечнике. Самая дальняя точка участка — около 310 м от капсулы. На дне — большой ледник: 160 кусков льда.'},
 ];
 /** Landmarks outside the B3 valley; they motivate a future rover. */
 export const FAR_IDS = ['canyon','mesa','crater'];
@@ -162,9 +163,10 @@ export function makeColliders(){
  for(const [i,r] of ROCKS.entries())boxes.push(box('rock-'+i,r.x,heightAt(r.x,r.z)+r.sy*.51,r.z,r.s*1.4,r.sy*1.02,r.s*1.4));
  boxes.push(box('iron-outcrop',67,heightAt(67,65)+.7,65,3.6,1.7,3));
  boxes.push(box('copper-outcrop',83,heightAt(83,55)+.7,55,3.6,1.7,3));
- // S1 deposits; a collider is removed once every node of its outcrop is mined out.
+ // Mineable deposits: each main body loses its own collider when depleted.
  boxes.push(box('stone-outcrop',30,heightAt(30,52)+.45,52,2.2,.9,2.2));
  boxes.push(box('ice-outcrop',33,heightAt(33,76.5)+.5,76.5,1.8,1,1.8));
+ for(const n of NODES)if(n.box){const [w,h,d]=n.box;boxes.push(box('node-'+n.id,n.x,heightAt(n.x,n.z)+h/2-.1,n.z,w,h,d));}
  // Footprint of the rotated formation (geometry spans ±w × ±d): axis-aligned bounds of its elliptical base.
  for(const [i,f] of FORMATIONS.entries()){const c=Math.cos(f.rotation),s=Math.sin(f.rotation),hx=Math.hypot(f.w*c,f.d*s),hz=Math.hypot(f.w*s,f.d*c);boxes.push(box('formation-'+i,f.x,f.base+f.h/2,f.z,hx*1.9,f.h,hz*1.9));}
  boxes.push(box('spire-a',100,heightAt(100,103)+8,103,5,16,6));
@@ -174,11 +176,7 @@ export function makeColliders(){
 makeColliders();
 
 /** B1 produced 1,218 accepted tufts; B2 uses 244 (one fifth), 84% in patches. */
-export const GRASS_PATCHES = [
- {x:44,z:57,rx:4.5,rz:3.4}, {x:16,z:66,rx:4.5,rz:2.6},
- {x:70,z:90,rx:6,rz:3.8}, {x:99,z:128,rx:5,rz:3},
- {x:136,z:104,rx:4,rz:5}, {x:59,z:114,rx:4.3,rz:3.5},
-];
+export { GRASS_PATCHES };
 export const GRASS: {x:number;z:number;s:number;rotation:number;patch:number}[]=[];
 const grassRandom=random(4242);
 for(let i=0;i<244;i++){

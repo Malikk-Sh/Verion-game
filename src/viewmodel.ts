@@ -21,7 +21,8 @@ function stoneMultitool(): THREE.Object3D {
  const strap = new THREE.Mesh(new THREE.BoxGeometry(.03, .1, .095), orange); strap.position.set(0, .25, 0); g.add(strap);
  return g;
 }
-export const HAND_MODELS: Record<string, Builder> = { tool_stone: stoneMultitool };
+function wrench():THREE.Group{const g=new THREE.Group(),metal=new THREE.MeshStandardMaterial({color:0xaac0c7,metalness:.7,roughness:.35});const part=(x:number,y:number,w:number,h:number)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,.035),metal);m.position.set(x,y,0);g.add(m);};part(0,0,.065,.48);part(-.055,.26,.045,.14);part(.055,.26,.045,.14);part(0,.20,.14,.055);g.rotation.z=-.15;return g;}
+export const HAND_MODELS: Record<string, Builder> = { tool_stone: stoneMultitool, wrench };
 
 export function createViewModel() {
  const scene = new THREE.Scene();
@@ -50,5 +51,9 @@ export function createViewModel() {
   sun.color.copy(light.sun.color); sun.intensity = light.sun.intensity * .75;
   sun.position.copy(camera.position).add(light.sun.position).sub(light.sun.target.position); sun.target.position.copy(camera.position);
  }
- return { scene, setItem, update, get visible() { return current !== null; } };
+ async function prewarm(renderer:THREE.WebGLRenderer,camera:THREE.Camera,light:{sun:THREE.DirectionalLight;hemi:THREE.HemisphereLight}){
+  const previous=current;for(const id of Object.keys(HAND_MODELS))if(!built.has(id))built.set(id,HAND_MODELS[id]());
+  holder.clear();for(const model of built.values())holder.add(model);update(1,camera,light,false,0,0);await renderer.compileAsync(scene,camera);renderer.render(scene,camera);holder.clear();current=null;setItem(previous);
+ }
+ return { scene, setItem, update, prewarm, get visible() { return current !== null; } };
 }

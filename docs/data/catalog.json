@@ -1,4 +1,18 @@
 {
+  "upgrades": {
+    "workbench": {
+      "fromLevel": 1,
+      "toLevel": 2,
+      "tool": "wrench",
+      "inputs": {
+        "iron": 6,
+        "wire": 4,
+        "circuit": 1
+      },
+      "EU_per_second": 4,
+      "queueCapacity": 5
+    }
+  },
   "version": "1.1.0",
   "status": "baseline_design_not_playtested",
   "units": {
@@ -80,7 +94,7 @@
       }
     },
     "grass": {
-      "name": "Съедобная трава",
+      "name": "Местная трава",
       "kind": "item",
       "stack": 64,
       "source": {
@@ -619,7 +633,7 @@
     "water": {
       "name": "Вода",
       "kind": "fluid",
-      "stack": 0
+      "stack": 64
     },
     "oxygen": {
       "name": "Кислород",
@@ -1107,6 +1121,11 @@
       "kind": "equipment",
       "stack": 1
     },
+    "wrench": {
+      "name": "Гаечный ключ",
+      "kind": "equipment",
+      "stack": 1
+    },
     "tool_stone": {
       "name": "Каменный мультитул",
       "kind": "equipment",
@@ -1275,7 +1294,7 @@
       "station": "kiln",
       "inputs": {
         "iron_raw": 1,
-        "fiber": 2
+        "fiber": 1
       },
       "outputs": {
         "iron": 1
@@ -1284,7 +1303,7 @@
       "EU_per_second": 0,
       "tech": "start",
       "scope": "core",
-      "note": "Печь сжигает волокна; снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
+      "note": "Печь сжигает волокно (S3: 1 на плавку); снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
     },
     {
       "id": "arc_iron_raw",
@@ -1306,7 +1325,7 @@
       "station": "kiln",
       "inputs": {
         "iron_dust": 1,
-        "fiber": 2
+        "fiber": 1
       },
       "outputs": {
         "iron": 1
@@ -1315,7 +1334,7 @@
       "EU_per_second": 0,
       "tech": "start",
       "scope": "core",
-      "note": "Печь сжигает волокна; снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
+      "note": "Печь сжигает волокно (S3: 1 на плавку); снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
     },
     {
       "id": "arc_iron_dust",
@@ -1352,7 +1371,7 @@
       "station": "kiln",
       "inputs": {
         "copper_raw": 1,
-        "fiber": 2
+        "fiber": 1
       },
       "outputs": {
         "copper": 1
@@ -1361,7 +1380,7 @@
       "EU_per_second": 0,
       "tech": "start",
       "scope": "core",
-      "note": "Печь сжигает волокна; снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
+      "note": "Печь сжигает волокно (S3: 1 на плавку); снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
     },
     {
       "id": "arc_copper_raw",
@@ -1383,7 +1402,7 @@
       "station": "kiln",
       "inputs": {
         "copper_dust": 1,
-        "fiber": 2
+        "fiber": 1
       },
       "outputs": {
         "copper": 1
@@ -1392,7 +1411,7 @@
       "EU_per_second": 0,
       "tech": "start",
       "scope": "core",
-      "note": "Печь сжигает волокна; снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
+      "note": "Печь сжигает волокно (S3: 1 на плавку); снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
     },
     {
       "id": "arc_copper_dust",
@@ -1429,7 +1448,7 @@
       "station": "kiln",
       "inputs": {
         "gold_raw": 1,
-        "fiber": 2
+        "fiber": 1
       },
       "outputs": {
         "gold": 1
@@ -1438,7 +1457,7 @@
       "EU_per_second": 0,
       "tech": "start",
       "scope": "core",
-      "note": "Печь сжигает волокна; снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
+      "note": "Печь сжигает волокно (S3: 1 на плавку); снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
     },
     {
       "id": "arc_gold_raw",
@@ -1460,7 +1479,7 @@
       "station": "kiln",
       "inputs": {
         "gold_dust": 1,
-        "fiber": 2
+        "fiber": 1
       },
       "outputs": {
         "gold": 1
@@ -1469,7 +1488,7 @@
       "EU_per_second": 0,
       "tech": "start",
       "scope": "core",
-      "note": "Печь сжигает волокна; снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
+      "note": "Печь сжигает волокно (S3: 1 на плавку); снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
     },
     {
       "id": "arc_gold_dust",
@@ -1506,7 +1525,7 @@
       "station": "kiln",
       "inputs": {
         "velite_raw": 1,
-        "fiber": 2
+        "fiber": 1
       },
       "outputs": {
         "velite": 1
@@ -1515,7 +1534,7 @@
       "EU_per_second": 0,
       "tech": "start",
       "scope": "core",
-      "note": "Печь сжигает волокна; снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
+      "note": "Печь сжигает волокно (S3: 1 на плавку); снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
     },
     {
       "id": "arc_velite_raw",
@@ -1537,7 +1556,7 @@
       "station": "kiln",
       "inputs": {
         "velite_dust": 1,
-        "fiber": 2
+        "fiber": 1
       },
       "outputs": {
         "velite": 1
@@ -1546,7 +1565,7 @@
       "EU_per_second": 0,
       "tech": "start",
       "scope": "core",
-      "note": "Печь сжигает волокна; снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
+      "note": "Печь сжигает волокно (S3: 1 на плавку); снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
     },
     {
       "id": "arc_velite_dust",
@@ -1583,7 +1602,7 @@
       "station": "kiln",
       "inputs": {
         "astrite_raw": 1,
-        "fiber": 2
+        "fiber": 1
       },
       "outputs": {
         "astrite": 1
@@ -1592,7 +1611,7 @@
       "EU_per_second": 0,
       "tech": "start",
       "scope": "expansion2",
-      "note": "Печь сжигает волокна; снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
+      "note": "Печь сжигает волокно (S3: 1 на плавку); снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
     },
     {
       "id": "arc_astrite_raw",
@@ -1614,7 +1633,7 @@
       "station": "kiln",
       "inputs": {
         "astrite_dust": 1,
-        "fiber": 2
+        "fiber": 1
       },
       "outputs": {
         "astrite": 1
@@ -1623,7 +1642,7 @@
       "EU_per_second": 0,
       "tech": "start",
       "scope": "expansion2",
-      "note": "Печь сжигает волокна; снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
+      "note": "Печь сжигает волокно (S3: 1 на плавку); снаружи в вакууме требует 2 GU O₂/с или пригодное помещение."
     },
     {
       "id": "arc_astrite_dust",
@@ -1645,7 +1664,7 @@
       "station": "kiln",
       "inputs": {
         "sand": 2,
-        "fiber": 2
+        "fiber": 1
       },
       "outputs": {
         "glass": 1
@@ -1686,6 +1705,22 @@
       "tech": "power",
       "scope": "core",
       "note": ""
+    },
+    {
+      "id": "craft_wrench",
+      "station": "workbench",
+      "inputs": {
+        "iron": 4,
+        "copper": 1
+      },
+      "outputs": {
+        "wrench": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": "Многоразовый инструмент улучшения построек; не расходуется при улучшении."
     },
     {
       "id": "craft_wire",
@@ -3958,18 +3993,19 @@
     },
     {
       "id": "melt_in_generator",
-      "station": "electrolyzer",
+      "station": "kiln",
       "inputs": {
-        "ice": 1
+        "ice": 1,
+        "fiber": 1
       },
       "outputs": {
         "water": 1
       },
       "seconds": 2,
-      "EU_per_second": 6,
-      "tech": "power",
+      "EU_per_second": 0,
+      "tech": "start",
       "scope": "core",
-      "note": ""
+      "note": "1 переносимая единица воды = 1 WU; слот сырья и слот топлива."
     },
     {
       "id": "melt_bulk",

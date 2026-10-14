@@ -3,8 +3,8 @@ import * as THREE from 'three';
 import {createWorld} from '../src/scene';
 import type {Quality} from '../src/scene';
 import {heightAt} from '../src/world';
-const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(1);renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1;renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;document.body.append(renderer.domElement);
-const scene=new THREE.Scene(),world=createWorld(scene),camera=new THREE.PerspectiveCamera(58,innerWidth/innerHeight,.07,1400);
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(1);renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1;renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFShadowMap;document.body.append(renderer.domElement);
+const scene=new THREE.Scene(),world=createWorld(scene),camera=new THREE.PerspectiveCamera(58,innerWidth/innerHeight,.15,1400);
 const views:Record<string,{eye:number[];target:number[];label:string;rel?:boolean}>={
  capsule:{eye:[48,3.2,51],target:[40,2.3,40],label:'КАПСУЛА / B4'},
  interior:{eye:[40,2.1,42.3],target:[39.8,1.6,37.2],label:'ИНТЕРЬЕР / B4'},
@@ -32,9 +32,9 @@ function showView(name:string,night=false){
  if(view.rel){eye.y+=heightAt(eye.x,eye.z);target.y+=heightAt(target.x,target.z);}
  camera.position.copy(eye);camera.lookAt(target);
  // Camera changes do not change the sun: retain baked lighting and the environment map.
- if(shownNight!==night){world.setTime(night?900:240,true);shownNight=night;}
+ if(shownNight!==night){world.setTime(night?900:240,true);shownNight=night;world.prepare(renderer);}
  document.getElementById('label')!.textContent=view.label;
- world.terrain.update(camera.position,99);world.update(.016,camera,renderer);world.update(.016,camera,renderer);renderer.render(scene,camera);
+ for(let i=0;i<100;i++)world.terrain.update(camera.position,100);for(let i=0;i<110;i++)world.update(.016,camera,renderer);renderer.render(scene,camera);
  document.body.dataset.ready='true';
  return{name,night,quality,drawCalls:renderer.info.render.calls};
 }

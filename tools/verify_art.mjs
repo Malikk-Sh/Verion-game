@@ -84,7 +84,7 @@ try {
   await click('#close-suit');
  }
  check('HUD, inventory and suit raster layers fit at ' + viewports.map(([w,h]) => `${w}×${h}`).join(', '));
- await page.setViewportSize({ width: 844, height: 390 }); await click('#suit-button');
+ await page.setViewportSize({ width: 844, height: 390 }); await click('#inventory-button');await click('#open-suit');
  await click('#part-grid [data-part="boots"]');
  assert.equal(await page.locator('.fig-boots.sel').count(), 1); assert.equal(await page.locator('.fig-helmet.sel').count(), 0);
  for (const part of ['helmet', 'legs', 'boots']) {

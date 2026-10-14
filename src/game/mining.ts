@@ -1,4 +1,4 @@
-import { ITEMS, MATERIALS, TOOLS } from './defs';
+import { HAND_MINING, ITEMS, MATERIALS, TOOLS } from './defs';
 import { addItems, firstEmpty, stateful } from './inventory';
 import { NODE_BY_ID } from './resources';
 import type { GameState, ItemStack } from './state';
@@ -21,6 +21,13 @@ export function toolSlot(state: GameState): number {
  return s && TOOLS[s.itemId] && (s.durability ?? 0) > 0 ? i : -1;
 }
 export const ticksFor = (material: keyof typeof MATERIALS, timeMul: number) => Math.round(MATERIALS[material].seconds * timeMul * 1000 / TICK_MS);
+/** Seconds per block for the current selection: tool speed, or the slower bare-hand rate; null if impossible. */
+export function mineSeconds(state: GameState, material: keyof typeof MATERIALS): number | null {
+ const ti = toolSlot(state);
+ if (material !== 'grass' && ti >= 0) return ticksFor(material, TOOLS[state.player.inventory[ti]!.itemId].timeMul) * TICK_MS / 1000;
+ const hand = HAND_MINING[material];
+ return hand === undefined ? null : ticksFor(material, hand) * TICK_MS / 1000;
+}
 /** One 50 ms tick of mining. Mutates `state` and `mining`. */
 export function mineTick(state: GameState, mining: Mining, aimNodeId: string | null, holding: boolean): MineEvent {
  if (!holding || !aimNodeId) { mining.nodeId = null; mining.ticks = 0; return { kind: 'idle' }; }
@@ -28,9 +35,9 @@ export function mineTick(state: GameState, mining: Mining, aimNodeId: string | n
  const node = NODE_BY_ID.get(aimNodeId);
  if (!node) { mining.nodeId = null; mining.ticks = 0; return { kind: 'idle' }; }
  if ((state.world.nodes[node.id] ?? 0) <= 0) { mining.ticks = 0; return { kind: 'blocked', nodeId: node.id, reason: 'Запас исчерпан' }; }
- const inv = state.player.inventory, ti = toolSlot(state);
- if (ti < 0) { mining.ticks = 0; const sel = inv[state.player.hotbar]; return { kind: 'blocked', nodeId: node.id, reason: sel && TOOLS[sel.itemId] ? 'Инструмент сломан' : inv.some(s => s && TOOLS[s.itemId]) ? 'Выберите мультитул в быстром доступе' : 'Нужен инструмент' }; }
- const tool = inv[ti]!, def = TOOLS[tool.itemId];
+ const inv = state.player.inventory, ti = toolSlot(state), hand = HAND_MINING[node.material];
+ if (ti < 0 && hand === undefined) { mining.ticks = 0; const sel = inv[state.player.hotbar]; return { kind: 'blocked', nodeId: node.id, reason: sel && TOOLS[sel.itemId] ? 'Инструмент сломан' : inv.some(s => s && TOOLS[s.itemId]) ? 'Выберите мультитул в быстром доступе' : 'Нужен инструмент' }; }
+ const tool = ti >= 0 && node.material !== 'grass' ? inv[ti]! : null, def = tool ? TOOLS[tool.itemId] : { tier: 0, timeMul: hand ?? 1 };
  if (def.tier < MATERIALS[node.material].tier) { mining.ticks = 0; return { kind: 'blocked', nodeId: node.id, reason: 'Нужен инструмент выше уровнем' }; }
  const need = ticksFor(node.material, def.timeMul);
  mining.ticks++;
@@ -38,10 +45,10 @@ export function mineTick(state: GameState, mining: Mining, aimNodeId: string | n
  // Complete: one logical transaction.
  mining.ticks = 0;
  state.world.nodes[node.id]--;
- tool.durability = (tool.durability ?? 0) - 1;
+ if (tool) tool.durability = (tool.durability ?? 0) - 1;
  const ground = addItems(inv, node.itemId, 1);
  if (ground) dropItems(state, state.player.x, state.player.z, [{ itemId: node.itemId, count: ground }]);
- return { kind: 'block', nodeId: node.id, itemId: node.itemId, toInventory: 1 - ground, toGround: ground, left: state.world.nodes[node.id], toolBroke: tool.durability === 0 };
+ return { kind: 'block', nodeId: node.id, itemId: node.itemId, toInventory: 1 - ground, toGround: ground, left: state.world.nodes[node.id], toolBroke: tool?.durability === 0 };
 }
 /** Adds items to the nearest pile within 2 m (≤64 entries) or creates a new one. Stateful items keep their state and never merge. */
 export function dropItems(state: GameState, x: number, z: number, items: ItemStack[]) {

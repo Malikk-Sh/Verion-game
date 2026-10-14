@@ -1,0 +1,1014 @@
+{
+  "environment": "Chromium SwiftShader, 844x390, real RAF, single runs; not physical-device FPS. First-use driver warmup remains separately visible.",
+  "baselineHead": "74c51f2078c92d364b374ae8585bddc945410976",
+  "baseline": [
+    {
+      "name": "cold",
+      "elapsedMs": 6236,
+      "frames": 45,
+      "p95": 683.3000000000002,
+      "max": 2266.6,
+      "tasks": [
+        {
+          "at": 297.70000000018626,
+          "ms": 1191
+        },
+        {
+          "at": 1488.7000000001863,
+          "ms": 1089
+        }
+      ]
+    },
+    {
+      "name": "idle",
+      "elapsedMs": 6540,
+      "frames": 13,
+      "p95": 1566.6000000000004,
+      "max": 1566.6000000000004,
+      "tasks": [
+        {
+          "at": 9215.700000000186,
+          "ms": 1577
+        }
+      ]
+    },
+    {
+      "name": "craft",
+      "elapsedMs": 32972,
+      "frames": 60,
+      "p95": 1050.0999999999985,
+      "max": 1566.5999999999985,
+      "tasks": [
+        {
+          "at": 31088.200000000186,
+          "ms": 145
+        },
+        {
+          "at": 31716,
+          "ms": 53
+        },
+        {
+          "at": 36268.90000000014,
+          "ms": 53
+        },
+        {
+          "at": 37423.5,
+          "ms": 52
+        },
+        {
+          "at": 45622.700000000186,
+          "ms": 1554
+        },
+        {
+          "at": 48139.60000000009,
+          "ms": 101
+        }
+      ]
+    },
+    {
+      "name": "grass",
+      "elapsedMs": 14112,
+      "frames": 27,
+      "p95": 933.4000000000015,
+      "max": 1583.300000000003,
+      "tasks": [
+        {
+          "at": 63628.700000000186,
+          "ms": 93
+        },
+        {
+          "at": 65629,
+          "ms": 66
+        }
+      ]
+    },
+    {
+      "name": "walk",
+      "elapsedMs": 4053,
+      "frames": 11,
+      "p95": 833.3999999999942,
+      "max": 833.3999999999942,
+      "tasks": []
+    }
+  ],
+  "after": [
+    {
+      "name": "cold",
+      "elapsedMs": 6482,
+      "frames": 67,
+      "p95": 383.4000000000001,
+      "max": 1183.2,
+      "tasks": [
+        {
+          "at": 301.20000000018626,
+          "ms": 1194
+        },
+        {
+          "at": 2418.5,
+          "ms": 446
+        }
+      ]
+    },
+    {
+      "name": "idle",
+      "elapsedMs": 6530,
+      "frames": 34,
+      "p95": 666.7000000000007,
+      "max": 883.1999999999989,
+      "tasks": [
+        {
+          "at": 7635.200000000186,
+          "ms": 604
+        }
+      ]
+    },
+    {
+      "name": "craft",
+      "elapsedMs": 23361,
+      "frames": 72,
+      "p95": 683.2999999999993,
+      "max": 1000,
+      "tasks": []
+    },
+    {
+      "name": "grass",
+      "elapsedMs": 10484,
+      "frames": 32,
+      "p95": 583.2999999999956,
+      "max": 666.6000000000058,
+      "tasks": []
+    },
+    {
+      "name": "walk",
+      "elapsedMs": 4027,
+      "frames": 14,
+      "p95": 366.70000000000437,
+      "max": 366.70000000000437,
+      "tasks": []
+    }
+  ],
+  "finalScenarioStages": {
+    "simulation": {
+      "count": 530,
+      "averageMs": 0.15,
+      "maxMs": 7.6
+    },
+    "production-ui": {
+      "count": 530,
+      "averageMs": 0.02,
+      "maxMs": 0.3
+    },
+    "camera": {
+      "count": 530,
+      "averageMs": 0.05,
+      "maxMs": 0.9
+    },
+    "render-submit": {
+      "count": 530,
+      "averageMs": 52.26,
+      "maxMs": 8943.5
+    },
+    "hud": {
+      "count": 530,
+      "averageMs": 0.49,
+      "maxMs": 9.1
+    },
+    "world:shade": {
+      "count": 255,
+      "averageMs": 0.4,
+      "maxMs": 4
+    },
+    "world:environment": {
+      "count": 255,
+      "averageMs": 0.01,
+      "maxMs": 0.2
+    },
+    "world:terrain": {
+      "count": 255,
+      "averageMs": 1.12,
+      "maxMs": 9
+    },
+    "world:animation": {
+      "count": 255,
+      "averageMs": 0.05,
+      "maxMs": 0.4
+    },
+    "world": {
+      "count": 255,
+      "averageMs": 1.6,
+      "maxMs": 10.2
+    },
+    "production:draw": {
+      "count": 5,
+      "averageMs": 1.94,
+      "maxMs": 3
+    },
+    "save:snapshot": {
+      "count": 8,
+      "averageMs": 0.65,
+      "maxMs": 4.2
+    },
+    "save:encode": {
+      "count": 8,
+      "averageMs": 0.26,
+      "maxMs": 0.3
+    },
+    "save:commit-wall": {
+      "count": 8,
+      "averageMs": 50.54,
+      "maxMs": 66.9
+    }
+  },
+  "lowGeometryAtOre": [
+    {
+      "name": "local-grass",
+      "material": "MeshStandardMaterial",
+      "instances": 244,
+      "triangles": 31232
+    },
+    {
+      "name": "outer-mountains",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 28560
+    },
+    {
+      "name": "rock:2,1",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 4728
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 3840
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 3840
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 3840
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 3840
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 3840
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 3840
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 3840
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 3840
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 3840
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 3840
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 3840
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 3840
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 3840
+    },
+    {
+      "name": "ice:0,2",
+      "material": "ice",
+      "instances": 1,
+      "triangles": 3740
+    },
+    {
+      "name": "rock:2,2",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 3060
+    },
+    {
+      "name": "rock:3,2",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 2520
+    },
+    {
+      "name": "rock:1,2",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 2520
+    },
+    {
+      "name": "ShaderMaterial",
+      "material": "ShaderMaterial",
+      "instances": 1,
+      "triangles": 2208
+    },
+    {
+      "name": "rock:0,3",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 1980
+    },
+    {
+      "name": "rock:3,3",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 1980
+    },
+    {
+      "name": "rock:-1,3",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 1440
+    },
+    {
+      "name": "rock:1,1",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 1280
+    },
+    {
+      "name": "rock:1,3",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 1260
+    },
+    {
+      "name": "rock:6,7",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 1260
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 1120
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 1120
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 1120
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 1120
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 1120
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 1120
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 1120
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 1120
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 1120
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 1120
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 1120
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 1120
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 1120
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 1120
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 1120
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 1120
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 1120
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 1120
+    },
+    {
+      "name": "terrain",
+      "material": "terrain",
+      "instances": 1,
+      "triangles": 1120
+    },
+    {
+      "name": "rock:-3,6",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 1080
+    },
+    {
+      "name": "rock:4,6",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 1080
+    },
+    {
+      "name": "rock:6,4",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 1080
+    },
+    {
+      "name": "rock:0,2",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 900
+    },
+    {
+      "name": "rock:2,7",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 900
+    },
+    {
+      "name": "rock:-3,7",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 900
+    },
+    {
+      "name": "rock:0,6",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 900
+    },
+    {
+      "name": "rock:1,6",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 900
+    },
+    {
+      "name": "rock:-2,3",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 900
+    },
+    {
+      "name": "rock:3,4",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 900
+    },
+    {
+      "name": "rock:1,7",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 720
+    },
+    {
+      "name": "rock:-1,6",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 720
+    },
+    {
+      "name": "rock:7,6",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 720
+    },
+    {
+      "name": "rock:-4,5",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 720
+    },
+    {
+      "name": "rock:1,5",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 540
+    },
+    {
+      "name": "rock:4,7",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 540
+    },
+    {
+      "name": "rock:-2,5",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 540
+    },
+    {
+      "name": "rock:4,5",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 540
+    },
+    {
+      "name": "rock:-1,5",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 540
+    },
+    {
+      "name": "rock:5,6",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 540
+    },
+    {
+      "name": "rock:7,5",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 540
+    },
+    {
+      "name": "rock:5,5",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 540
+    },
+    {
+      "name": "rock:-2,4",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 540
+    },
+    {
+      "name": "rock:-4,6",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 540
+    },
+    {
+      "name": "rock:4,4",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 540
+    },
+    {
+      "name": "rock:2,5",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 540
+    },
+    {
+      "name": "rock:6,5",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 540
+    },
+    {
+      "name": "rock:3,6",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 540
+    },
+    {
+      "name": "rock:7,7",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 540
+    },
+    {
+      "name": "cliffRock:5,3",
+      "material": "cliffRock",
+      "instances": 1,
+      "triangles": 540
+    },
+    {
+      "name": "rock:2,3",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 360
+    },
+    {
+      "name": "rock:2,8",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 360
+    },
+    {
+      "name": "rock:-2,6",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 360
+    },
+    {
+      "name": "rock:7,8",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 360
+    },
+    {
+      "name": "rock:-1,7",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 360
+    },
+    {
+      "name": "rock:-2,7",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 360
+    },
+    {
+      "name": "rock:1,4",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 360
+    },
+    {
+      "name": "rock:-1,4",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 360
+    },
+    {
+      "name": "rock:3,5",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 360
+    },
+    {
+      "name": "rock:-3,5",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 360
+    },
+    {
+      "name": "rock:8,7",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 360
+    },
+    {
+      "name": "cliffRock:3,6",
+      "material": "cliffRock",
+      "instances": 1,
+      "triangles": 360
+    },
+    {
+      "name": "cliffRock:3,5",
+      "material": "cliffRock",
+      "instances": 1,
+      "triangles": 360
+    },
+    {
+      "name": "cliffRock:6,4",
+      "material": "cliffRock",
+      "instances": 1,
+      "triangles": 360
+    },
+    {
+      "name": "cliffRock:-1,4",
+      "material": "cliffRock",
+      "instances": 1,
+      "triangles": 360
+    },
+    {
+      "name": "cliffRock:3,7",
+      "material": "cliffRock",
+      "instances": 1,
+      "triangles": 360
+    },
+    {
+      "name": "cliffRock:4,5",
+      "material": "cliffRock",
+      "instances": 1,
+      "triangles": 360
+    },
+    {
+      "name": "cliffRock:4,6",
+      "material": "cliffRock",
+      "instances": 1,
+      "triangles": 360
+    },
+    {
+      "name": "cliffRock:-1,6",
+      "material": "cliffRock",
+      "instances": 1,
+      "triangles": 360
+    },
+    {
+      "name": "cliffRock:-2,6",
+      "material": "cliffRock",
+      "instances": 1,
+      "triangles": 360
+    },
+    {
+      "name": "cliffRock:-2,7",
+      "material": "cliffRock",
+      "instances": 1,
+      "triangles": 360
+    },
+    {
+      "name": "cliffRock:2,7",
+      "material": "cliffRock",
+      "instances": 1,
+      "triangles": 360
+    },
+    {
+      "name": "rock",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 320
+    },
+    {
+      "name": "rock",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 320
+    },
+    {
+      "name": "rock:5,7",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 180
+    },
+    {
+      "name": "rock:6,8",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 180
+    },
+    {
+      "name": "rock:3,7",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 180
+    },
+    {
+      "name": "rock:0,7",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 180
+    },
+    {
+      "name": "rock:2,6",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 180
+    },
+    {
+      "name": "rock:8,8",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 180
+    },
+    {
+      "name": "rock:4,8",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 180
+    },
+    {
+      "name": "rock:5,8",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 180
+    },
+    {
+      "name": "rock:3,8",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 180
+    },
+    {
+      "name": "rock:-2,8",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 180
+    },
+    {
+      "name": "rock:0,5",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 180
+    },
+    {
+      "name": "rock:-3,8",
+      "material": "rock",
+      "instances": 1,
+      "triangles": 180
+    },
+    {
+      "name": "cliffRock:-1,3",
+      "material": "cliffRock",
+      "instances": 1,
+      "triangles": 180
+    },
+    {
+      "name": "cliffRock:0,7",
+      "material": "cliffRock",
+      "instances": 1,
+      "triangles": 180
+    },
+    {
+      "name": "cliffRock:-3,6",
+      "material": "cliffRock",
+      "instances": 1,
+      "triangles": 180
+    },
+    {
+      "name": "cliffRock:6,7",
+      "material": "cliffRock",
+      "instances": 1,
+      "triangles": 180
+    },
+    {
+      "name": "cliffRock:-1,5",
+      "material": "cliffRock",
+      "instances": 1,
+      "triangles": 180
+    },
+    {
+      "name": "cliffRock:5,5",
+      "material": "cliffRock",
+      "instances": 1,
+      "triangles": 180
+    },
+    {
+      "name": "cliffRock:-3,7",
+      "material": "cliffRock",
+      "instances": 1,
+      "triangles": 180
+    },
+    {
+      "name": "cliffRock:2,6",
+      "material": "cliffRock",
+      "instances": 1,
+      "triangles": 180
+    },
+    {
+      "name": "cliffRock:5,4",
+      "material": "cliffRock",
+      "instances": 1,
+      "triangles": 180
+    },
+    {
+      "name": "cliffRock:7,7",
+      "material": "cliffRock",
+      "instances": 1,
+      "triangles": 180
+    },
+    {
+      "name": "cliffRock:0,6",
+      "material": "cliffRock",
+      "instances": 1,
+      "triangles": 180
+    },
+    {
+      "name": "cliffRock:1,5",
+      "material": "cliffRock",
+      "instances": 1,
+      "triangles": 180
+    },
+    {
+      "name": "cliffRock:-2,4",
+      "material": "cliffRock",
+      "instances": 1,
+      "triangles": 180
+    },
+    {
+      "name": "cliffRock:-4,7",
+      "material": "cliffRock",
+      "instances": 1,
+      "triangles": 180
+    },
+    {
+      "name": "cliffRock:0,4",
+      "material": "cliffRock",
+      "instances": 1,
+      "triangles": 180
+    },
+    {
+      "name": "iron:1,1",
+      "material": "iron",
+      "instances": 1,
+      "triangles": 125
+    },
+    {
+      "name": "iron",
+      "material": "iron",
+      "instances": 1,
+      "triangles": 50
+    },
+    {
+      "name": "iron",
+      "material": "iron",
+      "instances": 1,
+      "triangles": 34
+    }
+  ],
+  "checks": [
+    "Opt-in diagnostics is available through settings and starts without a save mutation",
+    "Live craft advances the same simulation, pays eight stone once and completes while diagnostics records",
+    "Turning the camera at the same paused ground position does not move the shadow projection",
+    "Grass and ground-contact ores render in all presets; paused 3D pixels stay identical between frames",
+    "Diagnostic controls fit 568x320 and retain 32px touch targets",
+    "Actual JSON download contains bounded frame, crafting, save, input and quality data without world inventory",
+    "Stop freezes the recording; Clear removes its data",
+    "No runtime or shader errors"
+  ]
+}

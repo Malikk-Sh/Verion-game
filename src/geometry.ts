@@ -7,7 +7,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
  * and an optional tint multiplies vertex colour (one rock material, many rock tones).
  */
 export class StaticBatch {
- private groups = new Map<THREE.Material, THREE.BufferGeometry[]>();
+ private groups = new Map<string, {material:THREE.Material;geometries:THREE.BufferGeometry[]}>();
+ constructor(private cellSize=0,private spatial:(material:THREE.Material)=>boolean=()=>true){}
  add(geometry: THREE.BufferGeometry, material: THREE.Material, x=0,y=0,z=0,sx=1,sy=1,sz=1,rx=0,ry=0,rz=0,tint?:THREE.ColorRepresentation) {
   const g=geometry.index?geometry.toNonIndexed():geometry.clone();
   for(const name of Object.keys(g.attributes))if(!['position','normal','uv','color'].includes(name))g.deleteAttribute(name);
@@ -17,13 +18,15 @@ export class StaticBatch {
   if(!g.attributes.color)g.setAttribute('color',new THREE.Float32BufferAttribute(new Float32Array(n*3).fill(1),3));
   if(tint!==undefined){const c=new THREE.Color(tint),col=g.attributes.color as THREE.BufferAttribute;for(let i=0;i<n;i++)col.setXYZ(i,col.getX(i)*c.r,col.getY(i)*c.g,col.getZ(i)*c.b);}
   const m=new THREE.Matrix4().compose(new THREE.Vector3(x,y,z),new THREE.Quaternion().setFromEuler(new THREE.Euler(rx,ry,rz)),new THREE.Vector3(sx,sy,sz));
-  g.applyMatrix4(m); const list=this.groups.get(material)??[];list.push(g);this.groups.set(material,list);
+  g.applyMatrix4(m);let key=material.uuid;
+  if(this.cellSize&&this.spatial(material)){if(!g.boundingBox)g.computeBoundingBox();const b=g.boundingBox!;key+=':'+Math.floor((b.min.x+b.max.x)/2/this.cellSize)+','+Math.floor((b.min.z+b.max.z)/2/this.cellSize);}
+  const group=this.groups.get(key)??{material,geometries:[]};group.geometries.push(g);this.groups.set(key,group);
  }
  finish(scene:THREE.Object3D,shadow:(m:THREE.Material)=>{cast:boolean;receive:boolean}=()=>({cast:true,receive:true})){
   const meshes:THREE.Mesh[]=[];
-  for(const [material,geometries] of this.groups){
+  for(const [key,{material,geometries}] of this.groups){
    const geometry=mergeGeometries(geometries);if(!geometry)throw new Error('Static geometry merge failed');
-   geometry.computeBoundingSphere();const mesh=new THREE.Mesh(geometry,material);const s=shadow(material);mesh.castShadow=s.cast;mesh.receiveShadow=s.receive;scene.add(mesh);meshes.push(mesh);geometries.forEach(g=>g.dispose());
+   geometry.computeBoundingSphere();const mesh=new THREE.Mesh(geometry,material);mesh.name=(material.name||material.type)+(key.includes(':')?':'+key.split(':')[1]:'');const s=shadow(material);mesh.castShadow=s.cast;mesh.receiveShadow=s.receive;scene.add(mesh);meshes.push(mesh);geometries.forEach(g=>g.dispose());
   }
   this.groups.clear();return meshes;
  }
