@@ -4,7 +4,7 @@ import { StaticBatch, surface, quad, beam, rod } from './geometry';
 import { chiseledRock, oreOutcrop } from './rocks';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { fbm, ridged, noise2 } from './noise';
-import { groundTextures, hullTextures, gratingTexture, consoleScreen, panelTexture } from './textures';
+import { groundTextures, hullTextures, gratingTexture, consoleScreen, panelTexture, macroNoiseTexture } from './textures';
 import { createSky, createMotes } from './sky';
 import { Wind } from './wind';
 import { reducedMotion } from './motion';
@@ -14,14 +14,19 @@ import { PATCH_NODES, SHARED_PATCH_SPLIT } from './game/resources';
 import { createLightPool, LIGHT_PRIORITY } from './lights';
 
 export type Quality = 'low'|'standard'|'high';
+// S4: sun shadows fade out over the outer 10% of the shadow frustum instead of ending at a hard line (no extra taps).
+THREE.ShaderChunk.shadowmap_pars_fragment=THREE.ShaderChunk.shadowmap_pars_fragment.replace('\t\treturn mix( 1.0, shadow, shadowIntensity );','\t\tfloat edgeFade=smoothstep(0.,.1,min(min(shadowCoord.x,1.-shadowCoord.x),min(shadowCoord.y,1.-shadowCoord.y)));\n\t\treturn mix( 1.0, shadow, shadowIntensity*edgeFade );');
 const lin=(r:number,g:number,b:number)=>new THREE.Color().setRGB(r,g,b,THREE.LinearSRGBColorSpace);
 const smooth=(a:number,b:number,t:number)=>{const u=Math.max(0,Math.min(1,(t-a)/(b-a)));return u*u*(3-2*u);};
-/** Beyond the walkable 560 m square: a rising ring of ridged, snow-capped mountains. */
+/** Beyond the walkable 560 m square: a rising ring of ridged, snow-capped mountains. S4: a second, finer ridge layer
+ * and eroded gullies give a sharper silhouette (purely visual: nothing out here is walkable, collided with or saved). */
 export function outerHeight(x:number,z:number){
  const cx=Math.max(MIN,Math.min(MAX,x)),cz=Math.max(MIN,Math.min(MAX,z)),d=Math.hypot(x-cx,z-cz);
  if(d<=0)return rawHeight(cx,cz)-3;
  const ramp=smooth(0,160,d),r=ridged(x*.0045+3,z*.0045-2,5,41);
- return rawHeight(cx,cz)-.8+d*.25+ramp*(r*r*190+fbm(x*.015,z*.015,3,5)*18)+smooth(0,50,d)*fbm(x*.04,z*.04,3,9)*8;
+ // The sharper layer comes and goes along the ring (a broad mask), so the skyline alternates jagged and rounded ranges.
+ const far=smooth(25,220,d)*(.35+.65*smooth(-.3,.35,fbm(x*.0032+9,z*.0032,2,88))),r2=ridged(x*.011-7+fbm(x*.006,z*.006,2,63)*1.5,z*.011+4,4,61),gully=Math.abs(noise2(x*.015+fbm(x*.008,z*.008,2,77)*2.2,z*.015,73));
+ return rawHeight(cx,cz)-.8+d*.25+ramp*(r*r*190+fbm(x*.015,z*.015,3,5)*18)+smooth(0,50,d)*fbm(x*.04,z*.04,3,9)*8+far*(r2*r2*r2*62-smooth(.2,0,gully)*12*(.4+r2));
 }
 /** Hull faces: octagon ring, perimeter-proportional U so decals never straddle a corner rib. */
 export const HULL_RING=[[-1.86,3],[1.86,3],[2.5,2.34],[2.5,-2.34],[1.86,-3],[-1.86,-3],[-2.5,-2.34],[-2.5,2.34]];
@@ -68,22 +73,38 @@ export function createWorld(scene:THREE.Scene,wind=new Wind()){
  const ground=groundTextures();ground.map.repeat.set(1,1);ground.normalMap.anisotropy=4;
  const terrainMat=new THREE.MeshStandardMaterial({vertexColors:true,map:ground.map,normalMap:ground.normalMap,normalScale:new THREE.Vector2(.45,.45),roughness:1,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1});
  terrainMat.name='terrain';
- const antiTile=(s:THREE.WebGLProgramParametersWithUniforms)=>{s.fragmentShader=s.fragmentShader.replace('#include <map_fragment>',`#ifdef USE_MAP
-  vec4 t1=texture2D(map,vMapUv);vec4 t2=texture2D(map,vMapUv*.23+vec2(.31,.17));diffuseColor.rgb*=mix(t1.rgb,t2.rgb,.45)*1.18;
- #endif`);};
+ // S4 look (point 9 without touching heights): the texture is projected from the side on steep faces (no stretching), thin
+ // strata follow world height there, a macro noise breaks the repeat at distance, and loose sand shows ripples across the wind.
+ const macro=macroNoiseTexture();
+ const antiTile=(s:THREE.WebGLProgramParametersWithUniforms)=>{s.uniforms.uMacro={value:macro};
+  s.vertexShader='attribute vec2 surface;varying vec3 vTerrW;varying vec3 vTerrN;varying vec2 vSurf;\n'+s.vertexShader.replace('#include <project_vertex>',`#include <project_vertex>
+  vTerrW=(modelMatrix*vec4(transformed,1.)).xyz;vTerrN=normalize(mat3(modelMatrix)*objectNormal);vSurf=surface;`);
+  s.fragmentShader='uniform sampler2D uMacro;varying vec3 vTerrW;varying vec3 vTerrN;varying vec2 vSurf;\n'+s.fragmentShader.replace('#include <map_fragment>',`float ripple=0.,ripplePh=0.;
+ #ifdef USE_MAP
+  vec3 tn=normalize(vTerrN);float steep=smoothstep(.3,.62,vSurf.y);
+  vec4 t1=texture2D(map,vMapUv),t2=texture2D(map,vMapUv*.23+vec2(.31,.17));vec3 side=texture2D(map,(abs(tn.x)>abs(tn.z)?vTerrW.zy:vTerrW.xy)*vec2(.38,.7)).rgb;
+  diffuseColor.rgb*=mix(mix(t1.rgb,t2.rgb,.45),side,steep)*1.18;
+  vec4 mc=texture2D(uMacro,vTerrW.xz*.023),mf=texture2D(uMacro,vTerrW.xz*.0061+vec2(.37,.11));
+  diffuseColor.rgb*=mix(.9,1.08,mc.r*.55+mf.r*.45);
+  diffuseColor.rgb*=1.+steep*(sin(vTerrW.y*5.2+mc.g*4.+mf.r*6.)*.08-.02);
+  ripplePh=(vTerrW.x+sin(vTerrW.z*.37)*.55+mc.g*1.8)*13.;
+  ripple=vSurf.x*(1.-smoothstep(9.,22.,length(vTerrW-cameraPosition)))*(1.-smoothstep(.7,1.8,fwidth(ripplePh)));
+  diffuseColor.rgb*=1.-.035*ripple*sin(ripplePh);
+ #endif`).replace('#include <normal_fragment_maps>',`#include <normal_fragment_maps>
+  if(ripple>.01)normal=normalize(normal-(viewMatrix*vec4(cos(ripplePh)*.3*ripple,0.,0.,0.)).xyz);`);};
  const P=[['#9b7a58','dust'],['#86694d','earth'],['#6e655c','gravel'],['#b1946f','path'],['#8a7d6c','silt'],['#e7ecee','snow'],['#4d4642','rock'],['#6a4a3a','redrock'],['#b9a583','sand']] as const;
  const C=Object.fromEntries(P.map(([h,k])=>[k,new THREE.Color(h)])) as Record<string,THREE.Color>;
  const paths=[[40,44,43,56],[43,56,62,63],[62,63,80,56],[40,44,56,45],[62,63,30,79],[80,56,110,72],[80,56,104,-40],[30,79,-40,140]];
  const tmpC=new THREE.Color();
- const groundColor=(x:number,z:number,h:number,slope:number,out:THREE.Color)=>{
-  out.copy(C.dust).lerp(C.earth,smooth(-.3,.4,fbm(x*.035,z*.035,3,2)));
-  out.lerp(C.gravel,smooth(.18,.5,fbm(x*.09+4,z*.09,3,6))*.8);
+ const groundColor=(x:number,z:number,h:number,slope:number,out:THREE.Color,cavity=0,surf?:Float32Array)=>{
+  const earth=smooth(-.3,.4,fbm(x*.035,z*.035,3,2));out.copy(C.dust).lerp(C.earth,earth);
+  const gravel=smooth(.18,.5,fbm(x*.09+4,z*.09,3,6))*.8;out.lerp(C.gravel,gravel);
   let p=Infinity;for(const q of paths)p=Math.min(p,segDist(x,z,q[0],q[1],q[2],q[3]));
-  out.lerp(C.path,smooth(2.4,.6,p+noise2(x*.5,z*.5,3)*.6)*.5);
+  const path=smooth(2.4,.6,p+noise2(x*.5,z*.5,3)*.6)*.5;out.lerp(C.path,path);
   const silt=smooth(16,10,Math.hypot((x-100)*.9,z-132));out.lerp(C.silt,silt);
   if(silt>0)out.lerp(tmpC.set('#cbbfa8'),smooth(.3,0,Math.abs(silt-.35))*.5);
   const cf=smooth(CRATER.r-14,CRATER.r-26,Math.hypot(x-CRATER.x,z-CRATER.z));out.lerp(tmpC.set('#b39c7b'),cf*.7);
-  const cn=Math.abs(canyonDist(x,z));out.lerp(C.sand,smooth(7,3,cn)*.75);
+  const cn=Math.abs(canyonDist(x,z)),bed=smooth(7,3,cn)*.75;out.lerp(C.sand,bed);
   out.multiplyScalar(1-smooth(8,3,Math.hypot(x-40,z-40.5))*.32*(0.7+.3*noise2(x,z,5)));
   // Exposed rock on steep ground, with strata on scarps (mesa, canyon, crater rim).
   const steep=smooth(.22,.55,slope);
@@ -91,7 +112,10 @@ export function createWorld(scene:THREE.Scene,wind=new Wind()){
   // Snow: high ground and gentle north-facing hollows; ice pocket in the valley.
   const snow=Math.max(smooth(15,8,Math.hypot(x-30,z-80)+fbm(x*.15,z*.15,2,4)*6),smooth(38,60,h+fbm(x*.03,z*.03,3,3)*14)*smooth(.6,.25,slope)*.55);
   out.lerp(C.snow,snow);
-  out.multiplyScalar(.93+noise2(x*.7,z*.7,19)*.07);
+  // S4: hollows and gullies collect darker fines; crests and rims are wind-scoured and paler.
+  out.multiplyScalar((.93+noise2(x*.7,z*.7,19)*.07)*(1-.16*Math.max(0,cavity)+.07*Math.max(0,-cavity)));
+  // Loose sand (ripples in the shader): the riverbed, dusty flats and the crater floor; not on gravel, paths, rock or snow.
+  if(surf)surf[0]=Math.max(bed,(1-earth)*.85,cf*.7)*(1-gravel)*(1-path*2)*(1-steep)*(1-snow)*smooth(.12,.04,slope);
   return out;
  };
  /** Ground colour under a point (dust from footsteps and landings takes it on). */
@@ -100,21 +124,31 @@ export function createWorld(scene:THREE.Scene,wind=new Wind()){
  useBakedShade(terrainMat,bakeUniforms,antiTile);
  const terrain=new Terrain(terrainMat,groundColor);scene.add(terrain.group);
  // ---------- Outer mountains beyond the walkable square ----------
+ // S4: a 10 m grid split into 8 sectors around the valley, so those behind the camera are culled; they lie outside the shadow
+ // frustum, so they do not receive the shadow map (a cheaper shader for a large part of the screen).
  {
-  const step=12,min=MIN-480,max=MAX+480,n=Math.round((max-min)/step)+1,pos:number[]=[],col:number[]=[],uv:number[]=[],idx:number[]=[],hh:number[]=[];
-  for(let j=0;j<n;j++)for(let i=0;i<n;i++){const x=min+i*step,z=min+j*step;hh.push(outerHeight(x,z));}
+  const step=10,min=MIN-480,max=MAX+480,n=Math.round((max-min)/step)+1,hh=new Float32Array(n*n),col=new Float32Array(n*n*3),nrm=new Float32Array(n*n*3),srf=new Float32Array(n*n*2),H=(i:number,j:number)=>hh[Math.max(0,Math.min(n-1,j))*n+Math.max(0,Math.min(n-1,i))];
+  for(let j=0;j<n;j++)for(let i=0;i<n;i++)hh[j*n+i]=outerHeight(min+i*step,min+j*step);
   for(let j=0;j<n;j++)for(let i=0;i<n;i++){
-   const x=min+i*step,z=min+j*step,h=hh[j*n+i];
-   const sx=(hh[j*n+Math.min(n-1,i+1)]-hh[j*n+Math.max(0,i-1)])/(2*step),sz=(hh[Math.min(n-1,j+1)*n+i]-hh[Math.max(0,j-1)*n+i])/(2*step),slope=Math.hypot(sx,sz);
-   pos.push(x,h,z);uv.push(x/2.6,z/2.6);
+   const x=min+i*step,z=min+j*step,h=H(i,j),sx=(H(i+1,j)-H(i-1,j))/(2*step),sz=(H(i,j+1)-H(i,j-1))/(2*step),slope=Math.hypot(sx,sz),cav=(H(i+1,j)+H(i-1,j)+H(i,j+1)+H(i,j-1)-4*h)/step;
    color.copy(C.dust).lerp(C.rock,smooth(.15,.6,slope)).lerp(tmpC.set('#403c3a'),smooth(.7,1.3,slope)*.7);
-   color.lerp(C.snow,smooth(95,150,h+fbm(x*.02,z*.02,3,3)*40)*smooth(1.1,.5,slope)*.75);
-   color.multiplyScalar(.9+noise2(x*.08,z*.08,7)*.1);col.push(color.r,color.g,color.b);
+   // Layered scarps, dust settled in gullies, snow on high ground that holds it: crests and north faces.
+   color.lerp(C.redrock,smooth(.45,.9,slope)*smooth(-.1,.7,Math.sin(h*.35+fbm(x*.01,z*.01,2,9)*3))*.45);
+   color.lerp(C.dust,smooth(.1,.6,cav)*.35);
+   color.lerp(C.snow,smooth(95,150,h+fbm(x*.02,z*.02,3,3)*40-cav*20+sz*25)*smooth(1.1,.5,slope)*.8);
+   color.multiplyScalar((.9+noise2(x*.08,z*.08,7)*.1)*(1-.12*smooth(0,.8,cav)));col.set([color.r,color.g,color.b],(j*n+i)*3);
+   const l=Math.hypot(sx,1,sz);nrm.set([-sx/l,1/l,-sz/l],(j*n+i)*3);srf[(j*n+i)*2+1]=1-1/l; // grid normals: no shading seams between sectors
   }
-  const inside=(x:number,z:number)=>x>MIN+step&&x<MAX-step&&z>MIN+step&&z<MAX-step;
-  for(let j=0;j<n-1;j++)for(let i=0;i<n-1;i++){const a=j*n+i,x=min+i*step,z=min+j*step;if(inside(x,z)&&inside(x+step,z+step))continue;idx.push(a,a+n,a+1,a+1,a+n,a+n+1);}
-  const g=surface(pos,idx,uv);g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));
-  const m=new THREE.Mesh(g,terrainMat);m.name='outer-mountains';m.receiveShadow=true;scene.add(m);
+  const inside=(x:number,z:number)=>x>MIN+step&&x<MAX-step&&z>MIN+step&&z<MAX-step,sectors:number[][]=[[],[],[],[],[],[],[],[]];
+  for(let j=0;j<n-1;j++)for(let i=0;i<n-1;i++){const x=min+i*step,z=min+j*step;if(inside(x,z)&&inside(x+step,z+step))continue;sectors[Math.floor((Math.atan2(z+step/2-80,x+step/2-80)/Math.PI+1)*4)%8].push(j*n+i);}
+  for(const [k,cells] of sectors.entries()){
+   const map=new Map<number,number>(),pos:number[]=[],c:number[]=[],uv:number[]=[],nv:number[]=[],sv:number[]=[],idx:number[]=[];
+   const v=(a:number)=>{let r=map.get(a);if(r===undefined){r=map.size;map.set(a,r);const i=a%n,j=(a-i)/n,x=min+i*step,z=min+j*step;pos.push(x,hh[a],z);uv.push(x/2.6,z/2.6);c.push(col[a*3],col[a*3+1],col[a*3+2]);nv.push(nrm[a*3],nrm[a*3+1],nrm[a*3+2]);sv.push(0,srf[a*2+1]);}return r;};
+   for(const a of cells)idx.push(v(a),v(a+n),v(a+1),v(a+1),v(a+n),v(a+n+1));
+   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(nv,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
+   g.setAttribute('color',new THREE.Float32BufferAttribute(c,3));g.setAttribute('surface',new THREE.Float32BufferAttribute(sv,2));g.setIndex(idx);g.computeBoundingSphere();
+   const m=new THREE.Mesh(g,terrainMat);m.name='outer-mountains-'+k;m.receiveShadow=false;scene.add(m);
+  }
  }
 
  // ---------- Rocks ----------
@@ -462,6 +496,7 @@ export function createWorld(scene:THREE.Scene,wind=new Wind()){
  /** Sets the day phase. Small steps follow the clock; a large jump (Sun/Moon skip, load) is animated over ≈1.5 s unless `instant`. */
  function setTime(t:number,instant=false){targetPhase=((t%CYCLE_S)+CYCLE_S)%CYCLE_S;if(instant||phase<0){phase=targetPhase;applyPhase(phase);bakeNow(lightDir);}}
  function setQuality(q:Quality){quality=q;sun.castShadow=q!=='low';const size=q==='high'?2048:1024,ext=q==='high'?60:42;
+  sun.shadow.normalBias=2*ext/size; // about one texel (8.2 cm Standard, 5.9 cm High)
   if(sun.shadow.mapSize.x!==size||sc.right!==ext){sun.shadow.mapSize.set(size,size);sc.left=sc.bottom=-ext;sc.right=sc.top=ext;sc.updateProjectionMatrix();sun.shadow.map?.dispose();sun.shadow.map=null as unknown as THREE.WebGLRenderTarget;}
   motes.setQuality(q);for(const m of lowDecoration)m.visible=q!=='low';terrain.setQuality(q);lights.resize(q==='low'?2:4);shadowAt.set(Infinity,0,0);sun.shadow.needsUpdate=true;const environment=(q==='low'?environments.low:environments.full)[k<.5?0:1];if(environment)scene.environment=environment.texture;}
  const snapped=new THREE.Vector3(),lx=new THREE.Vector3(),ly=new THREE.Vector3(),up=new THREE.Vector3(0,1,0),center=new THREE.Vector3(),shadowDir=new THREE.Vector3(),shadowCenter=new THREE.Vector3(Infinity,Infinity,Infinity);

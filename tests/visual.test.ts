@@ -6,6 +6,7 @@ import {windAt,Wind,WIND_WANDER,WIND_WRAP} from '../src/wind';
 import {printAllowed,PrintRing,printCorners,PRINT_W,PRINT_L,FOOTPRINTS} from '../src/footprints';
 import {ParticleSim,SHAPE,FX_CAPS} from '../src/fx';
 import {MOTES} from '../src/sky';
+import {Terrain,groundSlope,groundCavity} from '../src/terrain';
 
 test('Light pool picks the nearest active emitters within reach, priority breaking ties',()=>{
  const src=(x:number,intensity:number,priority:number,distance=6)=>({x,y:0,z:0,intensity,distance,priority});
@@ -72,4 +73,28 @@ test('Chips bounce on the ground, come to rest, stay opaque, then fade and are h
  const z=new ParticleSim(2,rng);z.emit({x:0,y:1,z:0,color:'#fff',up:2,life:2});z.step(.1);const snap=[...z.pos,...z.vel,z.alpha[0],z.size[0]];z.step(0,()=>0);assert.deepEqual([...z.pos,...z.vel,z.alpha[0],z.size[0]],snap);
  // Low quality: the ring shrinks and nothing lives beyond it.
  const r=new ParticleSim(10,rng);r.setCap(4);r.emit({x:0,y:0,z:0,color:'#fff',count:9,life:5});r.step(.1);assert.equal(r.alive,4);assert.ok(r.last<4);
+});
+
+test('Ground colour inputs (2 m slope, cavity, surface weights) match in both terrain levels, so a block swap does not pop',()=>{
+ // A colour that encodes every input: any level-dependent slope or cavity would change it.
+ const t=new Terrain(new THREE.MeshBasicMaterial(),(x,_z,h,s,c,cav=0,surf)=>{if(surf)surf[0]=(x*.37)%1;return c.setRGB(s,cav*.5+.5,h*.01);});
+ // The block 120…200 × 40…120 holds the valley's eastern slopes (2 m slope up to ≈ 0.4).
+ const p=new THREE.Vector3(160,2,80);for(let i=0;i<8&&!t.fineBlocks;i++)t.update(p,1000);assert.equal(t.fineBlocks,1);
+ const at=new Map<string,number[]>(),meshes=t.group.children as THREE.Mesh[];
+ for(const m of meshes.filter(m=>m.visible&&m.geometry.attributes.position.count>1000)){const g=m.geometry.attributes,n=41*41;for(let i=0;i<n;i++)at.set(g.position.getX(i)+','+g.position.getZ(i),[g.color.getX(i),g.color.getY(i),g.color.getZ(i),g.surface.getX(i),g.surface.getY(i)]);}
+ const coarse=meshes.find(m=>!m.visible&&m.geometry.boundingBox!.min.x===120&&m.geometry.boundingBox!.min.z===40&&m.geometry.attributes.position.count<1000)!;assert.ok(coarse);
+ const g=coarse.geometry.attributes;let compared=0,steep=0;
+ for(let i=0;i<21*21;i++){const f=at.get(g.position.getX(i)+','+g.position.getZ(i));assert.ok(f);const c=[g.color.getX(i),g.color.getY(i),g.color.getZ(i),g.surface.getX(i),g.surface.getY(i)];
+  for(let k=0;k<5;k++)assert.ok(Math.abs(c[k]-f[k])<1e-6,`vertex ${i} channel ${k}: ${c[k]} vs ${f[k]}`);compared++;if(c[0]>.1)steep++;}
+ assert.equal(compared,441);assert.ok(steep>5,'the block must contain sloped ground for the check to mean anything');
+ // The stencils themselves: a plane has no cavity; a bowl is a hollow (> 0), a dome a crest (< 0).
+ const plane=(x:number,z:number)=>x*.3+z*.1,bowl=(x:number,z:number)=>(x*x+z*z)*.02;
+ assert.ok(Math.abs(groundSlope(plane,5,5)-(1-1/Math.hypot(.3,1,.1)))<1e-12);assert.equal(groundCavity(plane,5,5),0);
+ assert.ok(groundCavity(bowl,0,0)>0);assert.ok(groundCavity((x,z)=>-bowl(x,z),0,0)<0);
+});
+
+test('Sun shadows fade out at the shadow frustum edge (the patched shader chunk is in place)',async()=>{
+ await import('../src/scene');const chunk=THREE.ShaderChunk.shadowmap_pars_fragment;
+ assert.ok(chunk.includes('float edgeFade=smoothstep(0.,.1,'),'three.js changed the shadow chunk: re-check the edge-fade patch in scene.ts');
+ assert.ok(chunk.includes('shadowIntensity*edgeFade'));
 });

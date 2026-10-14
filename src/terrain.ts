@@ -7,29 +7,38 @@ import { MIN, MAX, SIZE, gridHeight, FORMATIONS } from './world';
  * on the exact 1 m collision grid (built lazily, a couple per frame). Coarse vertices lie on
  * the same grid points; skirts hide the small cracks between levels.
  */
-export type GroundColor=(x:number,z:number,h:number,slope:number,out:THREE.Color)=>THREE.Color;
+/** `slope` (1 − n.y over 2 m) and `cavity` come from fixed 1 m-grid stencils in both levels of detail (no colour pop when a
+ * block swaps); `surface` receives per-vertex surface weights (x: loose sand for wind ripples). */
+export type GroundColor=(x:number,z:number,h:number,slope:number,out:THREE.Color,cavity?:number,surface?:Float32Array)=>THREE.Color;
 const BLOCK=80,CHUNK=40,SKIRT=2.5;
 
 function* patchSteps(x0:number,z0:number,len:number,step:number,color:GroundColor){
- const n=Math.round(len/step)+1,pos=new Float32Array((n*n+n*4)*3),nor=new Float32Array(pos.length),col=new Float32Array(pos.length),uv=new Float32Array((n*n+n*4)*2);
- const c=new THREE.Color(),idx:number[]=[];
+ const n=Math.round(len/step)+1,pos=new Float32Array((n*n+n*4)*3),nor=new Float32Array(pos.length),col=new Float32Array(pos.length),uv=new Float32Array((n*n+n*4)*2),surf=new Float32Array(uv.length);
+ const c=new THREE.Color(),idx:number[]=[],w=new Float32Array(2);
  const H=(x:number,z:number)=>{const ix=Math.max(0,Math.min(SIZE,Math.round(x-MIN))),iz=Math.max(0,Math.min(SIZE,Math.round(z-MIN)));return gridHeight(ix,iz);};
  let k=0;
- const put=(x:number,y:number,z:number,nx:number,ny:number,nz:number,slope:number,h:number)=>{
-  pos[k*3]=x;pos[k*3+1]=y;pos[k*3+2]=z;nor[k*3]=nx;nor[k*3+1]=ny;nor[k*3+2]=nz;color(x,z,h,slope,c);col[k*3]=c.r;col[k*3+1]=c.g;col[k*3+2]=c.b;uv[k*2]=x/2.6;uv[k*2+1]=z/2.6;return k++;
+ // surface.y carries the same 2 m slope to the shader (rock projection and strata), so steep faces match across levels too.
+ const put=(x:number,y:number,z:number,nx:number,ny:number,nz:number,slope:number,h:number,cavity=0)=>{
+  pos[k*3]=x;pos[k*3+1]=y;pos[k*3+2]=z;nor[k*3]=nx;nor[k*3+1]=ny;nor[k*3+2]=nz;w.fill(0);color(x,z,h,slope,c,cavity,w);col[k*3]=c.r;col[k*3+1]=c.g;col[k*3+2]=c.b;uv[k*2]=x/2.6;uv[k*2+1]=z/2.6;surf[k*2]=w[0];surf[k*2+1]=slope;return k++;
  };
  const normal=(x:number,z:number)=>{const e=step,dx=H(x+e,z)-H(x-e,z),dz=H(x,z+e)-H(x,z-e),l=Math.hypot(dx,2*e,dz);return [-dx/l,2*e/l,-dz/l];};
- for(let j=0;j<n;j++){for(let i=0;i<n;i++){const x=x0+i*step,z=z0+j*step,h=H(x,z),[nx,ny,nz]=normal(x,z);put(x,h,z,nx,ny,nz,1-ny,h);}yield;}
+ for(let j=0;j<n;j++){for(let i=0;i<n;i++){const x=x0+i*step,z=z0+j*step,h=H(x,z),[nx,ny,nz]=normal(x,z);put(x,h,z,nx,ny,nz,groundSlope(H,x,z),h,groundCavity(H,x,z,h));}yield;}
  for(let j=0;j<n-1;j++)for(let i=0;i<n-1;i++){const a=j*n+i;idx.push(a,a+n,a+1,a+1,a+n,a+n+1);}
- // Skirts: each border vertex duplicated downward, stitched both windings (visible from either side).
+ // Skirts: each border vertex duplicated downward (same colour and surface), stitched both windings (visible from either side).
  const edges=[[...Array(n).keys()].map(i=>i),[...Array(n).keys()].map(i=>(n-1)*n+i),[...Array(n).keys()].map(j=>j*n),[...Array(n).keys()].map(j=>j*n+n-1)];
- for(const e of edges){const low=e.map(v=>put(pos[v*3],pos[v*3+1]-SKIRT,pos[v*3+2],nor[v*3],nor[v*3+1],nor[v*3+2],0,pos[v*3+1]));
+ const drop=(v:number)=>{pos[k*3]=pos[v*3];pos[k*3+1]=pos[v*3+1]-SKIRT;pos[k*3+2]=pos[v*3+2];nor.copyWithin(k*3,v*3,v*3+3);col.copyWithin(k*3,v*3,v*3+3);uv.copyWithin(k*2,v*2,v*2+2);surf.copyWithin(k*2,v*2,v*2+2);return k++;};
+ for(const e of edges){const low=e.map(drop);
   for(let i=0;i<e.length-1;i++){const a=e[i],b=e[i+1],c2=low[i],d=low[i+1];idx.push(a,c2,b,b,c2,d,a,b,c2,b,d,c2);}}
  const g=new THREE.BufferGeometry();
  g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('normal',new THREE.BufferAttribute(nor,3));
- g.setAttribute('color',new THREE.BufferAttribute(col,3));g.setAttribute('uv',new THREE.BufferAttribute(uv,2));
+ g.setAttribute('color',new THREE.BufferAttribute(col,3));g.setAttribute('uv',new THREE.BufferAttribute(uv,2));g.setAttribute('surface',new THREE.BufferAttribute(surf,2));
  g.setIndex(idx);g.computeBoundingSphere();g.computeBoundingBox();return g;
 }
+type Heights=(x:number,z:number)=>number;
+/** Colour slope (1 − n.y) over a fixed 2 m span, whatever the mesh step. */
+export function groundSlope(H:Heights,x:number,z:number){const sx=(H(x+1,z)-H(x-1,z))/2,sz=(H(x,z+1)-H(x,z-1))/2;return 1-1/Math.hypot(sx,1,sz);}
+/** Curvature: 1 m Laplacian plus a broader 4 m one; > 0 in hollows and gullies, < 0 on crests and rims. */
+export function groundCavity(H:Heights,x:number,z:number,h=H(x,z)){const l1=H(x+1,z)+H(x-1,z)+H(x,z+1)+H(x,z-1)-4*h,l4=H(x+4,z)+H(x-4,z)+H(x,z+4)+H(x,z-4)-4*h;return Math.max(-1,Math.min(1,l1*2+l4*.5));}
 
 function buildPatch(x:number,z:number,len:number,step:number,color:GroundColor){const task=patchSteps(x,z,len,step,color);let r=task.next();while(!r.done)r=task.next();return r.value;}
 
