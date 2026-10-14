@@ -1,25 +1,30 @@
 import { installTank } from '../game/backpack';
 import { ITEMS, TANKS } from '../game/defs';
-import { loadMachineSlot, takeSlot, packStation } from '../game/worldActions';
+import { loadMachineSlot, takeSlot, packStation, moveTank, moveTankGap, wearSlot, type TankPlace } from '../game/worldActions';
 import { addItems, countItem, transferSlot, type Slot } from '../game/inventory';
 import { machine, RECIPES, RECIPE_BY_ID, beginPassage, cancelJob, connect, disconnect, linkOptions, linkLength, endpoint, gasRate, powerRate, supplyRate, telemetry, DOME_CAPACITY, ELECTROLYZER_O2, FIBER_EU, GEN_BUFFER, O2_PER_WU, PORT_O2, type Building } from '../game/production';
 import { stationStatus, type StationStatus } from '../game/stationStatus';
 import { CAPSULE_CAPACITY } from '../game/survival';
 import type { GameState } from '../game/state';
 import type { GuideTarget } from '../game/guide';
-import { itemArt } from './art';
-import { captureTokens, transferCraft } from './craftMotion';
+import { ghostArt, itemArt } from './art';
+import { captureTokens, pulseCraft, transferCraft } from './craftMotion';
+import { dragFrom } from './dragDrop';
 
 const h = <K extends keyof HTMLElementTagNameMap>(tag: K, text = '', cls = '') => { const e = document.createElement(tag); if (text) e.textContent = text; if (cls) e.className = cls; return e; };
 const button = (label: string, fn: () => void, cls = 'st-btn', disabled = false) => { const b = h('button', label, cls); b.type = 'button'; b.onclick = fn; b.disabled = disabled; return b; };
 const peerName = (g: GameState, id: string) => id === 'capsule' ? 'Капсула' : ITEMS[machine(g, id)?.kind ?? '']?.name ?? id;
 /** Items each machine accepts from the backpack; everything else is dimmed. */
-const ACCEPTS: Record<string, string[]> = { kiln: ['iron_raw', 'copper_raw', 'sand', 'ice', 'fiber'], biogenerator: ['fiber'], electrolyzer: ['water', 'bottle_1'] };
+const ACCEPTS: Record<string, string[]> = { kiln: ['iron_raw', 'copper_raw', 'sand', 'ice', 'fiber'], biogenerator: ['fiber'], electrolyzer: ['water', ...Object.keys(TANKS)] };
 type Say = (error: string, success?: string) => void;
 /** Oxygen buffer of a gas station in GU: the electrolyzer holds more than the refill/distributor ports (D30). */
 const o2Max = (b: Building) => (b.kind === 'electrolyzer' ? ELECTROLYZER_O2 : PORT_O2) / 1000;
 const ELECTROLYSIS = RECIPE_BY_ID.get('electrolysis')!;
-type Ctx = { g: GameState; id: string; say: Say; changed: () => void; draw: () => void; refill: (id: string | null) => void; nav?: (t: GuideTarget) => void };
+/** Meter scale of an empty tank connector: the basic tank. */
+const EMPTY_TANK = TANKS.bottle_1.capacity / 1000;
+/** What a machine window needs from its host; `caution` shows an amber chip that asks to repeat the action. */
+export type MachineHost = { say: Say; caution: (text: string) => void; changed: () => void; draw: () => void; refill: (id: string | null) => void; nav?: (t: GuideTarget) => void; inside: () => boolean };
+type Ctx = MachineHost & { g: GameState; id: string };
 
 function meter(key: string, label: string, value: number, max: number, unit: string, tone = '', mark?: number) {
  const box = h('div', '', 'st-meter ' + tone); box.dataset.meter = key;
@@ -60,6 +65,61 @@ function slotCell(ctx: Ctx, b: Building, label: string, index: number, placehold
  count.id = `st-slot-${index}-${label}`; cell.append(count);
  wrap.append(h('span', label), cell); return wrap;
 }
+// ---------- S4: worn tanks and the charging slot of the oxygen generator ----------
+const isTank = (s: Slot): s is NonNullable<Slot> => !!s && Object.hasOwn(TANKS, s.itemId);
+const LAST_AIR = 'Это последний воздух: без баллона удушье через 5 с. Повторите, чтобы снять.';
+const code = (p: TankPlace) => p.kind === 'worn' ? 'worn:' + p.b : p.kind === 'pack' ? 'pack:' + p.i : 'station';
+const place = (ctx: Ctx, v = ''): TankPlace | null => { const [k, n] = v.split(':'); return k === 'worn' && (n === '0' || n === '1') ? { kind: 'worn', b: Number(n) as 0 | 1 } : k === 'pack' && n ? { kind: 'pack', i: Number(n) } : k === 'station' ? { kind: 'station', id: ctx.id } : null; };
+/** The last breathable gas leaves the suit only after the same action is repeated within 4 s. */
+let pendingGap: { key: string; at: number } | null = null;
+function tankMove(ctx: Ctx, from: TankPlace, to: TankPlace, dragged = false) {
+ if (code(from) === code(to)) return;
+ const key = ctx.id + '|' + code(from) + '>' + code(to), now = performance.now();
+ if (moveTankGap(ctx.g, ctx.inside(), from, to) && (pendingGap?.key !== key || now - pendingGap.at > 4000)) { pendingGap = { key, at: now }; ctx.caution(LAST_AIR); return; }
+ pendingGap = null;
+ const src = document.querySelector(`[data-drop="${code(from)}"]`), tokens = dragged || !src ? [] : captureTokens([src]);
+ const e = moveTank(ctx.g, from, to); ctx.say(e, to.kind === 'worn' ? 'Баллон на костюме' : to.kind === 'station' ? 'Баллон заправляется' : 'Баллон в рюкзаке');
+ if (!e) { const target = `[data-drop="${code(to)}"]`; if (tokens.length) transferCraft(tokens, target); else pulseCraft(target); }
+}
+/** A tank cell starts a drag; the drop target is read from `data-drop` when the pointer is released. */
+function dragTank(ctx: Ctx, cell: HTMLElement, from: TankPlace) {
+ cell.dataset.drag = code(from);
+ cell.addEventListener('pointerdown', e => dragFrom(e, cell, target => { const to = place(ctx, target.dataset.drop); if (to) tankMove(ctx, from, to, true); }));
+}
+/** Tank art, its gas in GU and a gas bar; an empty connector shows the outline. */
+function tankFace(cell: HTMLElement, t: Slot, key: string) {
+ const gu = h('small', t ? String(Math.round((t.milliGU ?? 0) / 1000)) : ''), bar = h('i', '', 'st-gas');
+ gu.id = key + '-gu'; bar.id = key + '-bar'; bar.style.transform = `scaleX(${isTank(t) ? Math.min(1, (t.milliGU ?? 0) / TANKS[t.itemId].capacity) : 0})`;
+ cell.append(t ? itemArt(t.itemId) : ghostArt('tank'), gu, bar);
+}
+function tankLive(key: string, t: Slot) {
+ const gu = document.getElementById(key + '-gu'), bar = document.getElementById(key + '-bar'), text = t ? String(Math.round((t.milliGU ?? 0) / 1000)) : '';
+ if (gu && gu.textContent !== text) gu.textContent = text; if (bar) bar.style.transform = `scaleX(${isTank(t) ? Math.min(1, (t.milliGU ?? 0) / TANKS[t.itemId].capacity) : 0})`;
+}
+/** The charging slot: tap wears the tank (first empty connector, otherwise instead of the emptier worn tank). */
+function chargeCell(ctx: Ctx, b: Building) {
+ const t = b.input[1]; if (t && !isTank(t)) return slotCell(ctx, b, 'Баллон', 1, 'bottle_1');
+ const station: TankPlace = { kind: 'station', id: ctx.id }, wrap = h('div', '', 'st-slot');
+ const cell = button('', () => { if (b.input[1]) tankMove(ctx, station, { kind: 'worn', b: wearSlot(ctx.g) }); else ctx.say('Нажмите на баллон костюма или перетащите его сюда'); }, 'st-slot-cell st-tank' + (t ? '' : ' empty'));
+ cell.id = 'st-charge'; cell.dataset.machineSlot = 'Баллон'; cell.dataset.drop = 'station';
+ cell.setAttribute('aria-label', 'Заправка баллона · ' + (t ? `${ITEMS[t.itemId].name}, ${Math.round((t.milliGU ?? 0) / 1000)} из ${TANKS[t.itemId].capacity / 1000} GU — нажмите, чтобы надеть` : 'пусто'));
+ tankFace(cell, t, 'st-charge'); if (t) dragTank(ctx, cell, station);
+ wrap.append(h('span', 'Заправка'), cell); return wrap;
+}
+/** Both worn connectors: tap sends the tank to charge (hot swap with a charging one); an empty one takes the charging tank.
+ * Taps read the live state: a rebuild may wait while a finger is down (production.ts). */
+function suitRow(ctx: Ctx, b: Building) {
+ const row = h('div', '', 'st-suit'); row.append(h('span', 'Костюм', 'st-suit-label'));
+ for (const n of [0, 1] as const) {
+  const t = ctx.g.player.bottles[n], worn: TankPlace = { kind: 'worn', b: n }, wrap = h('div', '', 'st-slot');
+  const cell = button('', () => { if (ctx.g.player.bottles[n]) tankMove(ctx, worn, { kind: 'station', id: ctx.id }); else if (isTank(b.input[1])) tankMove(ctx, { kind: 'station', id: ctx.id }, worn); else ctx.say('Разъём пуст: перетащите сюда баллон из рюкзака'); }, 'st-slot-cell st-tank' + (t ? '' : ' empty'));
+  cell.id = 'st-worn-' + n; cell.dataset.drop = code(worn);
+  cell.setAttribute('aria-label', `Баллон ${n + 1} на костюме · ` + (t ? `${Math.round((t.milliGU ?? 0) / 1000)} из ${TANKS[t.itemId].capacity / 1000} GU — нажмите, чтобы поставить на заправку` : 'пусто'));
+  tankFace(cell, t, 'st-worn-' + n); if (t) dragTank(ctx, cell, worn);
+  wrap.append(h('span', `Баллон ${n + 1}`), cell); row.append(wrap);
+ }
+ return row;
+}
 function arrow(job: Building['job']) {
  const r = job ? RECIPE_BY_ID.get(job.recipeId) : null, p = job && r ? Math.min(1, job.workMs / (r.seconds * 1000)) : 0;
  const a = h('div', '', 'st-arrow' + (job && p < 1 ? ' active' : '')); a.id = 'st-arrow';
@@ -89,7 +149,7 @@ function connections(ctx: Ctx, b: Building) {
  }
  sec.append(list); return sec;
 }
-function backpack(ctx: Ctx, kind: string, act: (i: number) => void, title = 'Рюкзак') {
+function backpack(ctx: Ctx, kind: string, act: (i: number) => void, title = 'Рюкзак', decorate?: (cell: HTMLElement, i: number) => void) {
  const box = h('aside', '', 'st-bag'), grid = h('div', '', 'st-bag-grid'), accept = ACCEPTS[kind];
  box.append(h('h4', title + (accept ? ' · подходящее подсвечено' : '')));
  ctx.g.player.inventory.forEach((s, i) => {
@@ -98,7 +158,7 @@ function backpack(ctx: Ctx, kind: string, act: (i: number) => void, title = 'Р�
   cell.dataset.inventory = String(i);
   cell.setAttribute('aria-label', s ? ITEMS[s.itemId].name + ' ×' + s.count : 'Пустая ячейка ' + (i + 1));
   if (s) { cell.append(itemArt(s.packed?.kind === 'workbench' && s.packed.level === 2 ? 'workbench_2' : s.itemId), h('small', s.milliGU !== undefined ? Math.round((s.milliGU ?? 0) / 1000) + '' : s.packed ? (s.packed.level === 2 ? 'II' : 'I') : String(s.count))); cell.title = ITEMS[s.itemId].name; }
-  grid.append(cell);
+  decorate?.(cell, i); grid.append(cell);
  });
  box.append(grid); return box;
 }
@@ -114,8 +174,8 @@ function quickLoad(ctx: Ctx, kind: string, id: string, items: string[], label: s
   ctx.say(moved ? '' : err || (held && !g.player.inventory.some(s => s?.itemId === held) ? `В рюкзаке нет: ${ITEMS[held].name}. Сменить сырьё — нажмите на стак` : 'Нечего загрузить'), 'Загружено');
  }, 'st-btn small', !has);
 }
-export function machineView(g: GameState, id: string, say: Say, changed: () => void, draw: () => void, refill: (id: string | null) => void, nav?: (t: GuideTarget) => void): HTMLElement {
- const ctx: Ctx = { g, id, say, changed, draw, refill, nav };
+export function machineView(g: GameState, id: string, host: MachineHost): HTMLElement {
+ const ctx: Ctx = { ...host, g, id }, { say, changed, draw, refill } = host;
  const root = h('div', '', 'st-layout'), left = h('div', '', 'st-main'); root.append(left);
  const change = () => { changed(); draw(); };
  // ---------- Storage crates ----------
@@ -136,7 +196,7 @@ export function machineView(g: GameState, id: string, say: Say, changed: () => v
   root.dataset.kind = 'capsule';
   const status = h('div', '', 'st-status'); status.id = 'st-status'; status.dataset.tone = 'idle'; status.append(h('i', '', 'st-lamp'), (() => { const t = h('div', '', 'st-status-text'), a = h('b', 'Кислородный порт'), b2 = h('span', 'Запас капсулы конечен: она не производит газ.'); a.id = 'st-status-title'; b2.id = 'st-status-hint'; t.append(a, b2); return t; })());
   left.append(status, meter('capsule', 'Капсула', g.world.capsuleMilliGU / 1000, CAPSULE_CAPACITY / 1000, 'GU', 'o2'));
-  g.player.bottles.forEach((t, i) => left.append(meter('bottle-' + i, t ? `Баллон ${i + 1}` : `Слот ${i + 1} пуст`, (t?.milliGU ?? 0) / 1000, t ? TANKS[t.itemId].capacity / 1000 : 600, 'GU', 'o2')));
+  g.player.bottles.forEach((t, i) => left.append(meter('bottle-' + i, t ? `Баллон ${i + 1}` : `Слот ${i + 1} пуст`, (t?.milliGU ?? 0) / 1000, t ? TANKS[t.itemId].capacity / 1000 : EMPTY_TANK, 'GU', 'o2')));
   const actions = h('div', '', 'st-actions');
   const fill = button('Заправить баллоны', () => { refill('capsule-out'); say('', 'Заправка идёт'); }, 'st-btn accent'); fill.id = 'capsule-start';
   actions.append(fill, button('Остановить', () => { refill(null); say('', 'Остановлено'); }, 'st-btn'), button('Баллоны → капсула', () => { refill('capsule-in'); say('', 'Газ передаётся в капсулу'); }, 'st-btn ghost'));
@@ -161,12 +221,10 @@ export function machineView(g: GameState, id: string, say: Say, changed: () => v
  } else if (b.kind === 'electrolyzer') {
   const proc = h('div', '', 'st-process'), ins = h('div', '', 'st-inputs');
   ins.append(slotCell(ctx, b, 'Вода', 0, 'water'));
-  proc.append(ins, arrow(b.job), slotCell(ctx, b, 'Баллон', 1, 'bottle_1'));
-  left.append(proc, meter('oxygen', 'Буфер O₂', b.oxygen / 1000, o2Max(b), 'GU', 'o2'));
+  proc.append(ins, arrow(b.job), chargeCell(ctx, b));
+  left.append(proc, suitRow(ctx, b), meter('oxygen', 'Буфер O₂', b.oxygen / 1000, o2Max(b), 'GU', 'o2'));
   const quick = h('div', '', 'st-actions'); quick.append(quickLoad(ctx, 'electrolyzer', id, ['water'], 'Загрузить воду'));
-  g.player.bottles.forEach((t, i) => { if (t) quick.append(button(`Баллон ${i + 1} из костюма`, () => { const old = b.input[1]; if (old && !TANKS[old.itemId]) { say('Освободите слот баллона'); return; } b.input[1] = t; g.player.bottles[i] = old; change(); }, 'st-btn small')); });
-  if (b.input[1]) quick.append(button('Баллон в костюм', () => { const free = g.player.bottles.findIndex(v => !v); if (free < 0) { say('Оба слота костюма заняты'); return; } g.player.bottles[free as 0 | 1] = b.input[1]; b.input[1] = null; change(); }, 'st-btn small'));
-  left.append(quick, h('p', `1 вода → ${O2_PER_WU / 1000} GU кислорода за ${ELECTROLYSIS.seconds} с при ${ELECTROLYSIS.EU_per_second} EU/с. Установленный баллон заправляется сам.`, 'st-note'));
+  left.append(quick, h('p', `1 вода → ${O2_PER_WU / 1000} GU кислорода за ${ELECTROLYSIS.seconds} с при ${ELECTROLYSIS.EU_per_second} EU/с. Перетащите баллон костюма в слот заправки или нажмите на него — он заправится. Заправленный верните так же: прямо на костюм.`, 'st-note'));
  } else if (b.kind === 'biogenerator') {
   const proc = h('div', '', 'st-process'), ins = h('div', '', 'st-inputs'); ins.append(slotCell(ctx, b, 'Топливо', 0, 'fiber'));
   const out = h('div', '', 'st-slot'); out.append(h('span', 'Энергия'), (() => { const c = h('div', '', 'st-slot-cell power'); c.append(h('b', '⚡')); return c; })());
@@ -174,7 +232,7 @@ export function machineView(g: GameState, id: string, say: Say, changed: () => v
   const quick = h('div', '', 'st-actions'); quick.append(quickLoad(ctx, 'biogenerator', id, ['fiber'], 'Загрузить волокно')); left.append(quick, h('p', `1 волокно = ${FIBER_EU / 1000} EU. Выдача до 40 EU/с по кабелю. Ставьте снаружи купола.`, 'st-note'));
  } else if (b.kind === 'refill') {
   left.append(meter('oxygen', 'Буфер O₂', b.oxygen / 1000, o2Max(b), 'GU', 'o2'));
-  g.player.bottles.forEach((t, i) => left.append(meter('bottle-' + i, t ? `Баллон ${i + 1}` : `Слот ${i + 1} пуст`, (t?.milliGU ?? 0) / 1000, t ? TANKS[t.itemId].capacity / 1000 : 600, 'GU', 'o2')));
+  g.player.bottles.forEach((t, i) => left.append(meter('bottle-' + i, t ? `Баллон ${i + 1}` : `Слот ${i + 1} пуст`, (t?.milliGU ?? 0) / 1000, t ? TANKS[t.itemId].capacity / 1000 : EMPTY_TANK, 'GU', 'o2')));
   const quick = h('div', '', 'st-actions'); quick.append(button('Заправить баллоны', () => { refill(id); say('', 'Заправка идёт'); }, 'st-btn accent'), button('Стоп', () => { refill(null); say('', 'Остановлено'); }, 'st-btn')); left.append(quick);
  } else if (b.kind === 'distributor') {
   left.append(meter('oxygen', 'Буфер O₂', b.oxygen / 1000, o2Max(b), 'GU', 'o2'), h('p', 'Наполняет купол до 20 GU/с, очищает воздух и держит +20 °C. Нужны труба O₂ и кабель питания.', 'st-note'));
@@ -189,14 +247,14 @@ export function machineView(g: GameState, id: string, say: Say, changed: () => v
  footer.append(button('Забрать станцию', () => { const e = packStation(g, id); say(e, 'Станция в рюкзаке'); }, 'st-btn small ghost'));
  if (b.input.slice(2).some(Boolean) || b.output.slice(1).some(Boolean)) { const legacy = h('details', '', 'st-legacy'); legacy.append(h('summary', 'Другие сохранённые ячейки')); for (const [source, from] of [[b.input, 2], [b.output, 1]] as const) source.forEach((v, i) => { if (v && i >= from) legacy.append(button(ITEMS[v.itemId].name + ' ×' + v.count, () => say(takeSlot(g, source, i), 'Предмет забран'), 'st-btn small')); }); footer.append(legacy); }
  left.append(footer);
- if (ACCEPTS[b.kind]) root.append(backpack(ctx, b.kind, i => say(loadMachineSlot(g, id, i), 'Загружено')));
+ if (ACCEPTS[b.kind]) root.append(backpack(ctx, b.kind, i => say(loadMachineSlot(g, id, i), 'Загружено'), 'Рюкзак', b.kind !== 'electrolyzer' ? undefined : (cell, i) => { cell.dataset.drop = 'pack:' + i; if (isTank(g.player.inventory[i])) dragTank(ctx, cell, { kind: 'pack', i }); }));
  else root.classList.add('single');
  return root;
 }
 export function tickMachine(g: GameState, id: string) {
  if (id === 'capsule') {
   setMeter('capsule', g.world.capsuleMilliGU / 1000, CAPSULE_CAPACITY / 1000, 'GU');
-  g.player.bottles.forEach((t, i) => setMeter('bottle-' + i, (t?.milliGU ?? 0) / 1000, t ? TANKS[t.itemId].capacity / 1000 : 600, 'GU'));
+  g.player.bottles.forEach((t, i) => setMeter('bottle-' + i, (t?.milliGU ?? 0) / 1000, t ? TANKS[t.itemId].capacity / 1000 : EMPTY_TANK, 'GU'));
   const fill = document.getElementById('capsule-start') as HTMLButtonElement | null, has = g.player.bottles.some(Boolean), full = has && g.player.bottles.every(t => !t || (t.milliGU ?? 0) >= TANKS[t.itemId].capacity);
   if (fill) { fill.disabled = !has || full || g.world.capsuleMilliGU <= 0; const label = !has ? 'Установите баллон' : full ? 'Баллоны заполнены' : g.world.capsuleMilliGU <= 0 ? 'В капсуле нет O₂' : 'Заправить баллоны'; if (fill.textContent !== label && !fill.dataset.busy) fill.textContent = label; }
   return;
@@ -207,8 +265,8 @@ export function tickMachine(g: GameState, id: string) {
  const r = b.job ? RECIPE_BY_ID.get(b.job.recipeId) : null, p = r && b.job ? Math.min(1, b.job.workMs / (r.seconds * 1000)) : 0;
  const ring = document.getElementById('st-ring'); if (ring) ring.style.setProperty('--p', String(p)); document.getElementById('st-arrow')?.classList.toggle('active', !!b.job && p < 1 || (b.kind === 'biogenerator' && supplyRate(b.id) > 0));
  if (b.kind === 'electrolyzer' || b.kind === 'refill' || b.kind === 'distributor') setMeter('oxygen', b.oxygen / 1000, o2Max(b), 'GU');
- if (b.kind === 'electrolyzer') { const t = b.input[1], e = document.getElementById('st-slot-1-Баллон'); if (e && t && TANKS[t.itemId]) e.textContent = Math.round((t.milliGU ?? 0) / TANKS[t.itemId].capacity * 100) + '%'; const w = document.getElementById('st-slot-0-Вода'); if (w) { const n = (b.input[0]?.itemId === 'water' ? b.input[0].count : 0) + b.water / 1000; w.textContent = n ? String(n) : ''; } }
- if (b.kind === 'refill') g.player.bottles.forEach((t, i) => setMeter('bottle-' + i, (t?.milliGU ?? 0) / 1000, t ? TANKS[t.itemId].capacity / 1000 : 600, 'GU'));
+ if (b.kind === 'electrolyzer') { tankLive('st-charge', isTank(b.input[1]) ? b.input[1] : null); g.player.bottles.forEach((t, i) => tankLive('st-worn-' + i, t)); const w = document.getElementById('st-slot-0-Вода'); if (w) { const n = (b.input[0]?.itemId === 'water' ? b.input[0].count : 0) + b.water / 1000; w.textContent = n ? String(n) : ''; } }
+ if (b.kind === 'refill') g.player.bottles.forEach((t, i) => setMeter('bottle-' + i, (t?.milliGU ?? 0) / 1000, t ? TANKS[t.itemId].capacity / 1000 : EMPTY_TANK, 'GU'));
  if (b.kind === 'biogenerator') { setMeter('energy', b.energy / 1000, GEN_BUFFER / 1000, 'EU'); const f = document.getElementById('st-slot-0-Топливо'); if (f) f.textContent = String(countItem(b.input, 'fiber') || ''); }
  if (b.kind === 'kiln') { const f = document.getElementById('st-slot-1-Топливо'); if (f) f.textContent = String(b.input[1]?.count ?? ''); const raw = document.getElementById('st-slot-0-Сырьё'); if (raw) raw.textContent = String(b.input[0]?.count ?? ''); }
  if (b.kind === 'dome') { setMeter('air', b.zone.q / 1000, DOME_CAPACITY / 1000, 'GU'); setMeter('purity', b.zone.purity * 100, 100, '%'); }

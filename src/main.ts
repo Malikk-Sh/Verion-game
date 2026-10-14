@@ -171,7 +171,7 @@ function boot(){
   navigate:target=>{guideOverride=target;selected='guide';updateUI();}});
  const openQuests=()=>{if(!started||!game||game.player.vitals.health<=0||saver?.halted)return;if(dialog==='quest-panel'){questBook.escape();return;}if(running||liveDialogs.has(dialog)||dialog==='paused')questBook.open();};
  el('quests-button').onclick=openQuests;
- const production=createProductionPanel({game:()=>game,show:()=>setDialog('production-panel'),close:()=>{void saver?.save();const back=workshopReturn;if(back)setDialog(back);else resume();},changed:()=>{if(game)built.sync(game);world.invalidateShadows();syncDrops();hudKey='';updateHotbar();void saver?.save();},measure:(name,ms)=>{diagnostics.span(name,ms);diagnostics.event(name,ms,{dialog,quality:settings.quality});},refill:id=>{const wasRefilling=refillMachine!==null;refillMachine=id;if(wasRefilling&&!id)void saver?.save();},tone:ok=>audio.tone(ok?'item':'warn'),
+ const production=createProductionPanel({game:()=>game,show:()=>setDialog('production-panel'),close:()=>{void saver?.save();const back=workshopReturn;if(back)setDialog(back);else resume();},changed:()=>{if(game)built.sync(game);world.invalidateShadows();syncDrops();hudKey='';updateHotbar();void saver?.save();},measure:(name,ms)=>{diagnostics.span(name,ms);diagnostics.event(name,ms,{dialog,quality:settings.quality});},refill:id=>{const wasRefilling=refillMachine!==null;refillMachine=id;if(wasRefilling&&!id)void saver?.save();},tone:ok=>audio.tone(ok?'item':'warn'),insideCapsule:()=>insideCapsule(),
   navigate:t=>{guideOverride=t;selected='guide';audio.tone('ui');void saver?.save();resume();updateUI();}});
  el('craft-button').onclick=()=>production.open();
 
