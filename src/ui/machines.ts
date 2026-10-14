@@ -2,7 +2,7 @@ import { installTank } from '../game/backpack';
 import { ITEMS, TANKS } from '../game/defs';
 import { loadMachineSlot, takeSlot, packStation } from '../game/worldActions';
 import { addItems, countItem, transferSlot, type Slot } from '../game/inventory';
-import { machine, RECIPES, RECIPE_BY_ID, beginPassage, cancelJob, connect, disconnect, linkOptions, linkLength, endpoint, gasRate, powerRate, supplyRate, telemetry, DOME_CAPACITY, type Building } from '../game/production';
+import { machine, RECIPES, RECIPE_BY_ID, beginPassage, cancelJob, connect, disconnect, linkOptions, linkLength, endpoint, gasRate, powerRate, supplyRate, telemetry, DOME_CAPACITY, ELECTROLYZER_O2, FIBER_EU, GEN_BUFFER, O2_PER_WU, PORT_O2, type Building } from '../game/production';
 import { stationStatus, type StationStatus } from '../game/stationStatus';
 import { CAPSULE_CAPACITY } from '../game/survival';
 import type { GameState } from '../game/state';
@@ -16,6 +16,9 @@ const peerName = (g: GameState, id: string) => id === 'capsule' ? 'Капсул�
 /** Items each machine accepts from the backpack; everything else is dimmed. */
 const ACCEPTS: Record<string, string[]> = { kiln: ['iron_raw', 'copper_raw', 'sand', 'ice', 'fiber'], biogenerator: ['fiber'], electrolyzer: ['water', 'bottle_1'] };
 type Say = (error: string, success?: string) => void;
+/** Oxygen buffer of a gas station in GU: the electrolyzer holds more than the refill/distributor ports (D30). */
+const o2Max = (b: Building) => (b.kind === 'electrolyzer' ? ELECTROLYZER_O2 : PORT_O2) / 1000;
+const ELECTROLYSIS = RECIPE_BY_ID.get('electrolysis')!;
 type Ctx = { g: GameState; id: string; say: Say; changed: () => void; draw: () => void; refill: (id: string | null) => void; nav?: (t: GuideTarget) => void };
 
 function meter(key: string, label: string, value: number, max: number, unit: string, tone = '', mark?: number) {
@@ -159,22 +162,22 @@ export function machineView(g: GameState, id: string, say: Say, changed: () => v
   const proc = h('div', '', 'st-process'), ins = h('div', '', 'st-inputs');
   ins.append(slotCell(ctx, b, 'Вода', 0, 'water'));
   proc.append(ins, arrow(b.job), slotCell(ctx, b, 'Баллон', 1, 'bottle_1'));
-  left.append(proc, meter('oxygen', 'Буфер O₂', b.oxygen / 1000, 480, 'GU', 'o2'));
+  left.append(proc, meter('oxygen', 'Буфер O₂', b.oxygen / 1000, o2Max(b), 'GU', 'o2'));
   const quick = h('div', '', 'st-actions'); quick.append(quickLoad(ctx, 'electrolyzer', id, ['water'], 'Загрузить воду'));
   g.player.bottles.forEach((t, i) => { if (t) quick.append(button(`Баллон ${i + 1} из костюма`, () => { const old = b.input[1]; if (old && !TANKS[old.itemId]) { say('Освободите слот баллона'); return; } b.input[1] = t; g.player.bottles[i] = old; change(); }, 'st-btn small')); });
   if (b.input[1]) quick.append(button('Баллон в костюм', () => { const free = g.player.bottles.findIndex(v => !v); if (free < 0) { say('Оба слота костюма заняты'); return; } g.player.bottles[free as 0 | 1] = b.input[1]; b.input[1] = null; change(); }, 'st-btn small'));
-  left.append(quick, h('p', '1 вода → 240 GU кислорода за 10 с при 12 EU/с. Установленный баллон заправляется сам.', 'st-note'));
+  left.append(quick, h('p', `1 вода → ${O2_PER_WU / 1000} GU кислорода за ${ELECTROLYSIS.seconds} с при ${ELECTROLYSIS.EU_per_second} EU/с. Установленный баллон заправляется сам.`, 'st-note'));
  } else if (b.kind === 'biogenerator') {
   const proc = h('div', '', 'st-process'), ins = h('div', '', 'st-inputs'); ins.append(slotCell(ctx, b, 'Топливо', 0, 'fiber'));
   const out = h('div', '', 'st-slot'); out.append(h('span', 'Энергия'), (() => { const c = h('div', '', 'st-slot-cell power'); c.append(h('b', '⚡')); return c; })());
-  proc.append(ins, arrow(null), out); left.append(proc, meter('energy', 'Накопитель', b.energy / 1000, 400, 'EU', 'power'));
-  const quick = h('div', '', 'st-actions'); quick.append(quickLoad(ctx, 'biogenerator', id, ['fiber'], 'Загрузить волокно')); left.append(quick, h('p', '1 волокно = 200 EU. Выдача до 40 EU/с по кабелю. Ставьте снаружи купола.', 'st-note'));
+  proc.append(ins, arrow(null), out); left.append(proc, meter('energy', 'Накопитель', b.energy / 1000, GEN_BUFFER / 1000, 'EU', 'power'));
+  const quick = h('div', '', 'st-actions'); quick.append(quickLoad(ctx, 'biogenerator', id, ['fiber'], 'Загрузить волокно')); left.append(quick, h('p', `1 волокно = ${FIBER_EU / 1000} EU. Выдача до 40 EU/с по кабелю. Ставьте снаружи купола.`, 'st-note'));
  } else if (b.kind === 'refill') {
-  left.append(meter('oxygen', 'Буфер O₂', b.oxygen / 1000, 480, 'GU', 'o2'));
+  left.append(meter('oxygen', 'Буфер O₂', b.oxygen / 1000, o2Max(b), 'GU', 'o2'));
   g.player.bottles.forEach((t, i) => left.append(meter('bottle-' + i, t ? `Баллон ${i + 1}` : `Слот ${i + 1} пуст`, (t?.milliGU ?? 0) / 1000, t ? TANKS[t.itemId].capacity / 1000 : 600, 'GU', 'o2')));
   const quick = h('div', '', 'st-actions'); quick.append(button('Заправить баллоны', () => { refill(id); say('', 'Заправка идёт'); }, 'st-btn accent'), button('Стоп', () => { refill(null); say('', 'Остановлено'); }, 'st-btn')); left.append(quick);
  } else if (b.kind === 'distributor') {
-  left.append(meter('oxygen', 'Буфер O₂', b.oxygen / 1000, 480, 'GU', 'o2'), h('p', 'Наполняет купол до 20 GU/с, очищает воздух и держит +20 °C. Нужны труба O₂ и кабель питания.', 'st-note'));
+  left.append(meter('oxygen', 'Буфер O₂', b.oxygen / 1000, o2Max(b), 'GU', 'o2'), h('p', 'Наполняет купол до 20 GU/с, очищает воздух и держит +20 °C. Нужны труба O₂ и кабель питания.', 'st-note'));
  } else if (b.kind === 'dome') {
   left.append(meter('air', 'Воздух', b.zone.q / 1000, DOME_CAPACITY / 1000, 'GU', 'o2', 384), meter('purity', 'Чистота', b.zone.purity * 100, 100, '%', 'clean', 50));
   const quick = h('div', '', 'st-actions'); quick.append(button('Пройти шлюз', () => say(beginPassage(g, id), 'Шлюз: 6 с'), 'st-btn accent')); left.append(quick, h('p', 'Шлюз тратит до 4 GU воздуха за проход. Внутри пригодного купола баллоны не расходуются.', 'st-note'));
@@ -203,10 +206,10 @@ export function tickMachine(g: GameState, id: string) {
  updateStatus(stationStatus(g, b));
  const r = b.job ? RECIPE_BY_ID.get(b.job.recipeId) : null, p = r && b.job ? Math.min(1, b.job.workMs / (r.seconds * 1000)) : 0;
  const ring = document.getElementById('st-ring'); if (ring) ring.style.setProperty('--p', String(p)); document.getElementById('st-arrow')?.classList.toggle('active', !!b.job && p < 1 || (b.kind === 'biogenerator' && supplyRate(b.id) > 0));
- if (b.kind === 'electrolyzer' || b.kind === 'refill' || b.kind === 'distributor') setMeter('oxygen', b.oxygen / 1000, 480, 'GU');
+ if (b.kind === 'electrolyzer' || b.kind === 'refill' || b.kind === 'distributor') setMeter('oxygen', b.oxygen / 1000, o2Max(b), 'GU');
  if (b.kind === 'electrolyzer') { const t = b.input[1], e = document.getElementById('st-slot-1-Баллон'); if (e && t && TANKS[t.itemId]) e.textContent = Math.round((t.milliGU ?? 0) / TANKS[t.itemId].capacity * 100) + '%'; const w = document.getElementById('st-slot-0-Вода'); if (w) { const n = (b.input[0]?.itemId === 'water' ? b.input[0].count : 0) + b.water / 1000; w.textContent = n ? String(n) : ''; } }
  if (b.kind === 'refill') g.player.bottles.forEach((t, i) => setMeter('bottle-' + i, (t?.milliGU ?? 0) / 1000, t ? TANKS[t.itemId].capacity / 1000 : 600, 'GU'));
- if (b.kind === 'biogenerator') { setMeter('energy', b.energy / 1000, 400, 'EU'); const f = document.getElementById('st-slot-0-Топливо'); if (f) f.textContent = String(countItem(b.input, 'fiber') || ''); }
+ if (b.kind === 'biogenerator') { setMeter('energy', b.energy / 1000, GEN_BUFFER / 1000, 'EU'); const f = document.getElementById('st-slot-0-Топливо'); if (f) f.textContent = String(countItem(b.input, 'fiber') || ''); }
  if (b.kind === 'kiln') { const f = document.getElementById('st-slot-1-Топливо'); if (f) f.textContent = String(b.input[1]?.count ?? ''); const raw = document.getElementById('st-slot-0-Сырьё'); if (raw) raw.textContent = String(b.input[0]?.count ?? ''); }
  if (b.kind === 'dome') { setMeter('air', b.zone.q / 1000, DOME_CAPACITY / 1000, 'GU'); setMeter('purity', b.zone.purity * 100, 100, '%'); }
  void endpoint; void gasRate;

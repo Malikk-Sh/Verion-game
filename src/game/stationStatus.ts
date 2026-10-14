@@ -1,6 +1,6 @@
 import { countItem } from './inventory';
 import { ITEMS, TANKS } from './defs';
-import { RECIPES, RECIPE_BY_ID, habitable, insideDome, sealCheck, poweredComponent, telemetry, powerRate, supplyRate, gasRate, roomRate, DOME_CAPACITY, nearby, type Building } from './production';
+import { RECIPES, RECIPE_BY_ID, habitable, insideDome, sealCheck, poweredComponent, telemetry, powerRate, supplyRate, gasRate, roomRate, DOME_CAPACITY, FIBER_EU, GEN_BUFFER, PORT_O2, nearby, type Building } from './production';
 import type { GameState } from './state';
 /**
  * Plain-language state of a station for its window, the aim label and the status lamp.
@@ -34,10 +34,10 @@ export function stationStatus(g: GameState, b: Building): StationStatus {
   case 'biogenerator': {
    const out = supplyRate(b.id), fiber = countItem(b.input, 'fiber');
    if (out > 0) return { tone: 'ok', title: `Выдаёт ${out.toFixed(0)} EU/с`, hint: `Запас: ${Math.round(b.energy / 1000)} EU, волокна ${fiber}` + (b.fuel ? ` + ${Math.round(b.fuel / 1000)} EU в топке` : '') };
-   if (!fiber && !b.fuel && b.energy < 1000) return { tone: 'warn', title: 'Нет топлива', hint: 'Загрузите растительное волокно: 1 волокно = 200 EU.' };
+   if (!fiber && !b.fuel && b.energy < 1000) return { tone: 'warn', title: 'Нет топлива', hint: `Загрузите растительное волокно: 1 волокно = ${FIBER_EU / 1000} EU.` };
    if (!g.world.base.links.some(l => l.kind === 'cable' && (l.from === b.id || l.to === b.id))) return { tone: 'idle', title: 'Не подключён', hint: 'Протяните кабель к станциям, которым нужна энергия.' };
    if (roomOf(g, b)) return { tone: 'warn', title: 'Внутри купола', hint: 'Горение внутри купола запрещено — перенесите генератор наружу.' };
-   return { tone: 'idle', title: 'Ожидает нагрузку', hint: `Запас ${Math.round(b.energy / 1000)} / 400 EU · волокна ${fiber}` };
+   return { tone: 'idle', title: 'Ожидает нагрузку', hint: `Запас ${Math.round(b.energy / 1000)} / ${GEN_BUFFER / 1000} EU · волокна ${fiber}` };
   }
   case 'electrolyzer': {
    const water = (b.input[0]?.itemId === 'water' ? b.input[0].count : 0) + b.water / 1000, tank = b.input[1];
@@ -54,7 +54,7 @@ export function stationStatus(g: GameState, b: Building): StationStatus {
    const piped = g.world.base.links.some(l => l.kind === 'gas_pipe' && l.to === b.id);
    if (!piped && b.oxygen <= 0) return { tone: 'warn', title: 'Нет подачи O₂', hint: 'Протяните трубу от генератора кислорода.' };
    if (!hasPower(g, b)) return { tone: 'warn', title: 'Нет питания', hint: 'Заправка расходует 2 EU/с — подключите кабель.' };
-   return { tone: b.oxygen > 0 ? 'idle' : 'warn', title: b.oxygen > 0 ? 'Готова к заправке' : 'Буфер пуст', hint: `В буфере ${Math.round(b.oxygen / 1000)} / 480 GU` };
+   return { tone: b.oxygen > 0 ? 'idle' : 'warn', title: b.oxygen > 0 ? 'Готова к заправке' : 'Буфер пуст', hint: `В буфере ${Math.round(b.oxygen / 1000)} / ${PORT_O2 / 1000} GU` };
   }
   case 'distributor': {
    const room = roomOf(g, b), flow = gasRate(b.id);

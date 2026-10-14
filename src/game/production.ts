@@ -10,6 +10,8 @@ export const RECIPES: Recipe[] = catalog.recipes as unknown as Recipe[];
 export const RECIPE_BY_ID = new Map(RECIPES.map(r => [r.id, r]));
 // Import-only recipe: finish old paid melts without giving the old operation a new UI entry.
 RECIPE_BY_ID.set('legacy_melt',{id:'legacy_melt',station:'electrolyzer',inputs:{ice:1},outputs:{water:1},seconds:2,EU_per_second:6});
+/** Oxygen of one electrolysis batch (1 WU) in milli-GU, straight from the catalog recipe (D30: 500 GU). */
+export const O2_PER_WU = RECIPE_BY_ID.get('electrolysis')!.outputs.oxygen * 1000;
 /** `repeat` more identical batches follow this one while inputs last (S3 batch crafting). */
 export type Job = { recipeId: string; workMs: number; reserved: ItemStack[]; water: number; repeat: number };
 export const MAX_REPEAT = 99;
@@ -21,6 +23,9 @@ export const freshBase = (): BaseState => ({ buildings: [], links: [], nextId: 1
 export const machine = (g: GameState, id: string) => g.world.base.buildings.find(b => b.id === id);
 export const DOME_VOLUME = 48;
 export const DOME_CAPACITY = 960000;
+/** Buffers in milli-units (D30, S4): generator 2000 EU and 300 EU per fiber, electrolyzer 2000 GU; refill and
+ * distributor ports keep 480 GU; the capsule holds 2400 GU. */
+export const GEN_BUFFER = 2000000, FIBER_EU = 300000, ELECTROLYZER_O2 = 2000000, PORT_O2 = 480000, CAPSULE_CAPACITY = 2400000;
 export const endpoint = (g: GameState, id: string) => id === 'capsule' ? { x: 40, y: heightAt(40,40)+.14, z: 40 } : machine(g, id);
 /** A line is paid per started 4 m segment (SYSTEMS §6) and may chain up to LINK_RANGE. */
 export const SEGMENT = 4, LINK_RANGE = 12;
@@ -119,7 +124,7 @@ export function startJob(g: GameState, recipeId: string, id = 'hand', buffered =
  }
  for (const [item,n] of Object.entries(r.inputs)) if (item === 'water' && (b?.water??0)>=n*1000 ? false : countItem(inv,item)<n) return 'Не хватает: '+(ITEMS[item]?.name ?? 'Вода');
  if (r.id === 'legacy_melt' && b!.water > 19000) return 'Буфер воды полон';
- if (r.id === 'electrolysis' && b!.oxygen > 240000) return 'Буфер O₂ полон';
+ if (r.id === 'electrolysis' && b!.oxygen > ELECTROLYZER_O2 - O2_PER_WU) return 'Буфер O₂ полон';
  const reserved: ItemStack[] = [];
  for (const [item,n] of Object.entries(r.inputs)) if (item !== 'water'||(b?.water??0)<n*1000) { removeItems(inv,item,n); reserved.push({itemId:item,count:n}); } else b!.water-=n*1000;
  if(dedicated)b!.input.splice(0,2,...inv);
@@ -293,17 +298,17 @@ export function productionTick(g: GameState, ms: number, refillId: string | null
  const bottleNeed=(b:Building)=>b.kind==='electrolyzer'&&b.enabled&&b.input[1]&&TANKS[b.input[1].itemId]?Math.min(b.oxygen,20*ms,TANKS[b.input[1].itemId].capacity-(b.input[1].milliGU??0))/10:0;
  for(const b of base.buildings)if(hasQueue(b)&&b.enabled&&!b.job&&b.queue.length&&!startJob(g,b.queue[0],b.id,true)){b.queue.shift();changed=true;}const power=new Map<string,number>();
  for(const b of base.buildings)if(b.enabled&&!b.job){const r=b.kind==='kiln'?RECIPES.find(r=>r.station==='kiln'&&Object.entries(r.inputs).every(([id,n])=>{const s=b.input[id==='fiber'?1:0];return s?.itemId===id&&s.count>=n;})):b.kind==='electrolyzer'?RECIPE_BY_ID.get('electrolysis'):undefined;if(r&&!startJob(g,r.id,b.id,true))changed=true;}
- // A running outside generator may charge its finite 400 EU buffer. Fiber is paid per 200 EU.
+ // A running outside generator may charge its finite GEN_BUFFER (2000 EU). Fiber is paid per FIBER_EU (300 EU).
  for(const b of base.buildings)if(b.kind==='biogenerator'&&b.enabled&&!base.buildings.some(d=>insideDome(d,b.x,b.y,b.z))){
-  let demand=Math.min(40*ms,400000-b.energy);
-  while(demand>0){if(!b.fuel){if(!removeItems(b.input,'fiber',1))break;b.fuel=200000;}const n=Math.min(demand,b.fuel);b.fuel-=n;b.energy+=n;demand-=n;}
+  let demand=Math.min(40*ms,GEN_BUFFER-b.energy);
+  while(demand>0){if(!b.fuel){if(!removeItems(b.input,'fiber',1))break;b.fuel=FIBER_EU;}const n=Math.min(demand,b.fuel);b.fuel-=n;b.energy+=n;demand-=n;}
  }
  const tankDemand=new Map(base.buildings.map(b=>[b.id,Math.ceil(bottleNeed(b))]));
  const seen=new Set<string>();
  for(const root of base.buildings){if(seen.has(root.id))continue;const ids=poweredComponent(g,root.id);ids.forEach(id=>seen.add(id));const group=base.buildings.filter(b=>ids.has(b.id));
   for(const e of group)if(e.kind==='electrolyzer'){
-   const targets=base.links.filter(l=>l.kind==='gas_pipe'&&l.from===e.id).map(l=>l.to);let reserve=e.oxygen,capacity=480000;const rooms=new Set<string>();
-   for(const id of new Set(targets)){if(id==='capsule'){reserve+=g.world.capsuleMilliGU;capacity+=2400000;}else{const b=machine(g,id)!;reserve+=b.oxygen;capacity+=480000;if(b.kind==='distributor')for(const d of base.buildings)if(insideDome(d,b.x,b.y,b.z))rooms.add(d.id);}}
+   const targets=base.links.filter(l=>l.kind==='gas_pipe'&&l.from===e.id).map(l=>l.to);let reserve=e.oxygen,capacity=ELECTROLYZER_O2;const rooms=new Set<string>();
+   for(const id of new Set(targets)){if(id==='capsule'){reserve+=g.world.capsuleMilliGU;capacity+=CAPSULE_CAPACITY;}else{const b=machine(g,id)!;reserve+=b.oxygen;capacity+=PORT_O2;if(b.kind==='distributor')for(const d of base.buildings)if(insideDome(d,b.x,b.y,b.z))rooms.add(d.id);}}
    for(const id of rooms){reserve+=machine(g,id)!.zone.q;capacity+=DOME_CAPACITY;}
    if(reserve/capacity>=.8)e.lowPriority=true;else if(reserve/capacity<.5)e.lowPriority=false;
   }
@@ -315,12 +320,12 @@ export function productionTick(g: GameState, ms: number, refillId: string | null
  }
  for(const [id,n] of power)if(n>0)telemetry.power.set(id,n);
  if([...power.values()].some(n=>n>0))changed=recordQuestFact(g,'system:power')||changed;
- const finish=(job:Job,slots:Slot[],b?:Building)=>{const r=RECIPE_BY_ID.get(job.recipeId)!;if(job.workMs<r.seconds*1000)return false;if(r.id==='legacy_melt'){if(b!.water>19000)return false;b!.water+=1000;}else if(r.id==='electrolysis'){if(b!.oxygen>240000)return false;b!.oxygen+=240000;}else if(b?.kind==='kiln'){const output=[b.output[0]];if(!insert(output,outputSlots(r)))return false;b.output[0]=output[0];}else if(!insert(slots,outputSlots(r)))return false;recordQuestFact(g,'craft:'+(r.id==='legacy_melt'?'melt_in_generator':r.id));for(const id of Object.keys(r.outputs))if(Object.hasOwn(ITEMS,id))recordQuestFact(g,'item:'+id);if(b?.kind==='workbench'&&b.level===2&&!nearby(g,b)){recordQuestFact(g,'system:auto');if(g.world.base.buildings.some(habitable))recordQuestFact(g,'system:base');}changed=true;return true;};
+ const finish=(job:Job,slots:Slot[],b?:Building)=>{const r=RECIPE_BY_ID.get(job.recipeId)!;if(job.workMs<r.seconds*1000)return false;if(r.id==='legacy_melt'){if(b!.water>19000)return false;b!.water+=1000;}else if(r.id==='electrolysis'){if(b!.oxygen>ELECTROLYZER_O2-O2_PER_WU)return false;b!.oxygen+=O2_PER_WU;}else if(b?.kind==='kiln'){const output=[b.output[0]];if(!insert(output,outputSlots(r)))return false;b.output[0]=output[0];}else if(!insert(slots,outputSlots(r)))return false;recordQuestFact(g,'craft:'+(r.id==='legacy_melt'?'melt_in_generator':r.id));for(const id of Object.keys(r.outputs))if(Object.hasOwn(ITEMS,id))recordQuestFact(g,'item:'+id);if(b?.kind==='workbench'&&b.level===2&&!nearby(g,b)){recordQuestFact(g,'system:auto');if(g.world.base.buildings.some(habitable))recordQuestFact(g,'system:base');}changed=true;return true;};
  if(base.hand){base.hand.workMs=Math.min(base.hand.workMs+ms,RECIPE_BY_ID.get(base.hand.recipeId)!.seconds*1000);if(finish(base.hand,g.player.inventory)){const {repeat,recipeId}=base.hand;base.hand=null;if(repeat>0&&!startJob(g,recipeId,'hand'))base.hand!.repeat=repeat-1;}}
  const manual=base.hand?undefined:manualWork(g);
  for(const b of base.buildings)if(b.job&&b.enabled){const r=RECIPE_BY_ID.get(b.job.recipeId)!,rate=energyRate(b,r);if(b.kind==='workbench'&&b.level===1&&b!==manual&&b.job.workMs<r.seconds*1000)continue;b.job.workMs=Math.min(r.seconds*1000,b.job.workMs+(rate?Math.max(0,(power.get(b.id)??0)-(tankDemand.get(b.id)??0))/rate:ms));if(finish(b.job,b.output,b)){const {repeat,recipeId}=b.job;b.job=null;if(repeat>0&&b.kind==='workbench'){if(nearby(g,b))loadRecipeInputs(g,recipeId,b.id);if(!startJob(g,recipeId,b.id,true))b.job!.repeat=repeat-1;}}}
  for(const b of base.buildings){const t=b.input[1],need=(tankDemand.get(b.id)??0);if(need>0&&t){const n=Math.min(need*10,(power.get(b.id)??0)*10,b.oxygen,TANKS[t.itemId].capacity-(t.milliGU??0));b.oxygen-=n;t.milliGU=(t.milliGU??0)+n;if(n>0){changed=recordQuestFact(g,'system:refill')||changed;}}}
- for(const l of base.links)if(l.kind==='gas_pipe'){const a=machine(g,l.from)!,b=machine(g,l.to),cap=b?480000:2400000,stored=b?b.oxygen:g.world.capsuleMilliGU;const mounted=a.input[1],reserved=mounted&&TANKS[mounted.itemId]?TANKS[mounted.itemId].capacity-(mounted.milliGU??0):0;const n=Math.min(Math.max(0,a.oxygen-reserved),cap-stored,40*ms);a.oxygen-=n;if(b)b.oxygen+=n;else g.world.capsuleMilliGU+=n;if(n>0)telemetry.gas.set(l.id,n);}
+ for(const l of base.links)if(l.kind==='gas_pipe'){const a=machine(g,l.from)!,b=machine(g,l.to),cap=b?PORT_O2:CAPSULE_CAPACITY,stored=b?b.oxygen:g.world.capsuleMilliGU;const mounted=a.input[1],reserved=mounted&&TANKS[mounted.itemId]?TANKS[mounted.itemId].capacity-(mounted.milliGU??0):0;const n=Math.min(Math.max(0,a.oxygen-reserved),cap-stored,40*ms);a.oxygen-=n;if(b)b.oxygen+=n;else g.world.capsuleMilliGU+=n;if(n>0)telemetry.gas.set(l.id,n);}
  for(const b of base.buildings)if(b.kind==='dome'){
   const sealed=sealCheck(b.zone.shell).sealed,occupied=insideDome(b,g.player.x,g.player.y,g.player.z);
   const installed=base.buildings.filter(d=>d.kind==='distributor'&&insideDome(b,d.x,d.y,d.z)),distributors=installed.filter(d=>d.enabled);

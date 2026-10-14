@@ -1,4 +1,4 @@
-import { breathingDome, machine, DOME_CAPACITY } from './production';
+import { breathingDome, machine, DOME_CAPACITY, CAPSULE_CAPACITY } from './production';
 import { TANKS } from './defs';
 import { emptyInventory, removeItems, type Slot } from './inventory';
 import { oxygenGU, oxygenCapacityGU, wornParts } from './backpack';
@@ -6,7 +6,7 @@ import { dropItems } from './mining';
 import { freshSurvival, SPAWN_POSE, type GameState } from './state';
 
 export type SurvivalEvent = 'none' | 'warning' | 'damage' | 'death' | 'ate';
-export const CAPSULE_CAPACITY = 2400000;
+export { CAPSULE_CAPACITY };
 export const EMERGENCY_MS = 90000;
 const TIMER_MAX = 86400000;
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));

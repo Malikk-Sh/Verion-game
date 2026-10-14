@@ -6,7 +6,7 @@ import {newGame,cloneState,sanitizeState} from '../src/game/state.ts';
 import {addItems,countItem} from '../src/game/inventory.ts';
 import {mineTick,ticksFor,type Mining} from '../src/game/mining.ts';
 import {NODES} from '../src/game/resources.ts';
-import {RECIPES,RECIPE_BY_ID,makeBuilding,startJob,cancelJob,productionTick,collectOutput,queueJob,clearQueue,loadFuel,connect,sealCheck,domeFaces,habitable,beginPassage,releaseHandOnDeath,upgradeBuilding} from '../src/game/production.ts';
+import {RECIPES,RECIPE_BY_ID,makeBuilding,startJob,cancelJob,productionTick,collectOutput,queueJob,clearQueue,loadFuel,connect,sealCheck,domeFaces,habitable,beginPassage,releaseHandOnDeath,upgradeBuilding,ELECTROLYZER_O2,GEN_BUFFER,FIBER_EU,PORT_O2,O2_PER_WU} from '../src/game/production.ts';
 import {survivalTick,refillFromCapsule,loseCargo,accessibleOxygen} from '../src/game/survival.ts';
 import {place,placementProblem} from '../src/buildings.ts';
 import {heightAt,makeColliders} from '../src/world.ts';
@@ -39,7 +39,8 @@ test('Queued machine resources stay in normal buffers; only active inputs are re
 });
 test('Kiln water is paid with fuel and portable; electrolysis requires connected power',()=>{
  const g=fresh(),k=makeBuilding(g,'kiln',44,0,40),gen=makeBuilding(g,'biogenerator',44,0,42),e=makeBuilding(g,'electrolyzer',46,0,42);near(g,k);addItems(g.player.inventory,'ice',1);addItems(g.player.inventory,'fiber',1);assert.equal(startJob(g,'melt_in_generator',k.id),'');advance(g,2000);collectOutput(g,k.id);assert.equal(countItem(g.player.inventory,'water'),1);near(g,e);assert.equal(startJob(g,'electrolysis',e.id),'');advance(g,1000);assert.equal(e.job!.workMs,0);
- addItems(g.player.inventory,'fiber',1);loadFuel(g,gen.id);advance(g,10000);assert.equal(e.job!.workMs,0);addItems(g.player.inventory,'cable',1);assert.equal(connect(g,'cable',gen.id,e.id),'');advance(g,10000);assert.equal(e.oxygen,240000);assert.equal(e.job,null);assert.equal(gen.energy+gen.fuel,80000);
+ addItems(g.player.inventory,'fiber',1);loadFuel(g,gen.id);advance(g,10000);assert.equal(e.job!.workMs,0);addItems(g.player.inventory,'cable',1);assert.equal(connect(g,'cable',gen.id,e.id),'');advance(g,10000);assert.equal(O2_PER_WU,500000);assert.equal(e.oxygen,500000);assert.equal(e.job,null);// D30: one fiber gives 300 EU, electrolysis of 1 WU spends 120 EU.
+ assert.equal(gen.energy+gen.fuel,180000);
 });
 test('Two consumers share one finite power budget; disconnect and pause cannot invent work',()=>{
  const g=fresh(),gen=makeBuilding(g,'biogenerator',44,0,40),a=makeBuilding(g,'electrolyzer',46,0,40),b=makeBuilding(g,'electrolyzer',44,0,42);gen.energy=6000;for(const e of [a,b]){near(g,e);e.water=1000;startJob(g,'electrolysis',e.id);addItems(g.player.inventory,'cable',1);connect(g,'cable',gen.id,e.id);}advance(g,1000);assert.equal(a.job!.workMs+b.job!.workMs,500);assert.equal(gen.energy,0);const before=cloneState(g);advance(g,1000);assert.equal(a.job!.workMs,before.world.base.buildings[1].job!.workMs);
@@ -95,9 +96,9 @@ test('Capsule manual supply fills both installed tanks with one conserved 20 GU/
 test('A saturated electrical network respects 40 EU/s per source and oxygen priority hysteresis',()=>{
  const g=fresh(),gen=makeBuilding(g,'biogenerator',44,0,38),dome=makeBuilding(g,'dome',48,0,40),dist=makeBuilding(g,'distributor',47,0,40);gen.energy=400000;
  addItems(g.player.inventory,'cable',5);assert.equal(connect(g,'cable',gen.id,dist.id),'');
- for(const [x,z] of [[44,40],[46,38],[42,38],[44,36]]){const e=makeBuilding(g,'electrolyzer',x,0,z);near(g,e);e.water=1000;startJob(g,'electrolysis',e.id);e.oxygen=400000;assert.equal(connect(g,'cable',gen.id,e.id),'');}
+ for(const [x,z] of [[44,40],[46,38],[42,38],[44,36]]){const e=makeBuilding(g,'electrolyzer',x,0,z);near(g,e);e.water=1000;startJob(g,'electrolysis',e.id);e.oxygen=ELECTROLYZER_O2*.85;assert.equal(connect(g,'cable',gen.id,e.id),'');}
  advance(g,1000);assert.equal(gen.energy,360000);assert.ok(Math.abs(dome.zone.purity-1/30)<1e-9,'life support receives its full priority budget');
- const es=g.world.base.buildings.filter(b=>b.kind==='electrolyzer');assert.ok(es.every(b=>b.lowPriority));es[0].oxygen=270000;advance(g,50);assert.equal(es[0].lowPriority,true,'50–80% keeps the previous class');es[0].oxygen=100000;advance(g,50);assert.equal(es[0].lowPriority,false);
+ const es=g.world.base.buildings.filter(b=>b.kind==='electrolyzer');assert.ok(es.every(b=>b.lowPriority));es[0].oxygen=ELECTROLYZER_O2*.65;advance(g,50);assert.equal(es[0].lowPriority,true,'50–80% keeps the previous class');es[0].oxygen=ELECTROLYZER_O2*.25;advance(g,50);assert.equal(es[0].lowPriority,false,'the band is relative to the 2000 GU electrolyzer buffer');
 });
 
 
@@ -113,4 +114,13 @@ test('Production has its own state version: old saves migrate, corrupt current s
  const g=fresh();assert.equal(g.meta.stateVersion,7);const old:any=cloneState(g);old.meta.stateVersion=2;delete old.world.base;delete old.world.nodes['grass-a'];delete old.world.nodes['grass-b'];delete old.world.nodes['sand-a'];old.world.capsuleMilliGU=12345;old.player.survival.emergencyMs=1234;
  const migrated=sanitizeState(old);assert.equal(migrated.meta.stateVersion,7);assert.equal(migrated.world.capsuleMilliGU,12345);assert.equal(migrated.player.survival.emergencyMs,1234);assert.equal(migrated.world.base.buildings.length,0);
  const corrupt:any=cloneState(g);delete corrupt.world.capsuleMilliGU;assert.throws(()=>sanitizeState(corrupt),/capsuleMilliGU/);delete corrupt.world.base;assert.throws(()=>sanitizeState(corrupt),/world.base/);
+});
+test('D30 buffers: a full 2000 EU generator, a lit 300 EU fiber and a full 2000 GU electrolyzer survive saving; ports stay 480 GU',()=>{
+ assert.deepEqual([GEN_BUFFER,FIBER_EU,ELECTROLYZER_O2,PORT_O2],[2000000,300000,2000000,480000]);
+ const g=fresh(),gen=makeBuilding(g,'biogenerator',44,0,40),e=makeBuilding(g,'electrolyzer',46,0,40),r=makeBuilding(g,'refill',44,0,42),d=makeBuilding(g,'distributor',46,0,42);
+ gen.energy=GEN_BUFFER;gen.fuel=FIBER_EU;e.oxygen=ELECTROLYZER_O2;r.oxygen=PORT_O2;d.oxygen=PORT_O2;assert.deepEqual(sanitizeState(g),g);
+ for(const [b,key,v] of [[gen,'energy',GEN_BUFFER+1],[gen,'fuel',FIBER_EU+1],[e,'oxygen',ELECTROLYZER_O2+1],[r,'oxygen',PORT_O2+1],[d,'oxygen',PORT_O2+1]] as const){const bad:any=cloneState(g);bad.world.base.buildings.find((v:any)=>v.id===b.id)[key]=v;assert.throws(()=>sanitizeState(bad),/число вне/,b.kind+'.'+key);}
+ // A fiber burns into the buffer only up to 2000 EU; the electrolyzer starts a batch only while 500 GU still fit.
+ gen.energy=0;gen.fuel=0;addItems(gen.input,'fiber',10);advance(g,60000);assert.equal(gen.energy,GEN_BUFFER);assert.equal(countItem(gen.input,'fiber')*FIBER_EU+gen.fuel+gen.energy,10*FIBER_EU);
+ near(g,e);e.water=2000;e.oxygen=ELECTROLYZER_O2-O2_PER_WU+1;assert.equal(startJob(g,'electrolysis',e.id),'Буфер O₂ полон');e.oxygen=ELECTROLYZER_O2-O2_PER_WU;assert.equal(startJob(g,'electrolysis',e.id),'');
 });

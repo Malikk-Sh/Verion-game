@@ -308,7 +308,7 @@ C('refinery','fabricator',{'steel':6,'iron':4,'motor':1,'circuit':1},tech='steel
 C('oil_pump','fabricator',{'steel':4,'motor':1,'copper':2},tech='steel')
 C('oil_generator','fabricator',{'steel':6,'motor':2,'circuit':1},tech='steel')
 C('hydrogen_collector','fabricator',{'steel':4,'velite':4,'gas_tank':1,'circuit_adv':1},tech='velite')
-R('electrolysis','electrolyzer',{'water':1},{'oxygen':240,'hydrogen':480},10,12,'power',note='H₂ автоматически сбрасывается до установки модуля сбора; воду и газы учитывать разными игровыми единицами.')
+R('electrolysis','electrolyzer',{'water':1},{'oxygen':500,'hydrogen':1000},10,12,'power',note='H₂ автоматически сбрасывается до установки модуля сбора; воду и газы учитывать разными игровыми единицами.')
 R('melt_in_generator','kiln',{'ice':1,'fiber':1},{'water':1},2,0,'start',note='1 переносимая единица воды = 1 WU; слот сырья и слот топлива.')
 R('melt_bulk','ice_melter',{'ice':4},{'water':4},4,20,'steel')
 R('extract_co2','gas_extractor',{'carbonate':1},{'co2':40,'mineral_residue':1},10,30,'steel')

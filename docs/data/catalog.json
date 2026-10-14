@@ -3982,8 +3982,8 @@
         "water": 1
       },
       "outputs": {
-        "oxygen": 240,
-        "hydrogen": 480
+        "oxygen": 500,
+        "hydrogen": 1000
       },
       "seconds": 10,
       "EU_per_second": 12,
