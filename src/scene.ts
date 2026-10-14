@@ -5,7 +5,9 @@ import { chiseledRock, oreOutcrop } from './rocks';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { fbm, ridged, noise2 } from './noise';
 import { groundTextures, hullTextures, gratingTexture, consoleScreen, panelTexture } from './textures';
-import { createSky, createDust } from './sky';
+import { createSky, createMotes } from './sky';
+import { Wind } from './wind';
+import { reducedMotion } from './motion';
 import { Terrain, createShadeBaker, useBakedShade } from './terrain';
 import { CYCLE_S, nightAmount, sunDirection } from './game/daycycle';
 import { PATCH_NODES, SHARED_PATCH_SPLIT } from './game/resources';
@@ -25,7 +27,7 @@ export function outerHeight(x:number,z:number){
 export const HULL_RING=[[-1.86,3],[1.86,3],[2.5,2.34],[2.5,-2.34],[1.86,-3],[-1.86,-3],[-2.5,-2.34],[-2.5,2.34]];
 export const HULL_U=(()=>{const len=HULL_RING.map((a,i)=>{const b=HULL_RING[(i+1)%8];return Math.hypot(b[0]-a[0],b[1]-a[1]);}),total=len.reduce((x,y)=>x+y,0);let u=0;return len.map(l=>{const r=[u/total,(u+l)/total,l] as [number,number,number];u+=l;return r;});})();
 
-export function createWorld(scene:THREE.Scene){
+export function createWorld(scene:THREE.Scene,wind=new Wind()){
  const lowDecoration:THREE.Object3D[]=[];
  const rng=random(558),dummy=new THREE.Object3D(),color=new THREE.Color();
  const cache=new Map<string,THREE.MeshStandardMaterial>();
@@ -92,6 +94,8 @@ export function createWorld(scene:THREE.Scene){
   out.multiplyScalar(.93+noise2(x*.7,z*.7,19)*.07);
   return out;
  };
+ /** Ground colour under a point (dust from footsteps and landings takes it on). */
+ function groundColorAt(x:number,z:number,out=new THREE.Color()){const e=1,h=heightAt(x,z),sx=(heightAt(x+e,z)-heightAt(x-e,z))/(2*e),sz=(heightAt(x,z+e)-heightAt(x,z-e))/(2*e);return groundColor(x,z,h,1-1/Math.hypot(sx,1,sz),out);}
  const bakeUniforms={uBake:{value:null as unknown as THREE.Texture},uBake2:{value:null as unknown as THREE.Texture},uBakeMix:{value:0},uBakeMin:{value:new THREE.Vector2()},uBakeSize:{value:new THREE.Vector2(1,1)},uBakeAmount:{value:1}};
  useBakedShade(terrainMat,bakeUniforms,antiTile);
  const terrain=new Terrain(terrainMat,groundColor);scene.add(terrain.group);
@@ -378,7 +382,7 @@ export function createWorld(scene:THREE.Scene){
  }
 
  // ---------- Local vegetation: low rosettes, 5–9 folded leaves, swaying in the wind ----------
- const windUniform={value:0};
+ const windUniform={value:0},windDir={value:new THREE.Vector2(1,0)},windGust={value:.55};
  {
   const gv:number[]=[],gc:number[]=[],gs:number[]=[],leaves=8,segs=4,base=new THREE.Color('#3c4a39'),mid=new THREE.Color('#6d7c5d'),tip=new THREE.Color('#b8ae80');
   for(let l=0;l<leaves;l++){
@@ -395,8 +399,14 @@ export function createWorld(scene:THREE.Scene){
   }
   const g=surface(gv);g.setAttribute('color',new THREE.Float32BufferAttribute(gc,3));g.setAttribute('sway',new THREE.Float32BufferAttribute(gs,1));
   const m=new THREE.MeshStandardMaterial({vertexColors:true,side:THREE.DoubleSide,roughness:.82});
-  const grassMat=m;grassMat.onBeforeCompile=s=>{s.uniforms.uWind=windUniform;s.vertexShader='attribute float sway;uniform float uWind;\n'+s.vertexShader.replace('#include <begin_vertex>',`#include <begin_vertex>
-   vec3 ip=instanceMatrix[3].xyz;float w=sway*sway;transformed.x+=sin(uWind*1.6+ip.x*.35+ip.z*.2)*.07*w;transformed.z+=cos(uWind*1.2+ip.x*.2)*.05*w;`);};
+  // S4: the bend is a world-space vector along the shared wind (moved into each tuft's rotated, scaled frame),
+  // with a wave travelling downwind across the meadow and a gust-driven flutter.
+  const grassMat=m;grassMat.onBeforeCompile=s=>{Object.assign(s.uniforms,{uWind:windUniform,uWindDir:windDir,uGust:windGust});s.vertexShader='attribute float sway;uniform float uWind,uGust;uniform vec2 uWindDir;\n'+s.vertexShader.replace('#include <begin_vertex>',`#include <begin_vertex>
+   vec3 ip=instanceMatrix[3].xyz;float w=sway*sway;float wave=uWind*1.8-dot(ip.xz,uWindDir)*.3;
+   float bend=(.3+.7*uGust)*(.6+.4*sin(wave))+.18*uGust*sin(uWind*5.1+ip.x*1.7+ip.z*1.3);
+   vec2 side=vec2(-uWindDir.y,uWindDir.x)*sin(uWind*2.3+ip.z*.8+ip.x*.3)*.025;
+   vec3 wd=vec3(uWindDir.x*bend*.13+side.x,-.05*bend,uWindDir.y*bend*.13+side.y)*w;
+   mat3 sw=mat3(instanceMatrix);transformed+=transpose(sw)*wd/dot(sw[0],sw[0]);`);};
   useBakedShade(grassMat,bakeUniforms,grassMat.onBeforeCompile);
   const inst=new THREE.InstancedMesh(g,m,GRASS.length);
   GRASS.forEach((p,i)=>{dummy.position.set(p.x,heightAt(p.x,p.z)-.02,p.z);dummy.scale.setScalar(p.s*1.35);dummy.rotation.set(0,p.rotation,0);dummy.updateMatrix();inst.setMatrixAt(i,dummy.matrix);inst.setColorAt(i,color.setHSL(.2+rng()*.06,.12+rng()*.1,.62+rng()*.3));});
@@ -409,7 +419,7 @@ export function createWorld(scene:THREE.Scene){
 
  // ---------- Sky, light, fog, atmosphere ----------
  const sky=createSky();scene.add(sky.mesh);
- const dust=createDust(260);scene.add(dust.points);
+ const motes=createMotes();scene.add(motes.mesh);
  const hemi=new THREE.HemisphereLight('#bcd3dc','#8a7358',1.15);scene.add(hemi);
  const sun=new THREE.DirectionalLight('#ffd9a8',3.4);sun.castShadow=true;scene.add(sun,sun.target);
  const sc=sun.shadow.camera;sc.left=-42;sc.right=42;sc.top=42;sc.bottom=-42;sc.near=1;sc.far=260;sun.shadow.bias=-.00008;sun.shadow.normalBias=.08;sun.shadow.radius=1.5;sun.shadow.autoUpdate=false;sun.shadow.needsUpdate=true;
@@ -418,8 +428,8 @@ export function createWorld(scene:THREE.Scene){
  const doorLight=new THREE.PointLight('#ffb870',9,13,1.7);doorLight.position.set(40,cy(1.8),43.8);scene.add(doorLight);lights.add(doorLight,LIGHT_PRIORITY.door);
  const interior=new THREE.PointLight('#ffd3a0',3.2,6.5,1.6);interior.position.set(40,cy(3.3),39.8);scene.add(interior);lights.add(interior,LIGHT_PRIORITY.interior);
  const fog=new THREE.FogExp2(lin(.8,.68,.53),.0022);scene.fog=fog;
- const D={sun:new THREE.Color('#ffd9a8'),hemiSky:new THREE.Color('#bcd3dc'),hemiGround:new THREE.Color('#8a7358'),fog:lin(.8,.68,.53),dust:new THREE.Color('#fff1d6')};
- const N={sun:new THREE.Color('#8fa9d6'),hemiSky:new THREE.Color('#5f7896'),hemiGround:new THREE.Color('#2b2f36'),fog:lin(.07,.1,.15),dust:new THREE.Color('#a9c4e6')};
+ const D={sun:new THREE.Color('#ffd9a8'),hemiSky:new THREE.Color('#bcd3dc'),hemiGround:new THREE.Color('#8a7358'),fog:lin(.8,.68,.53),dust:new THREE.Color('#f6e2bd')};
+ const N={sun:new THREE.Color('#8fa9d6'),hemiSky:new THREE.Color('#5f7896'),hemiGround:new THREE.Color('#2b2f36'),fog:lin(.07,.1,.15),dust:new THREE.Color('#5d6f86')};
  const moon=new THREE.Vector3(.5,.55,.67).normalize(),sunTrue=new THREE.Vector3(),lightDir=new THREE.Vector3(),lastBake=new THREE.Vector3();
  // Baked terrain/formation shade follows the moving sun: rebuilt a few rows per frame, then cross-faded.
  const baker=createShadeBaker([{x:100,z:103,r:3.2,top:heightAt(100,103)+18},{x:106.5,z:104.2,r:2.6,top:heightAt(106.5,104.2)+14},...[115,120,125,130,135].map(x=>({x,z:72,r:8,top:9.5}))]);
@@ -443,7 +453,7 @@ export function createWorld(scene:THREE.Scene){
   hemi.color.copy(D.hemiSky).lerp(N.hemiSky,v);hemi.groundColor.copy(D.hemiGround).lerp(N.hemiGround,v);hemi.intensity=THREE.MathUtils.lerp(1.15,.6,v);
   bakeUniforms.uBakeAmount.value=1-v;
   fog.color.copy(D.fog).lerp(N.fog,v);fog.density=THREE.MathUtils.lerp(.0022,.0038,v);
-  dust.uniforms.tint.value.copy(D.dust).lerp(N.dust,v);dust.uniforms.opacity.value=THREE.MathUtils.lerp(.28,.22,v);
+  motes.uniforms.uTint.value.copy(D.dust).lerp(N.dust,v);motes.uniforms.uOpacity.value=THREE.MathUtils.lerp(1.25,.6,v);motes.uniforms.uNight.value=v;motes.uniforms.uSun.value.copy(lightDir);
   doorLight.intensity=THREE.MathUtils.lerp(9,16,v);interior.intensity=THREE.MathUtils.lerp(3.2,4.2,v);
   warm.emissiveIntensity=THREE.MathUtils.lerp(2.6,3.4,v);glass.emissiveIntensity=THREE.MathUtils.lerp(.5,1.8,v);
 
@@ -453,7 +463,7 @@ export function createWorld(scene:THREE.Scene){
  function setTime(t:number,instant=false){targetPhase=((t%CYCLE_S)+CYCLE_S)%CYCLE_S;if(instant||phase<0){phase=targetPhase;applyPhase(phase);bakeNow(lightDir);}}
  function setQuality(q:Quality){quality=q;sun.castShadow=q!=='low';const size=q==='high'?2048:1024,ext=q==='high'?60:42;
   if(sun.shadow.mapSize.x!==size||sc.right!==ext){sun.shadow.mapSize.set(size,size);sc.left=sc.bottom=-ext;sc.right=sc.top=ext;sc.updateProjectionMatrix();sun.shadow.map?.dispose();sun.shadow.map=null as unknown as THREE.WebGLRenderTarget;}
-  dust.points.visible=q!=='low';for(const m of lowDecoration)m.visible=q!=='low';terrain.setQuality(q);lights.resize(q==='low'?2:4);shadowAt.set(Infinity,0,0);sun.shadow.needsUpdate=true;const environment=(q==='low'?environments.low:environments.full)[k<.5?0:1];if(environment)scene.environment=environment.texture;}
+  motes.setQuality(q);for(const m of lowDecoration)m.visible=q!=='low';terrain.setQuality(q);lights.resize(q==='low'?2:4);shadowAt.set(Infinity,0,0);sun.shadow.needsUpdate=true;const environment=(q==='low'?environments.low:environments.full)[k<.5?0:1];if(environment)scene.environment=environment.texture;}
  const snapped=new THREE.Vector3(),lx=new THREE.Vector3(),ly=new THREE.Vector3(),up=new THREE.Vector3(0,1,0),center=new THREE.Vector3(),shadowDir=new THREE.Vector3(),shadowCenter=new THREE.Vector3(Infinity,Infinity,Infinity);
  // S4: the shadow map follows its own light direction (updated after a 0.25° turn) and its own centre
  // (moved after 3 m of travel, texel-snapped), so it is redrawn about twice a second, not every frame.
@@ -470,7 +480,11 @@ export function createWorld(scene:THREE.Scene){
  }
  function update(dt:number,camera:THREE.Camera,renderer:THREE.WebGLRenderer,allowMaintenance=true,measure?:(name:string,ms:number)=>void,anchor?:THREE.Vector3){
   let at=performance.now();
-  sky.mesh.position.copy(camera.position);time+=dt;windUniform.value=time;sky.uniforms.time.value=time;dust.uniforms.time.value=time;dust.uniforms.origin.value.copy(camera.position);
+  sky.mesh.position.copy(camera.position);time+=dt;sky.uniforms.time.value=time;
+  // Shared wind (frozen with the scene; still under reduced motion): grass, clouds, motes; fx and audio read it too.
+  wind.update(dt);windUniform.value=wind.time;windDir.value.set(wind.dirX,wind.dirZ);windGust.value=wind.gust;sky.uniforms.cloud.value.set(wind.cloudX,wind.cloudZ);
+  const mu=motes.uniforms;motes.mesh.visible=!reducedMotion();mu.uOffset.value.set(wind.driftX,wind.driftZ);mu.uTime.value=wind.time;mu.uWind.value.set(wind.vx,0,wind.vz);mu.uGust.value=wind.gust;mu.uOrigin.value.copy(camera.position);
+  mu.uPx.value=(camera as THREE.PerspectiveCamera).projectionMatrix.elements[5]*renderer.domElement.height/2;
   if(phase!==targetPhase){const d=wrapS(targetPhase-phase);phase=Math.abs(d)<=Math.max(2,dt*320)?targetPhase:((phase+Math.sign(d)*dt*320)%CYCLE_S+CYCLE_S)%CYCLE_S;applyPhase(phase);}
   // Incremental re-bake when the light has turned by more than ~3° (S4; was 1.5°); then a 1.5 s cross-fade.
   if(fading){bakeUniforms.uBakeMix.value=Math.min(1,bakeUniforms.uBakeMix.value+dt/1.5);if(bakeUniforms.uBakeMix.value>=1){bakeUniforms.uBake.value=bakeUniforms.uBake2.value;bakeUniforms.uBakeMix.value=0;fading=false;}}
@@ -500,5 +514,5 @@ export function createWorld(scene:THREE.Scene){
   measure?.('animation',performance.now()-at);
  }
  setQuality('standard');
- return{setTime,setQuality,prepare,invalidateShadows:()=>{if(!sun.shadow.needsUpdate)shadowRedraws++;sun.shadow.needsUpdate=true;},get shadowRedraws(){return shadowRedraws;},lights,lightRoots,sunLight:sun,hemiLight:hemi,get sunDirection(){return sunTrue;},update,setNodeAmount,nodeGroups,followSky:(_p:THREE.Vector3)=>{},landmarks:LANDMARKS,grassCount:GRASS.length,meshes,terrain,get quality(){return quality;},get nightValue(){return k;}};
+ return{setTime,setQuality,prepare,invalidateShadows:()=>{if(!sun.shadow.needsUpdate)shadowRedraws++;sun.shadow.needsUpdate=true;},get shadowRedraws(){return shadowRedraws;},lights,lightRoots,wind,motes,groundColorAt,sunLight:sun,hemiLight:hemi,get sunDirection(){return sunTrue;},update,setNodeAmount,nodeGroups,followSky:(_p:THREE.Vector3)=>{},landmarks:LANDMARKS,grassCount:GRASS.length,meshes,terrain,get quality(){return quality;},get nightValue(){return k;}};
 }

@@ -24,9 +24,10 @@ export class Ambience {
  suspend(){void this.ctx?.suspend();}
  resume(){if(this.ctx&&this.enabled)void this.ctx.resume();}
  /** inside: 0..1 how enclosed the listener is; night lowers the wind a little. */
- update(dt:number,inside:number,night:number){
+ update(dt:number,inside:number,night:number,sharedGust?:number){
   const c=this.ctx;if(!c)return;this.gustPhase+=dt;
-  const gust=.55+.45*Math.sin(this.gustPhase*.23)*Math.sin(this.gustPhase*.071+1.3);
+  // S4: the shared world wind (wind.ts) drives the gusts when given, so sound, grass and dust agree.
+  const gust=sharedGust??.55+.45*Math.sin(this.gustPhase*.23)*Math.sin(this.gustPhase*.071+1.3);
   const t=c.currentTime,out=1-inside;
   this.windGain.gain.setTargetAtTime((.1+.16*gust)*(.25+.75*out)*(1-night*.25),t,.3);
   this.windFilter.frequency.setTargetAtTime(inside>.5?180:280+gust*520,t,.3);

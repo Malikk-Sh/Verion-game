@@ -3,6 +3,7 @@ import { sceneInterval } from './renderPolicy';
 import { createWorldInteraction } from './worldInteraction';
 import { stationStatus } from './game/stationStatus';
 import { createFx } from './fx';
+import { createFootprints, printAllowed } from './footprints';
 import { reducedMotion } from './motion';
 import { createFeed } from './ui/feed';
 import { packStation } from './game/worldActions';
@@ -62,9 +63,9 @@ function boot(){
  renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1;
  renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFShadowMap;
  const scene=new THREE.Scene();const camera=new THREE.PerspectiveCamera(68,1,.15,1400);
- const fx=createFx(scene),built=createBuildings(scene,fx),interaction=createWorldInteraction(scene,camera);
+ const fx=createFx(scene,{ground:heightAt}),built=createBuildings(scene,fx),interaction=createWorldInteraction(scene,camera);
  const world=createWorld(scene),actor=new Character(boxes),audio=new Ambience(),settings=loadSettings();
- world.lightRoots.push(built.root);
+ world.lightRoots.push(built.root);const prints=createFootprints(scene,heightAt);
  const diagnostics=new Diagnostics(),gl=renderer.getContext(),rendererVersion=String(gl.getParameter(gl.VERSION));
  const gpuExtension=gl.getExtension('WEBGL_debug_renderer_info');
  const deviceInfo={renderer:rendererVersion,gpu:gpuExtension?String(gl.getParameter(gpuExtension.UNMASKED_RENDERER_WEBGL)):'unavailable',cores:navigator.hardwareConcurrency,deviceMemory:(navigator as Navigator&{deviceMemory?:number}).deviceMemory??null,userAgent:navigator.userAgent,parallelShaderCompile:!!gl.getExtension('KHR_parallel_shader_compile'),browserTimings:typeof PerformanceObserver==='undefined'?[]:PerformanceObserver.supportedEntryTypes.filter(t=>['event','longtask','long-animation-frame'].includes(t))};
@@ -96,7 +97,7 @@ function boot(){
 
  // ---------- Settings ----------
  function applyQuality(q:Quality){
-  settings.quality=q;saveSettings(settings);world.setQuality(q);fx.setQuality(q);renderer.shadowMap.enabled=q!=='low';lastRender=-Infinity;diagnostics.event('quality',0,{quality:q});
+  settings.quality=q;saveSettings(settings);world.setQuality(q);fx.setQuality(q);prints.setQuality(q);renderer.shadowMap.enabled=q!=='low';lastRender=-Infinity;diagnostics.event('quality',0,{quality:q});
   renderer.setPixelRatio(q==='high'?Math.min(devicePixelRatio,1.5):q==='low'?.75:1);resize();
   el('quality-label').textContent=QUALITY_LABEL[q];
  }
@@ -407,7 +408,7 @@ function boot(){
   if(!saver.halted)await saver.save();saver.stopHeartbeat();await store.releaseLease(slotId,token).catch(()=>{});saver=null;slotId=null;
  }
  function startGame(state:GameState,id:string|null,revision:number,baseRevision=revision){
-  game=state;refreshQuestProgress(state);questBook.reset();slotId=id;clock.stop();clock.activeTicks=state.meta.activeTicks;mining.nodeId=null;mining.ticks=0;
+  game=state;refreshQuestProgress(state);questBook.reset();prints.clear();slotId=id;clock.stop();clock.activeTicks=state.meta.activeTicks;mining.nodeId=null;mining.ticks=0;
   actor.reset();Object.assign(actor,{x:state.player.x,y:state.player.y,z:state.player.z,yaw:state.player.yaw,pitch:state.player.pitch});actor.previous={x:actor.x,y:actor.y,z:actor.z};lastSurvivalEvent='none';holdMine=holdRefill=false;
   visited.clear();discovered.clear();state.progress.visited.forEach(v=>visited.add(v));state.progress.discovered.forEach(v=>discovered.add(v));selected=LANDMARKS.some(l=>l.id===state.progress.selected)?state.progress.selected:'guide';guideOverride=null;lastCompleted=-1;lastStep=null;lastTaskKey='';
   applyNodes();built.reset();built.sync(state);world.invalidateShadows();syncDrops();hudKey='';updateHotbar();shownDay=null;world.setTime(phaseSeconds(state.meta.activeTicks,state.world.dayOffsetTicks),true);updateDayButton();panels.reset();
@@ -450,7 +451,9 @@ function boot(){
  }
  const feed=createFeed();let shake=0;
  /** Point on a deposit facing the camera: where chips fly from. */
- function nodeHitPoint(id:string){const n=NODE_BY_ID.get(id)!,k=.42+.58*(game?game.world.nodes[id]:n.amount)/n.amount,c=new THREE.Vector3(n.x,heightAt(n.x,n.z)+n.height*k*.55,n.z),d=camera.position.clone().sub(c);d.y*=.4;return c.add(d.normalize().multiplyScalar(n.radius*k*.75));}
+ // S4: `hitNormal` is the struck face's outward direction: chips fly out of it, towards the player.
+ const hitNormal=new THREE.Vector3();
+ function nodeHitPoint(id:string){const n=NODE_BY_ID.get(id)!,k=.42+.58*(game?game.world.nodes[id]:n.amount)/n.amount,c=new THREE.Vector3(n.x,heightAt(n.x,n.z)+n.height*k*.55,n.z),d=camera.position.clone().sub(c);d.y*=.4;hitNormal.copy(d.normalize());return c.add(d.multiplyScalar(n.radius*k*.75));}
  // ---------- Aim: which deposit is under the reticle and within reach ----------
  const nodeCenter=new THREE.Vector3(),toNode=new THREE.Vector3();
  function computeAim(){
@@ -501,7 +504,7 @@ function boot(){
   const n=NODE_BY_ID.get(ev.nodeId)!;audio.tone('item');applyNodes();
   if(ev.toGround){syncDrops();toast('Рюкзак полон',`${itemName(ev.itemId)} оставлена на земле`);}
   else{const inv=game!.player.inventory,cell=inv.slice(0,HOTBAR_SIZE).findIndex(v=>v?.itemId===ev.itemId);feed.add(ev.itemId,ev.toInventory,countItem(inv,ev.itemId),cell>=0?hotCells[cell]:el('inventory-button'));}
-  {const p=nodeHitPoint(n.id);fx.block(p.x,p.y,p.z,n.material);shake=Math.max(shake,.09);}
+  {const p=nodeHitPoint(n.id);fx.block(p.x,p.y,p.z,n.material,hitNormal);shake=Math.max(shake,.09);}
   if(!ev.left){toast('Запас исчерпан',n.name);}
   if(ev.toolBroke){audio.tone('warn');toast('Инструмент сломан',itemName('tool_stone')+' · новый мультитул: 4 камня + 2 волокна в мастерской');}
   hudKey='';updateHotbar();
@@ -628,13 +631,23 @@ function boot(){
   const o=objective();if(o!==lastObjective){lastObjective=o;el('objective-text').textContent=o;const ob=el('objective');ob.classList.remove('advance');void ob.offsetWidth;ob.classList.add('advance');}
   updateVitals();updateHotbar();updateDayButton();
  }
- function state(){const sorted=[...frames].sort((a,b)=>a-b);return {ready:true,version:'S3',linkSource:interaction.source,lastAction,fx:fx.stats(),guide:game?{current:currentStep(game),objective:el('objective-text').textContent,task:el('objective-task').textContent,nav:navTarget(),selected}:null,station:production.station,worldTarget:interaction.target,quests:game?structuredClone(game.progress.quests):null,questBook:questBook.debug(),vitals:game?{...game.player.vitals}:null,survival:game?{...game.player.survival}:null,capsuleMilliGU:game?.world.capsuleMilliGU??0,base:game?structuredClone(game.world.base):null,visibleDrops:dropGroup.children.length,slotId,revision:saver?.revision??0,saveStatus:saver?.status.kind??(game?'none':'idle'),halted:!!saver?.halted,activeTicks:clock.activeTicks,clockRunning:clock.running,hotbar:game?.player.hotbar??0,cells:game?game.player.inventory.map(s=>s?{...s}:null):[],suit:game?Object.fromEntries(Object.entries(game.player.suit).map(([k,v])=>[k,v?.itemId??null])):null,worn:game?wornParts(game):0,bottles:game?game.player.bottles.map(b=>b?{...b}:null):[],oxygenGU:game?oxygenGU(game):0,dayPhase:dayPhase(),dayOffsetTicks:game?.world.dayOffsetTicks??0,nightValue:world.nightValue,action:actionKind,handItem:hand.visible,panel:panels.debug,aimNode,mineRatio,nodes:game?{...game.world.nodes}:null,inventory:game?game.player.inventory.filter(Boolean).map(s=>({...s})):[],drops:game?game.world.drops.length:0,storage:!!store,grassCount:world.grassCount,fullscreen:!!document.fullscreenElement,running,dialog,night:!isDay(dayPhase()),selected,visited:[...visited],activeTime:clock.activeSeconds,position:{x:actor.x,y:actor.y,z:actor.z},yaw:actor.yaw,pitch:actor.pitch,grounded:actor.grounded,input:{...input,joyX,joyY,joyPointer,lookPointer},quality:settings.quality,sound:settings.sound,bob:settings.bob,fov:settings.fov,fineTerrainBlocks:world.terrain.fineBlocks,drawCalls:renderCalls,triangles:renderTriangles,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0,viewport:{width:innerWidth,height:innerHeight},renderer:rendererVersion,diagnostics:diagnostics.enabled,shadowTarget:world.sunLight.target.position.toArray(),shadowRedraws:world.shadowRedraws,pointLights:{pool:world.lights.count,active:world.lights.active,emitters:world.lights.emitters},shadowBias:world.sunLight.shadow.bias};}
+ function state(){const sorted=[...frames].sort((a,b)=>a-b);return {ready:true,version:'S3',linkSource:interaction.source,lastAction,fx:fx.stats(),guide:game?{current:currentStep(game),objective:el('objective-text').textContent,task:el('objective-task').textContent,nav:navTarget(),selected}:null,station:production.station,worldTarget:interaction.target,quests:game?structuredClone(game.progress.quests):null,questBook:questBook.debug(),vitals:game?{...game.player.vitals}:null,survival:game?{...game.player.survival}:null,capsuleMilliGU:game?.world.capsuleMilliGU??0,base:game?structuredClone(game.world.base):null,visibleDrops:dropGroup.children.length,slotId,revision:saver?.revision??0,saveStatus:saver?.status.kind??(game?'none':'idle'),halted:!!saver?.halted,activeTicks:clock.activeTicks,clockRunning:clock.running,hotbar:game?.player.hotbar??0,cells:game?game.player.inventory.map(s=>s?{...s}:null):[],suit:game?Object.fromEntries(Object.entries(game.player.suit).map(([k,v])=>[k,v?.itemId??null])):null,worn:game?wornParts(game):0,bottles:game?game.player.bottles.map(b=>b?{...b}:null):[],oxygenGU:game?oxygenGU(game):0,dayPhase:dayPhase(),dayOffsetTicks:game?.world.dayOffsetTicks??0,nightValue:world.nightValue,action:actionKind,handItem:hand.visible,panel:panels.debug,aimNode,mineRatio,nodes:game?{...game.world.nodes}:null,inventory:game?game.player.inventory.filter(Boolean).map(s=>({...s})):[],drops:game?game.world.drops.length:0,storage:!!store,grassCount:world.grassCount,fullscreen:!!document.fullscreenElement,running,dialog,night:!isDay(dayPhase()),selected,visited:[...visited],activeTime:clock.activeSeconds,position:{x:actor.x,y:actor.y,z:actor.z},yaw:actor.yaw,pitch:actor.pitch,grounded:actor.grounded,input:{...input,joyX,joyY,joyPointer,lookPointer},quality:settings.quality,sound:settings.sound,bob:settings.bob,fov:settings.fov,fineTerrainBlocks:world.terrain.fineBlocks,drawCalls:renderCalls,triangles:renderTriangles,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0,viewport:{width:innerWidth,height:innerHeight},renderer:rendererVersion,diagnostics:diagnostics.enabled,shadowTarget:world.sunLight.target.position.toArray(),shadowRedraws:world.shadowRedraws,footprints:{count:prints.count,visible:prints.visible},motes:world.motes.count,wind:{gust:world.wind.gust,angle:world.wind.angle,time:world.wind.time},pointLights:{pool:world.lights.count,active:world.lights.active,emitters:world.lights.emitters},shadowBias:world.sunLight.shadow.bias};}
  const dev=!!(import.meta as unknown as {env?:{DEV?:boolean}}).env?.DEV;
  Object.defineProperty(window,'__vireon',{value:{getState:state,save:()=>saver?.save(),snapshot:()=>game?snapshot():null,diagnostics:()=>diagnosticReport(),
   // Development-only verification helpers; absent from production builds.
-  ...(dev?{captureFrame:()=>new Promise<string>(resolve=>{if(captureRequested)throw new Error('Capture already pending');captureRequested=resolve;}),setState:(raw:unknown)=>{if(!game)return;const next=sanitizeState(raw);if(next.meta.worldId!==game.meta.worldId)throw new Error('Test state belongs to another world');game=next;Object.assign(actor,{x:next.player.x,y:next.player.y,z:next.player.z,yaw:next.player.yaw,pitch:next.player.pitch});actor.vy=actor.vx=actor.vz=actor.airSpeed=0;actor.grounded=true;actor.previous={x:actor.x,y:actor.y,z:actor.z};clock.activeTicks=next.meta.activeTicks;built.sync(next);world.invalidateShadows();applyNodes();syncDrops();hudKey='';updateUI();updateAimUI();},teleport:(x:number,z:number,yaw:number,pitch=-.2)=>{actor.x=x;actor.z=z;actor.y=heightAt(x,z);actor.yaw=yaw;actor.pitch=pitch;actor.vy=actor.vx=actor.vz=actor.airSpeed=0;actor.grounded=true;actor.previous={x,y:actor.y,z};}}:{})},writable:false});
+  ...(dev?{captureFrame:()=>new Promise<string>(resolve=>{if(captureRequested)throw new Error('Capture already pending');captureRequested=resolve;}),setState:(raw:unknown)=>{if(!game)return;const next=sanitizeState(raw);if(next.meta.worldId!==game.meta.worldId)throw new Error('Test state belongs to another world');game=next;Object.assign(actor,{x:next.player.x,y:next.player.y,z:next.player.z,yaw:next.player.yaw,pitch:next.player.pitch});actor.vy=actor.vx=actor.vz=actor.airSpeed=0;actor.grounded=true;actor.previous={x:actor.x,y:actor.y,z:actor.z};clock.activeTicks=next.meta.activeTicks;built.sync(next);world.invalidateShadows();applyNodes();syncDrops();hudKey='';updateUI();updateAimUI();},teleport:(x:number,z:number,yaw:number,pitch=-.2)=>{prints.clear();actor.x=x;actor.z=z;actor.y=heightAt(x,z);actor.yaw=yaw;actor.pitch=pitch;actor.vy=actor.vx=actor.vz=actor.airSpeed=0;actor.grounded=true;actor.previous={x,y:actor.y,z};}}:{})},writable:false});
 
- let handBobX=0,handBobY=0;
+ let handBobX=0,handBobY=0,airTime=0,foot=1;
+ // S4: boot prints and a puff of the ground's own dust per stride; both feet and a dust ring on landing. Not in the
+ // capsule, on floors or crates (the body is not on the terrain surface) or on steep rock.
+ const groundTint=new THREE.Color();
+ function footstep(run:boolean,landing=false){
+  if(!started||!printAllowed(actor.x,actor.y,actor.z,heightAt,insideCapsule()))return;
+  const yaw=Math.hypot(actor.vx,actor.vz)>.1?Math.atan2(actor.vx,actor.vz):actor.yaw,rx=-Math.cos(yaw),rz=Math.sin(yaw);
+  world.groundColorAt(actor.x,actor.z,groundTint).multiplyScalar(1.12);
+  if(landing){for(const s of [-1,1])prints.add(actor.x+rx*s*.13,actor.z+rz*s*.13,yaw,s);fx.landing(actor.x,actor.y,actor.z,groundTint);return;}
+  foot=-foot;const x=actor.x+rx*foot*.13,z=actor.z+rz*foot*.13;prints.add(x,z,yaw,foot);fx.footDust(x,actor.y,z,groundTint,run,-Math.sin(yaw),-Math.cos(yaw));
+ }
  const draw=(now:number)=>{
   const workStart=diagnostics.stamp();let measured=workStart;
   // The first frame after a hidden tab spans the background time: it is not a freeze and is not recorded.
@@ -646,8 +659,9 @@ function boot(){
   }else{input.forward=input.right=0;input.jump=false;}
   // One accepted clock drives everything: ≤5 fixed 50 ms steps per frame, nothing while paused/hidden.
   const steps=clock.advance(actualFrameMs);let productionChanged=false,regrown=false;
-  for(let i=0;i<steps;i++){const px=actor.x,pz=actor.z;if(game?.world.base.passage){input.forward=input.right=0;input.run=false;input.jump=false;}actor.step(FIXED_DT,input,game?survivalSpeed(game):1);input.jump=false;
-   const moved=Math.hypot(actor.x-px,actor.z-pz);if(actor.grounded&&moved>0){stride+=moved;bob+=moved*(input.run?2.4:2.9);if(stride>(input.run?.82:.68)){stride=0;audio.step(input.run,insideCapsule());}}
+  for(let i=0;i<steps;i++){const px=actor.x,pz=actor.z,wasAir=!actor.grounded;if(game?.world.base.passage){input.forward=input.right=0;input.run=false;input.jump=false;}actor.step(FIXED_DT,input,game?survivalSpeed(game):1);input.jump=false;
+   if(wasAir&&actor.grounded){if(airTime>.25)footstep(false,true);airTime=0;}else if(!actor.grounded)airTime+=FIXED_DT;
+   const moved=Math.hypot(actor.x-px,actor.z-pz);if(actor.grounded&&moved>0){stride+=moved;bob+=moved*(input.run?2.4:2.9);if(stride>(input.run?.82:.68)){stride=0;audio.step(input.run,insideCapsule());footstep(input.run);}}
    if(game){
     Object.assign(game.player,{x:actor.x,y:actor.y,z:actor.z});
     const produced=productionTick(game,50,refillMachine,isDay(dayPhase())?10:-10);
@@ -666,7 +680,7 @@ function boot(){
     if(running&&holdRefill&&actionKind==='refill'&&insideCapsule()&&(refillTanks?refillFromCapsule(game,FIXED_DT):refillCapsule(game,FIXED_DT))){hudKey='';updateHotbar();}
     const ev=mineTick(game,mining,running?aimNode:null,running&&holdMine&&!game.world.base.hand&&!manualWork(game)&&!game.world.base.passage);
     aimReason=ev.kind==='blocked'?ev.reason:'';mineRatio=ev.kind==='progress'?ev.ratio:0;
-    if(ev.kind==='progress'){strikeClock-=FIXED_DT;if(strikeClock<=0){strikeClock=.45;const n=NODE_BY_ID.get(ev.nodeId)!;audio.strike(n.material==='ice');const p=nodeHitPoint(n.id);fx.strike(p.x,p.y,p.z,n.material);shake=Math.max(shake,.04);}}else strikeClock=0;
+    if(ev.kind==='progress'){strikeClock-=FIXED_DT;if(strikeClock<=0){strikeClock=.45;const n=NODE_BY_ID.get(ev.nodeId)!;audio.strike(n.material==='ice');const p=nodeHitPoint(n.id);fx.strike(p.x,p.y,p.z,n.material,hitNormal);shake=Math.max(shake,.04);}}else strikeClock=0;
     if(ev.kind==='block')onMined(ev);}
   }
   if(regrown)applyNodes();
@@ -702,14 +716,14 @@ function boot(){
   if(renderScene){
    shadowAnchor.set(actor.x,actor.y,actor.z);
    world.update(frozen?0:renderElapsed,camera,renderer,!started||(!frozen&&!dialog),diagnostics.enabled?(name,ms)=>diagnostics.span('world:'+name,ms):undefined,started?shadowAnchor:undefined);
-   fx.update(frozen?0:renderElapsed,camera,renderer.domElement.height);
+   fx.update(frozen?0:renderElapsed,camera,renderer.domElement.height,{night:world.nightValue,wind:world.wind});prints.update(frozen?0:renderElapsed);
    measured=diagnostics.stage('world',measured);renderer.render(scene,camera);renderCalls=renderer.info.render.calls;renderTriangles=renderer.info.render.triangles;
    if(started&&hand.visible&&dialog!=='suit-panel'){hand.update(frozen?0:renderElapsed,camera,{sun:world.sunLight,hemi:world.hemiLight},holdMine&&mineRatio>0,handBobX,handBobY);renderer.autoClear=false;renderer.clearDepth();renderer.render(hand.scene,camera);renderer.autoClear=true;renderCalls+=renderer.info.render.calls;renderTriangles+=renderer.info.render.triangles;}
    if(captureRequested){const resolve=captureRequested;captureRequested=null;resolve(canvas.toDataURL('image/png'));}
    lastRender=now;lastRenderedDialog=dialog;renderElapsed=0;
   }
   measured=diagnostics.stage('render-submit',measured);
-  if(!frozen)audio.update(dt,started&&insideCapsule()?1:0,world.nightValue);
+  if(!frozen)audio.update(dt,started&&insideCapsule()?1:0,world.nightValue,world.wind.gust);
   if(started){drawCompass(bearing(Math.sin(actor.yaw),Math.cos(actor.yaw)));updateMarker();interaction.update(game,running,dt);computeAim();updateAimUI();}
   if(game&&started){built.update(game,frozen?0:dt);if(built.animating||game.world.base.passage)world.invalidateShadows();}
   if(running&&dt>0){frames.push(actualFrameMs);if(frames.length>180)frames.shift();}
