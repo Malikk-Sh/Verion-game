@@ -8,6 +8,7 @@ import {mineTick,ticksFor,type Mining} from '../src/game/mining.ts';
 import {NODES} from '../src/game/resources.ts';
 import {RECIPES,RECIPE_BY_ID,makeBuilding,startJob,cancelJob,productionTick,collectOutput,queueJob,clearQueue,loadFuel,connect,sealCheck,domeFaces,habitable,beginPassage,releaseHandOnDeath,upgradeBuilding,ELECTROLYZER_O2,GEN_BUFFER,FIBER_EU,PORT_O2,O2_PER_WU} from '../src/game/production.ts';
 import {survivalTick,refillFromCapsule,loseCargo,accessibleOxygen} from '../src/game/survival.ts';
+import {stationStatus} from '../src/game/stationStatus.ts';
 import {place,placementProblem} from '../src/buildings.ts';
 import {heightAt,makeColliders} from '../src/world.ts';
 import {SaveStore} from '../src/persist/store.ts';
@@ -122,5 +123,8 @@ test('D30 buffers: a full 2000 EU generator, a lit 300 EU fiber and a full 2000 
  for(const [b,key,v] of [[gen,'energy',GEN_BUFFER+1],[gen,'fuel',FIBER_EU+1],[e,'oxygen',ELECTROLYZER_O2+1],[r,'oxygen',PORT_O2+1],[d,'oxygen',PORT_O2+1]] as const){const bad:any=cloneState(g);bad.world.base.buildings.find((v:any)=>v.id===b.id)[key]=v;assert.throws(()=>sanitizeState(bad),/число вне/,b.kind+'.'+key);}
  // A fiber burns into the buffer only up to 2000 EU; the electrolyzer starts a batch only while 500 GU still fit.
  gen.energy=0;gen.fuel=0;addItems(gen.input,'fiber',10);advance(g,60000);assert.equal(gen.energy,GEN_BUFFER);assert.equal(countItem(gen.input,'fiber')*FIBER_EU+gen.fuel+gen.energy,10*FIBER_EU);
- near(g,e);e.water=2000;e.oxygen=ELECTROLYZER_O2-O2_PER_WU+1;assert.equal(startJob(g,'electrolysis',e.id),'Буфер O₂ полон');e.oxygen=ELECTROLYZER_O2-O2_PER_WU;assert.equal(startJob(g,'electrolysis',e.id),'');
+ near(g,e);e.water=2000;e.oxygen=ELECTROLYZER_O2-O2_PER_WU+1;assert.equal(startJob(g,'electrolysis',e.id),'Буфер O₂ полон');
+ // The window says why a watered, powered generator waits instead of promising a batch that cannot start.
+ addItems(g.player.inventory,'cable',1);assert.equal(connect(g,'cable',gen.id,e.id),'');assert.deepEqual([stationStatus(g,e).title,stationStatus(g,e).tone],['Буфер O₂ полон','warn']);
+ e.oxygen=ELECTROLYZER_O2-O2_PER_WU;assert.equal(stationStatus(g,e).title,'Готов');assert.equal(startJob(g,'electrolysis',e.id),'');
 });

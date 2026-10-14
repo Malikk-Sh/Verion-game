@@ -1,6 +1,6 @@
 import { electricPort } from './production';
 import { heightAt } from '../world';
-import { freshBase, RECIPE_BY_ID, domeFaces, domeFront, LINK_RANGE, MAX_REPEAT, GEN_BUFFER, FIBER_EU, ELECTROLYZER_O2, PORT_O2, type BaseState, type Job, type Building, type Link } from './production';
+import { freshBase, RECIPE_BY_ID, domeFaces, domeFront, LINK_RANGE, MAX_REPEAT, GEN_BUFFER, FIBER_EU, ELECTROLYZER_O2, PORT_O2, CAPSULE_CAPACITY, type BaseState, type Job, type Building, type Link } from './production';
 import { BASIC_SUIT, BUILDABLE, CONTENT_VERSION, GENERATOR_VERSION, ITEMS, LEGACY_CONTENT_VERSIONS, SUIT_PARTS, TANKS, TOOLS, type SuitPart } from './defs';
 import { emptyInventory, INVENTORY_SIZE, type Slot } from './inventory';
 import { NODES, NODE_BY_ID, LATER_NODES, S3_NODES, nodeCovered, bodyHalf } from './resources';
@@ -52,7 +52,7 @@ export function newGame(worldId: string, seed: number, createdAt: number, y: num
  return {
   meta: { worldId, name, seed: seed >>> 0, planetId: 'verdana', generatorVersion: GENERATOR_VERSION, contentVersion: CONTENT_VERSION, stateVersion: STATE_VERSION, createdAt, activeTicks: 0 },
   player: { x: SPAWN_POSE.x, y, z: SPAWN_POSE.z, yaw: SPAWN_POSE.yaw, pitch: SPAWN_POSE.pitch, vitals: { health: 100, satiety: 100 }, survival: freshSurvival(), suit: basicSuit(), bottles: [{ itemId: 'bottle_1', count: 1, milliGU: TANKS.bottle_1.capacity }, null], inventory, hotbar: 0 },
-  world: { crates: {'crate-a':emptyInventory(),'crate-b':emptyInventory()}, base: freshBase(), capsuleMilliGU: 2400000, nodes: Object.fromEntries(NODES.map(n => [n.id, n.amount])), regrow: {}, drops: [], nextDropId: 1, dayOffsetTicks: START_OFFSET_TICKS },
+  world: { crates: {'crate-a':emptyInventory(),'crate-b':emptyInventory()}, base: freshBase(), capsuleMilliGU: CAPSULE_CAPACITY, nodes: Object.fromEntries(NODES.map(n => [n.id, n.amount])), regrow: {}, drops: [], nextDropId: 1, dayOffsetTicks: START_OFFSET_TICKS },
   progress: { visited: [], discovered: [], selected: 'guide', quests: freshQuestProgress() },
  };
 }
@@ -110,7 +110,7 @@ function migratePrevious(raw: unknown): unknown {
   if (!('base' in world)) world.base = freshBase();
   const existingNodes = obj(world.nodes, 'world.nodes');
   for (const n of NODES) if (!(n.id in existingNodes) && LATER_NODES.has(n.id)) existingNodes[n.id] = n.amount;
-  if (!('capsuleMilliGU' in world)) world.capsuleMilliGU = 2400000;
+  if (!('capsuleMilliGU' in world)) world.capsuleMilliGU = CAPSULE_CAPACITY;
   }
   // v3 already required survival, capsule and base fields; never refill a corrupt v3 save.
   for(const b of arr(obj(world.base,'world.base').buildings,'buildings',64)){const body=obj(b,'building');kilnFuelFix(body,world);if(body.kind==='electrolyzer'&&isObj(body.job)&&body.job.recipeId==='melt_in_generator')body.job.recipeId='legacy_melt';if(body.kind==='electrolyzer')body.queue=arr(body.queue,'queue',5).filter(v=>v!=='melt_in_generator');}
@@ -126,7 +126,7 @@ function migratePrevious(raw: unknown): unknown {
  if (pl.suit !== 'suit') throw new InvalidState('player.suit', 'неизвестный костюм старого формата');
  pl.suit = basicSuit();
  pl.vitals = { health: 100, satiety: 100 };
- pl.hotbar = 0; pl.survival = freshSurvival(); w.capsuleMilliGU = 2400000;
+ pl.hotbar = 0; pl.survival = freshSurvival(); w.capsuleMilliGU = CAPSULE_CAPACITY;
  w.dayOffsetTicks = START_OFFSET_TICKS;
  m.contentVersion = CONTENT_VERSION; m.stateVersion = V6;
  w.base = freshBase();
@@ -240,7 +240,7 @@ export function sanitizeState(input: unknown): GameState {
    survival, suit: Object.fromEntries(SUIT_PARTS.map(p => [p, suitSlot(suitRaw[p], p)])) as Suit,
    bottles: [bottleSlot(bottles[0], 'player.bottles[0]'), bottleSlot(bottles[1], 'player.bottles[1]')], inventory: inv.map((s, i) => slot(s, `player.inventory[${i}]`)),
    hotbar: int(pl.hotbar, 'player.hotbar', 0, HOTBAR_SIZE - 1) },
-  world: { crates:Object.fromEntries(['crate-a','crate-b'].map(id=>{const a=arr(obj(w.crates,'world.crates')[id],'crate.'+id,24);if(a.length!==24)throw new InvalidState('crate','нужно 24 слота');return [id,a.map((v,i)=>slot(v,'crate.'+id+'.'+i))];})), base: validateBase(w.base), capsuleMilliGU: int(w.capsuleMilliGU, 'world.capsuleMilliGU', 0, 2400000), nodes, regrow, drops, nextDropId, dayOffsetTicks: int(w.dayOffsetTicks, 'world.dayOffsetTicks', 0, CYCLE_TICKS - 1) },
+  world: { crates:Object.fromEntries(['crate-a','crate-b'].map(id=>{const a=arr(obj(w.crates,'world.crates')[id],'crate.'+id,24);if(a.length!==24)throw new InvalidState('crate','нужно 24 слота');return [id,a.map((v,i)=>slot(v,'crate.'+id+'.'+i))];})), base: validateBase(w.base), capsuleMilliGU: int(w.capsuleMilliGU, 'world.capsuleMilliGU', 0, CAPSULE_CAPACITY), nodes, regrow, drops, nextDropId, dayOffsetTicks: int(w.dayOffsetTicks, 'world.dayOffsetTicks', 0, CYCLE_TICKS - 1) },
   progress: { visited: ids(pr.visited, 'progress.visited'), discovered: ids(pr.discovered, 'progress.discovered'), selected: str(pr.selected, 'progress.selected', 32, ID), quests:{facts,completed,tracked:qp.tracked as QuestId|null} },
  };
 }

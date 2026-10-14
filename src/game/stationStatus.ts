@@ -1,6 +1,6 @@
 import { countItem } from './inventory';
 import { ITEMS, TANKS } from './defs';
-import { RECIPES, RECIPE_BY_ID, habitable, insideDome, sealCheck, poweredComponent, telemetry, powerRate, supplyRate, gasRate, roomRate, DOME_CAPACITY, FIBER_EU, GEN_BUFFER, PORT_O2, nearby, type Building } from './production';
+import { RECIPES, RECIPE_BY_ID, habitable, insideDome, sealCheck, poweredComponent, telemetry, powerRate, supplyRate, gasRate, roomRate, DOME_CAPACITY, ELECTROLYZER_O2, FIBER_EU, GEN_BUFFER, O2_PER_WU, PORT_O2, nearby, type Building } from './production';
 import type { GameState } from './state';
 /**
  * Plain-language state of a station for its window, the aim label and the status lamp.
@@ -48,6 +48,8 @@ export function stationStatus(g: GameState, b: Building): StationStatus {
    if (running) return { tone: 'warn', title: 'Мало энергии', hint: 'Генератор не успевает — добавьте второй или уменьшите нагрузку.' };
    if (tank && TANKS[tank.itemId] && (tank.milliGU ?? 0) < TANKS[tank.itemId].capacity && b.oxygen > 0) return { tone: powered ? 'ok' : 'warn', title: powered ? 'Заправляет баллон' : 'Нет питания', hint: `Баллон ${Math.round((tank.milliGU ?? 0) / 1000)} / ${TANKS[tank.itemId].capacity / 1000} GU` };
    if (!water) return { tone: 'idle', title: 'Ждёт воду', hint: 'Вода — из печи: лёд + волокно. Положите её в слот воды.' };
+   // A new batch starts only while its whole yield fits the buffer (production startJob).
+   if (b.oxygen > ELECTROLYZER_O2 - O2_PER_WU) { const piped = g.world.base.links.some(l => l.kind === 'gas_pipe' && l.from === b.id); return { tone: piped ? 'idle' : 'warn', title: 'Буфер O₂ полон', hint: `Следующая партия начнётся, когда освободится место для ${O2_PER_WU / 1000} GU.` + (piped ? '' : ' Подключите трубу или заправьте баллон.') }; }
    return { tone: 'idle', title: 'Готов', hint: 'Электролиз начнётся автоматически.' };
   }
   case 'refill': {
