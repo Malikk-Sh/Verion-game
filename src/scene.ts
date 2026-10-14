@@ -9,6 +9,7 @@ import { createSky, createDust } from './sky';
 import { Terrain, createShadeBaker, useBakedShade } from './terrain';
 import { CYCLE_S, nightAmount, sunDirection } from './game/daycycle';
 import { PATCH_NODES, SHARED_PATCH_SPLIT } from './game/resources';
+import { createLightPool, LIGHT_PRIORITY } from './lights';
 
 export type Quality = 'low'|'standard'|'high';
 const lin=(r:number,g:number,b:number)=>new THREE.Color().setRGB(r,g,b,THREE.LinearSRGBColorSpace);
@@ -128,7 +129,9 @@ export function createWorld(scene:THREE.Scene){
   batch.add(tall,rock,x,heightAt(x,z)-.4,z,w,hh,w*.8,lean*.5,ry,lean,'#e6e0d6');
   for(let k=0;k<7;k++){const a=rng()*6.28,d=2+rng()*2.5,px=x+Math.cos(a)*d,pz=z+Math.sin(a)*d;batch.add(boulders[k%6],rock,px,heightAt(px,pz)-.1,pz,.5+rng()*.9,.4+rng()*.8,.5+rng()*.8,0,rng()*6,0);}
  }
- // Pebbles: instanced, receive shadows only.
+ // Pebbles: instanced, receive shadows only. S4: only those within PEBBLE_R of the viewer are drawn
+ // (the list is rebuilt every 8 m of travel; ~45% lie scattered over the whole map and were all drawn).
+ const PEBBLE_R=70,pebbleAt=new THREE.Vector3(Infinity,0,Infinity);let updatePebbles=(_p:THREE.Vector3)=>{};
  {
   const peb=chiseledRock(7,{detail:0,cuts:5});const count=2600;
   const inst=new THREE.InstancedMesh(peb,rock,count);lowDecoration.push(inst);inst.name='decorative-pebbles';let k=0;const pr=random(77);
@@ -140,6 +143,12 @@ export function createWorld(scene:THREE.Scene){
    inst.setColorAt(k,color.set(tones[k%4]).multiplyScalar(.8+pr()*.3));k++;
   }
   inst.receiveShadow=true;scene.add(inst);
+  const all=inst.instanceMatrix.array.slice(),tint=inst.instanceColor!.array.slice(),xs=new Float32Array(count),zs=new Float32Array(count);
+  for(let i=0;i<count;i++){xs[i]=all[i*16+12];zs[i]=all[i*16+14];}
+  inst.boundingSphere=new THREE.Sphere(new THREE.Vector3(),PEBBLE_R+2);
+  updatePebbles=p=>{if(Math.hypot(p.x-pebbleAt.x,p.z-pebbleAt.z)<8)return;pebbleAt.copy(p);let n=0;const m=inst.instanceMatrix.array as Float32Array,c=inst.instanceColor!.array as Float32Array;
+   for(let i=0;i<count;i++)if((xs[i]-p.x)**2+(zs[i]-p.z)**2<PEBBLE_R*PEBBLE_R){m.set(all.subarray(i*16,i*16+16),n*16);c.set(tint.subarray(i*3,i*3+3),n*3);n++;}
+   inst.count=n;inst.boundingSphere!.center.set(p.x,heightAt(p.x,p.z),p.z);for(const a of [inst.instanceMatrix,inst.instanceColor!]){a.clearUpdateRanges();a.addUpdateRange(0,n*a.itemSize);a.needsUpdate=true;}};
  }
 
  // ---------- Landing capsule ----------
@@ -404,8 +413,10 @@ export function createWorld(scene:THREE.Scene){
  const hemi=new THREE.HemisphereLight('#bcd3dc','#8a7358',1.15);scene.add(hemi);
  const sun=new THREE.DirectionalLight('#ffd9a8',3.4);sun.castShadow=true;scene.add(sun,sun.target);
  const sc=sun.shadow.camera;sc.left=-42;sc.right=42;sc.top=42;sc.bottom=-42;sc.near=1;sc.far=260;sun.shadow.bias=-.00008;sun.shadow.normalBias=.08;sun.shadow.radius=1.5;sun.shadow.autoUpdate=false;sun.shadow.needsUpdate=true;
- const doorLight=new THREE.PointLight('#ffb870',9,13,1.7);doorLight.position.set(40,cy(1.8),43.8);scene.add(doorLight);
- const interior=new THREE.PointLight('#ffd3a0',3.2,6.5,1.6);interior.position.set(40,cy(3.3),39.8);scene.add(interior);
+ // Capsule lamps are hidden emitters: the fixed pool (lights.ts) lends them real lights when they are near.
+ const lights=createLightPool(scene,4),lightRoots:THREE.Object3D[]=[];
+ const doorLight=new THREE.PointLight('#ffb870',9,13,1.7);doorLight.position.set(40,cy(1.8),43.8);scene.add(doorLight);lights.add(doorLight,LIGHT_PRIORITY.door);
+ const interior=new THREE.PointLight('#ffd3a0',3.2,6.5,1.6);interior.position.set(40,cy(3.3),39.8);scene.add(interior);lights.add(interior,LIGHT_PRIORITY.interior);
  const fog=new THREE.FogExp2(lin(.8,.68,.53),.0022);scene.fog=fog;
  const D={sun:new THREE.Color('#ffd9a8'),hemiSky:new THREE.Color('#bcd3dc'),hemiGround:new THREE.Color('#8a7358'),fog:lin(.8,.68,.53),dust:new THREE.Color('#fff1d6')};
  const N={sun:new THREE.Color('#8fa9d6'),hemiSky:new THREE.Color('#5f7896'),hemiGround:new THREE.Color('#2b2f36'),fog:lin(.07,.1,.15),dust:new THREE.Color('#a9c4e6')};
@@ -442,8 +453,11 @@ export function createWorld(scene:THREE.Scene){
  function setTime(t:number,instant=false){targetPhase=((t%CYCLE_S)+CYCLE_S)%CYCLE_S;if(instant||phase<0){phase=targetPhase;applyPhase(phase);bakeNow(lightDir);}}
  function setQuality(q:Quality){quality=q;sun.castShadow=q!=='low';const size=q==='high'?2048:1024,ext=q==='high'?60:42;
   if(sun.shadow.mapSize.x!==size||sc.right!==ext){sun.shadow.mapSize.set(size,size);sc.left=sc.bottom=-ext;sc.right=sc.top=ext;sc.updateProjectionMatrix();sun.shadow.map?.dispose();sun.shadow.map=null as unknown as THREE.WebGLRenderTarget;}
-  dust.points.visible=q!=='low';for(const m of lowDecoration)m.visible=q!=='low';terrain.setQuality(q);sun.shadow.needsUpdate=true;const environment=(q==='low'?environments.low:environments.full)[k<.5?0:1];if(environment)scene.environment=environment.texture;}
+  dust.points.visible=q!=='low';for(const m of lowDecoration)m.visible=q!=='low';terrain.setQuality(q);lights.resize(q==='low'?2:4);shadowAt.set(Infinity,0,0);sun.shadow.needsUpdate=true;const environment=(q==='low'?environments.low:environments.full)[k<.5?0:1];if(environment)scene.environment=environment.texture;}
  const snapped=new THREE.Vector3(),lx=new THREE.Vector3(),ly=new THREE.Vector3(),up=new THREE.Vector3(0,1,0),center=new THREE.Vector3(),shadowDir=new THREE.Vector3(),shadowCenter=new THREE.Vector3(Infinity,Infinity,Infinity);
+ // S4: the shadow map follows its own light direction (updated after a 0.25° turn) and its own centre
+ // (moved after 3 m of travel, texel-snapped), so it is redrawn about twice a second, not every frame.
+ const shadowL=new THREE.Vector3(),shadowAt=new THREE.Vector3(Infinity,0,0);let shadowRedraws=0;
  /** Capture stable day/night reflections during loading, never during active play. */
  function prepare(renderer:THREE.WebGLRenderer){
   if(environments.low.length)return;
@@ -458,28 +472,33 @@ export function createWorld(scene:THREE.Scene){
   let at=performance.now();
   sky.mesh.position.copy(camera.position);time+=dt;windUniform.value=time;sky.uniforms.time.value=time;dust.uniforms.time.value=time;dust.uniforms.origin.value.copy(camera.position);
   if(phase!==targetPhase){const d=wrapS(targetPhase-phase);phase=Math.abs(d)<=Math.max(2,dt*320)?targetPhase:((phase+Math.sign(d)*dt*320)%CYCLE_S+CYCLE_S)%CYCLE_S;applyPhase(phase);}
-  // Incremental re-bake when the light has turned by more than ~1.5°; then a 1.5 s cross-fade.
+  // Incremental re-bake when the light has turned by more than ~3° (S4; was 1.5°); then a 1.5 s cross-fade.
   if(fading){bakeUniforms.uBakeMix.value=Math.min(1,bakeUniforms.uBakeMix.value+dt/1.5);if(bakeUniforms.uBakeMix.value>=1){bakeUniforms.uBake.value=bakeUniforms.uBake2.value;bakeUniforms.uBakeMix.value=0;fading=false;}}
   else if(baker.busy&&allowMaintenance){if(baker.step(10,2)){bakeUniforms.uBake2.value=baker.flip();bakeUniforms.uBakeMix.value=0;fading=true;}}
-  else if(k<.98&&lightDir.angleTo(lastBake)>.026){lastBake.copy(lightDir);baker.begin(lightDir);}
+  else if(k<.98&&lightDir.angleTo(lastBake)>.05){lastBake.copy(lightDir);baker.begin(lightDir);}
   measure?.('shade',performance.now()-at);at=performance.now();
   const environment=(quality==='low'?environments.low:environments.full)[k<.5?0:1];if(environment)scene.environment=environment.texture;
   // Fade reflection intensity to zero at the palette switch: no capture cost or sudden flash.
   scene.environmentIntensity=THREE.MathUtils.lerp(.55,.25,k)*THREE.MathUtils.smoothstep(Math.abs(k-.5),0,.12);
   measure?.('environment',performance.now()-at);at=performance.now();
   // Ground-anchored frustum: camera bob and turning cannot move the shadow projection.
-  const L=sky.uniforms.sunDir.value as THREE.Vector3;lx.crossVectors(up,L).normalize();ly.crossVectors(L,lx);
   center.copy(anchor??camera.position);center.y=heightAt(center.x,center.z);
-  const texel=(sc.right-sc.left)/sun.shadow.mapSize.x,px=Math.round(center.dot(lx)/texel)*texel,py=Math.round(center.dot(ly)/texel)*texel,pz=Math.round(center.dot(L)/texel)*texel;
-  snapped.copy(lx).multiplyScalar(px).addScaledVector(ly,py).addScaledVector(L,pz);
-  if(!shadowCenter.equals(snapped)||!shadowDir.equals(L)){shadowCenter.copy(snapped);shadowDir.copy(L);sun.shadow.needsUpdate=true;}
-  sun.target.position.copy(snapped);sun.position.copy(snapped).addScaledVector(L,130);sun.target.updateMatrixWorld();
+  const turned=shadowL.angleTo(lightDir)>.0044;
+  if(turned||center.distanceToSquared(shadowAt)>9){
+   if(turned)shadowL.copy(lightDir);shadowAt.copy(center);const L=shadowL;lx.crossVectors(up,L).normalize();ly.crossVectors(L,lx);
+   const texel=(sc.right-sc.left)/sun.shadow.mapSize.x,px=Math.round(center.dot(lx)/texel)*texel,py=Math.round(center.dot(ly)/texel)*texel,pz=Math.round(center.dot(L)/texel)*texel;
+   snapped.copy(lx).multiplyScalar(px).addScaledVector(ly,py).addScaledVector(L,pz);
+   if(!shadowCenter.equals(snapped)||!shadowDir.equals(L)){shadowCenter.copy(snapped);shadowDir.copy(L);sun.shadow.needsUpdate=true;shadowRedraws++;}
+   sun.target.position.copy(snapped);sun.position.copy(snapped).addScaledVector(L,130);sun.target.updateMatrixWorld();
+  }
+  updatePebbles(camera.position);
   if(allowMaintenance)terrain.update(camera.position,2);
   measure?.('terrain',performance.now()-at);at=performance.now();
   const blink=(Math.sin(time*3)>.6?1:0);redLight.emissiveIntensity=.3+blink*3.5;beacon.emissiveIntensity=1.2+Math.sin(time*2.2)*.8;holo.opacity=.55+Math.sin(time*1.7)*.2;
   screenClock-=dt;if(screenClock<=0&&camera.position.distanceTo(interior.position)<14){screenClock=.25;screen.draw(time,k>.5);}
+  lights.update(camera,dt,lightRoots);
   measure?.('animation',performance.now()-at);
  }
  setQuality('standard');
- return{setTime,setQuality,prepare,invalidateShadows:()=>{sun.shadow.needsUpdate=true;},sunLight:sun,hemiLight:hemi,get sunDirection(){return sunTrue;},update,setNodeAmount,nodeGroups,followSky:(_p:THREE.Vector3)=>{},landmarks:LANDMARKS,grassCount:GRASS.length,meshes,terrain,get quality(){return quality;},get nightValue(){return k;}};
+ return{setTime,setQuality,prepare,invalidateShadows:()=>{if(!sun.shadow.needsUpdate)shadowRedraws++;sun.shadow.needsUpdate=true;},get shadowRedraws(){return shadowRedraws;},lights,lightRoots,sunLight:sun,hemiLight:hemi,get sunDirection(){return sunTrue;},update,setNodeAmount,nodeGroups,followSky:(_p:THREE.Vector3)=>{},landmarks:LANDMARKS,grassCount:GRASS.length,meshes,terrain,get quality(){return quality;},get nightValue(){return k;}};
 }
