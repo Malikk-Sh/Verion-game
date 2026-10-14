@@ -43,7 +43,7 @@ export function place(g: GameState, kind: BuildingKind, x: number, z: number, ro
 /** Visual state of one station: never feeds back into the simulation. */
 export function stationLook(g: GameState, b: Building): StationLook {
  const pw = (telemetry.power.get(b.id) ?? 0) > 0, r = b.job ? RECIPE_BY_ID.get(b.job.recipeId) : undefined, running = !!b.job && !!r && b.job.workMs < r.seconds * 1000;
- if (!b.enabled) return { status: 'off', working: 0 };
+ if (!b.enabled && b.kind !== 'dome') return { status: 'off', working: 0 };
  switch (b.kind) {
   case 'workbench': {
    const work = running && (b.level === 2 ? pw : nearby(g, b));

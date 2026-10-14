@@ -1,6 +1,6 @@
 import { countItem } from './inventory';
 import { NODES } from './resources';
-import { RECIPE_BY_ID, WORKBENCH_UPGRADE, habitable, insideDome, DOME_CAPACITY } from './production';
+import { RECIPE_BY_ID, WORKBENCH_UPGRADE, habitable, insideDome, DOME_CAPACITY, type Building } from './production';
 import { ITEMS } from './defs';
 import { questStatus } from './quests';
 import type { QuestId } from './questCatalog';
@@ -110,8 +110,11 @@ export function guideStep(g: GameState, id: QuestId): GuideStep {
    how: ['Соберите распределитель на верстаке.', 'Поставьте его внутри купола — можно целиться сквозь стекло снаружи.'],
    tasks: [...inputs(g, 'craft_distributor', has(g, 'distributor') || inv(g, 'distributor') > 0), flag('Создать распределитель', has(g, 'distributor') || inv(g, 'distributor') > 0, nearestStation(g, 'workbench'), 'craft_distributor'), flag('Установить внутри купола', g.world.base.buildings.some(b => b.kind === 'distributor' && g.world.base.buildings.some(d => d.kind === 'dome' && insideDome(d, b.x, b.y, b.z))), dome ?? BASE_AREA)] }),
   air: () => {
-   const dist = g.world.base.buildings.find(b => b.kind === 'distributor');
-   const pipe = !!dist && g.world.base.links.some(l => l.kind === 'gas_pipe' && l.to === dist.id), cable = !!dist && g.world.base.links.some(l => l.kind === 'cable' && (l.to === dist.id || l.from === dist.id));
+   // Like the dome checklist: prefer a distributor inside a dome where the pipe and the cable meet.
+   const piped = (d: Building) => g.world.base.links.some(l => l.kind === 'gas_pipe' && l.to === d.id), wired = (d: Building) => g.world.base.links.some(l => l.kind === 'cable' && (l.to === d.id || l.from === d.id));
+   const all = g.world.base.buildings.filter(b => b.kind === 'distributor'), inside = all.filter(b => g.world.base.buildings.some(d => d.kind === 'dome' && insideDome(d, b.x, b.y, b.z)));
+   const dist = inside.find(d => piped(d) && wired(d)) ?? inside.find(piped) ?? inside.find(wired) ?? inside[0] ?? all[0];
+   const pipe = !!dist && piped(dist), cable = !!dist && wired(dist);
    return { chapter: 3, title: 'Дышащее убежище', item: 'dome', recipes: ['craft_gas_pipe'],
     why: 'Нужно ≥384 GU кислорода, чистота воздуха ≥50% и температура −5…+40 °C. Тогда в куполе дышат без баллонов.',
     how: ['Трубой O₂ соедините генератор кислорода с распределителем (до 12 м).', 'Кабелем подайте питание на распределитель.', 'Следите за шкалой воздуха в окне купола.'],

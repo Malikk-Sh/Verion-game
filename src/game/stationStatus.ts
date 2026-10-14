@@ -15,7 +15,7 @@ const generatorIn = (g: GameState, b: Building) => { const net = poweredComponen
 const hasPower = (g: GameState, b: Building) => generatorIn(g, b).some(v => v.enabled && (v.energy > 0 || !roomOf(g, v) && (v.fuel > 0 || countItem(v.input, 'fiber') > 0)));
 const roomOf = (g: GameState, b: Building) => g.world.base.buildings.find(d => d.kind === 'dome' && insideDome(d, b.x, b.y, b.z));
 export function stationStatus(g: GameState, b: Building): StationStatus {
- if (!b.enabled) return { tone: 'off', title: 'Выключено', hint: 'Нажмите «Включить», чтобы станция снова работала.' };
+ if (!b.enabled && b.kind !== 'dome') return { tone: 'off', title: 'Выключено', hint: 'Нажмите «Включить», чтобы станция снова работала.' };
  const r = b.job ? RECIPE_BY_ID.get(b.job.recipeId) : undefined, running = !!b.job && !!r && b.job.workMs < r.seconds * 1000, pct = r && b.job ? Math.floor(Math.min(1, b.job.workMs / (r.seconds * 1000)) * 100) : 0;
  const outName = r ? ITEMS[Object.keys(r.outputs)[0]]?.name ?? 'Вода' : '';
  switch (b.kind) {
