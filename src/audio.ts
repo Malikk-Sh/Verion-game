@@ -45,6 +45,12 @@ export class Ambience {
   const g=c.createGain(),t=c.currentTime;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.32,t+.004);g.gain.exponentialRampToValueAtTime(.001,t+(ice?.12:.09));
   s.connect(f).connect(g).connect(this.master);s.start(t,Math.random()*3,.15);
  }
+ /** Air escaping a breached room: 2 s of high band-passed noise that fades out. */
+ hiss(){
+  const c=this.ctx;if(!c||!this.enabled)return;const s=c.createBufferSource();s.buffer=this.noise;const f=c.createBiquadFilter();f.type='highpass';f.frequency.value=2400;f.Q.value=.8;
+  const g=c.createGain(),t=c.currentTime;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.22,t+.03);g.gain.exponentialRampToValueAtTime(.001,t+2);
+  s.connect(f).connect(g).connect(this.master);s.start(t,Math.random()*1.5,2.05);
+ }
  tone(kind:'ui'|'scan'|'discover'|'boot'|'item'|'warn'){
   const c=this.ctx;if(!c||!this.enabled)return;const t=c.currentTime;
   const seq:Record<string,[number,number,number][]>={ui:[[880,0,.06]],scan:[[520,0,.09],[780,.08,.09],[1170,.16,.14]],discover:[[660,0,.12],[990,.1,.22]],boot:[[330,0,.12],[495,.12,.12],[660,.24,.2]],item:[[740,0,.07],[1110,.06,.1]],warn:[[300,0,.14],[220,.14,.2]]};

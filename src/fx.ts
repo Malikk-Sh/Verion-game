@@ -227,6 +227,12 @@ export function createFx(scene: THREE.Scene, opts: { ground?: Ground } = {}) {
   smoke(x: number, y: number, z: number, dark = false) { if (on()) scaled(soft, { x, y, z, color: dark ? '#35312e' : '#625c56', count: 2, spread: .3, up: .9, size: .42, grow: 3.2, life: 2.6, gravity: -.35, drag: .8, alpha: dark ? .75 : .68, vx: .25, shape: SHAPE.soft, wind: .5 }); },
   steam(x: number, y: number, z: number) { if (on()) scaled(soft, { x, y, z, color: '#f2fbff', count: 1, spread: .2, up: .7, size: .18, grow: 2.4, life: 1.4, gravity: -.3, drag: 1, alpha: .28, shape: SHAPE.soft, wind: .5 }); },
   ember(x: number, y: number, z: number) { if (on()) scaled(glow, { x, y, z, color: '#ff9a4a', count: 1, spread: .5, up: 1.4, size: .04, life: .9, gravity: -.4, drag: .9, wind: .2 }); },
+  /** Air leaving a breached room: a steam jet along `n` (out of the opening) and dust lifted at its foot; `k` 0…1 fades it. */
+  vent(x: number, y: number, z: number, n: { x: number; y: number; z: number }, k = 1) {
+   if (!on()) return; const s = Math.max(.25, k);
+   scaled(soft, { x, y, z, normal: n, push: 3.2 * s, color: '#eef8f8', count: 3, spread: .5, up: .2, size: .3, grow: 3, life: 1.1, gravity: -.2, drag: 1.6, alpha: .34 * s, shape: SHAPE.soft, wind: .3 });
+   scaled(soft, { x, y: y - .4, z, normal: n, push: 1.6 * s, color: '#cdb796', count: 2, spread: .9, up: .4, size: .4, grow: 2.2, life: 1.3, gravity: -.1, drag: 1.4, alpha: .26 * s, shape: SHAPE.soft, wind: .5 });
+  },
   hiss(x: number, y: number, z: number) { if (on()) scaled(soft, { x, y, z, color: '#e9f3f2', count: 3, spread: 1.4, up: .3, size: .25, grow: 2.5, life: .9, gravity: 0, drag: 1.8, alpha: .3, shape: SHAPE.soft }); },
   /** `height`: framebuffer pixels. `env`: day/night level and the shared wind (dt is the frozen scene step). */
   update(dt: number, camera: THREE.PerspectiveCamera, height: number, env: FxEnv = {}) {

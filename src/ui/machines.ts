@@ -3,7 +3,8 @@ import { ITEMS, TANKS } from '../game/defs';
 import { loadMachineSlot, takeSlot, packStation, moveTank, moveTankGap, wearSlot, type TankPlace } from '../game/worldActions';
 import { addItems, countItem, transferSlot, type Slot } from '../game/inventory';
 import { machine, RECIPES, RECIPE_BY_ID, cancelJob, connect, disconnect, linkOptions, linkLength, endpoint, gasRate, powerRate, supplyRate, telemetry, ELECTROLYZER_O2, FIBER_EU, GEN_BUFFER, O2_PER_WU, PORT_O2, type Building } from '../game/production';
-import { stationStatus, type StationStatus } from '../game/stationStatus';
+import { stationStatus, structureStatus, type StationStatus } from '../game/stationStatus';
+import { beginPassage, capacityOf, doorById, doorKeys, doorRooms, habitableQ, removeDoor, removeGlass, type RoomEdit } from '../game/rooms';
 import { CAPSULE_CAPACITY } from '../game/survival';
 import type { GameState } from '../game/state';
 import type { GuideTarget } from '../game/guide';
@@ -23,7 +24,9 @@ const ELECTROLYSIS = RECIPE_BY_ID.get('electrolysis')!;
 /** Meter scale of an empty tank connector: the basic tank. */
 const EMPTY_TANK = TANKS.bottle_1.capacity / 1000;
 /** What a machine window needs from its host; `caution` shows an amber chip that asks to repeat the action. */
-export type MachineHost = { say: Say; caution: (text: string) => void; changed: () => void; draw: () => void; refill: (id: string | null) => void; nav?: (t: GuideTarget) => void; inside: () => boolean };
+export type MachineHost = { say: Say; caution: (text: string) => void; changed: () => void; draw: () => void; refill: (id: string | null) => void; nav?: (t: GuideTarget) => void; inside: () => boolean; room?: RoomHost };
+/** World side of the room window: effects after a glass/door edit, the red tint before air leaves. */
+export type RoomHost = { edited(r: RoomEdit): void; tint(key: number): void };
 type Ctx = MachineHost & { g: GameState; id: string };
 
 function meter(key: string, label: string, value: number, max: number, unit: string, tone = '', mark?: number) {
@@ -174,7 +177,34 @@ function quickLoad(ctx: Ctx, kind: string, id: string, items: string[], label: s
   ctx.say(moved ? '' : err || (held && !g.player.inventory.some(s => s?.itemId === held) ? `В рюкзаке нет: ${ITEMS[held].name}. Сменить сырьё — нажмите на стак` : 'Нечего загрузить'), 'Загружено');
  }, 'st-btn small', !has);
 }
+/** Room window ids: 'glass:<cell key>' for a glass block, the airlock's own id ('door-N'). */
+export const isStructure = (id: string) => id.startsWith('glass:') || id.startsWith('door-');
+export function structureKey(g: GameState, id: string): number | null { if (id.startsWith('glass:')) { const k = Number(id.slice(6)); return g.world.base.glass.includes(k) ? k : null; } const d = doorById(g, id); return d ? doorKeys(d)[0] : null; }
+let confirmKey = -1, confirmUntil = 0, structureTick = 0;
+/** Glass block / airlock window (S4): the room beside it (volume, air, checklist) or why it is not closed; the airlock
+ *  passage; taking the block back (a second press within 3 s confirms when air would leave). */
+function structureView(g: GameState, id: string, host: MachineHost): HTMLElement {
+ const { say, caution } = host, root = h('div', '', 'st-layout'), left = h('div', '', 'st-main'); root.append(left);
+ const key = structureKey(g, id); if (key === null) return root;
+ root.dataset.kind = 'room'; const door = doorById(g, id), st = structureStatus(g, key);
+ left.append(statusBlock(st));
+ if (st.room) { const r = st.room; left.append(meter('room-air', 'Воздух', r.zone.q / 1000, capacityOf(r.volume) / 1000, 'GU', 'o2', habitableQ(r.volume) / 1000), meter('room-purity', 'Чистота', r.zone.purity * 100, 100, '%', 'clean', 50), h('p', `Объём ${r.volume} м³ · вместимость ${capacityOf(r.volume) / 1000} GU · дышать можно от ${habitableQ(r.volume) / 1000} GU.`, 'st-note')); }
+ else if (st.leak.length) left.append(h('p', 'Путь утечки подсвечен красным в мире на 6 с.', 'st-note'));
+ if (door) {
+  const sides = doorRooms(g, door), quick = h('div', '', 'st-actions'), pass = button('Пройти шлюз', () => say(beginPassage(g, door.id), 'Шлюз: 6 с'), 'st-btn accent'); pass.id = 'airlock-pass'; quick.append(pass);
+  left.append(quick, h('p', sides.front && sides.back ? 'Внутренняя дверь: переход стоит 4 GU из помещения назначения.' : sides.front || sides.back ? 'Цикл 6 с. Вход тратит 4 GU воздуха помещения, выход — остаток до 4 GU. В пригодном помещении баллоны не расходуются.' : 'Шлюз не граничит с помещением: это просто проход, без цикла.', 'st-note'));
+ }
+ const footer = h('div', '', 'st-actions st-foot');
+ footer.append(button(door ? 'Забрать шлюз' : 'Забрать стеклоблок', () => {
+  const confirmed = confirmKey === key && performance.now() < confirmUntil, r = door ? removeDoor(g, door.id, confirmed) : removeGlass(g, key, confirmed);
+  if (r.needConfirm) { confirmKey = key; confirmUntil = performance.now() + 3000; host.room?.tint(key); caution(r.error); return; }
+  confirmKey = -1; if (!r.error) host.room?.edited(r); say(r.error, 'Возвращено в рюкзак');
+ }, 'st-btn small ghost'));
+ left.append(footer);
+ return root;
+}
 export function machineView(g: GameState, id: string, host: MachineHost): HTMLElement {
+ if (isStructure(id)) return structureView(g, id, host);
  const ctx: Ctx = { ...host, g, id }, { say, changed, draw, refill } = host;
  const root = h('div', '', 'st-layout'), left = h('div', '', 'st-main'); root.append(left);
  const change = () => { changed(); draw(); };
@@ -249,6 +279,13 @@ export function machineView(g: GameState, id: string, host: MachineHost): HTMLEl
  return root;
 }
 export function tickMachine(g: GameState, id: string) {
+ // Room windows: status and meters 4 times a second (the leak search is not free).
+ if (isStructure(id)) {
+  if (performance.now() - structureTick < 250) return; structureTick = performance.now();
+  const key = structureKey(g, id); if (key === null) return; const st = structureStatus(g, key); updateStatus(st);
+  if (st.room) { setMeter('room-air', st.room.zone.q / 1000, capacityOf(st.room.volume) / 1000, 'GU'); setMeter('room-purity', st.room.zone.purity * 100, 100, '%'); }
+  return;
+ }
  if (id === 'capsule') {
   setMeter('capsule', g.world.capsuleMilliGU / 1000, CAPSULE_CAPACITY / 1000, 'GU');
   g.player.bottles.forEach((t, i) => setMeter('bottle-' + i, (t?.milliGU ?? 0) / 1000, t ? TANKS[t.itemId].capacity / 1000 : EMPTY_TANK, 'GU'));

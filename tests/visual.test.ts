@@ -11,7 +11,7 @@ import {heightAt} from '../src/world';
 
 test('Light pool picks the nearest active emitters within reach, priority breaking ties',()=>{
  const src=(x:number,intensity:number,priority:number,distance=6)=>({x,y:0,z:0,intensity,distance,priority});
- const list=[src(30,3,LIGHT_PRIORITY.interior),src(10,0,LIGHT_PRIORITY.kiln),src(12,2,LIGHT_PRIORITY.door),src(12,2,LIGHT_PRIORITY.kiln),src(200,9,LIGHT_PRIORITY.dome),src(4,1,LIGHT_PRIORITY.dome)];
+ const list=[src(30,3,LIGHT_PRIORITY.interior),src(10,0,LIGHT_PRIORITY.kiln),src(12,2,LIGHT_PRIORITY.door),src(12,2,LIGHT_PRIORITY.kiln),src(200,9,LIGHT_PRIORITY.room),src(4,1,LIGHT_PRIORITY.room)];
  // Inactive (index 1) and far beyond reach (index 4) are never chosen; equal gaps prefer the kiln.
  assert.deepEqual(assignLights(list,0,0,0,4),[5,3,2,0]);
  assert.deepEqual(assignLights(list,0,0,0,2),[5,3]);

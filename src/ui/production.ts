@@ -3,11 +3,11 @@ import { machine, nearby, RECIPES } from '../game/production';
 import { ITEMS } from '../game/defs';
 import type { GameState } from '../game/state';
 import type { GuideTarget } from '../game/guide';
-import { machineView, tickMachine } from './machines';
+import { isStructure, machineView, structureKey, tickMachine, type RoomHost } from './machines';
 import { itemArt } from './art';
 import { isDragging } from './dragDrop';
 import './station.css';
-type Host = { game(): GameState | null; show(): void; close(): void; changed(): void; refill(id: string | null): void; tone(ok: boolean): void; measure?(name: string, ms: number): void; navigate?(t: GuideTarget): void; insideCapsule?(): boolean };
+type Host = { game(): GameState | null; show(): void; close(): void; changed(): void; refill(id: string | null): void; tone(ok: boolean): void; measure?(name: string, ms: number): void; navigate?(t: GuideTarget): void; insideCapsule?(): boolean; room?: RoomHost };
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const KICKER: Record<string, string> = { workbench: 'Сборка деталей и станций', kiln: 'Плавка · топливо — волокно', biogenerator: 'Энергия для станций', electrolyzer: 'Вода → кислород', refill: 'Заправка баллонов', distributor: 'Климат и воздух помещения' };
 /**
@@ -55,14 +55,16 @@ export function createProductionPanel(host: Host) {
   const focus = document.activeElement as HTMLInputElement | null, search = focus?.id === 'craft-search', cursor = search ? [focus.selectionStart, focus.selectionEnd] : null;
   const b = machine(g, station), craft = station === 'hand' || b?.kind === 'workbench', panel = el('production-panel'), content = el('production-content');
   // The station was packed into the backpack ("Забрать"): nothing left to show, close the window.
-  if (!b && station !== 'hand' && station !== 'capsule' && !station.startsWith('crate-')) { host.refill(null); if (!panel.hidden) host.close(); return; }
+  // A glass block or airlock taken back closes its room window the same way.
+  const structure = isStructure(station), door = station.startsWith('door-');
+  if (structure ? structureKey(g, station) === null : !b && station !== 'hand' && station !== 'capsule' && !station.startsWith('crate-')) { host.refill(null); if (!panel.hidden) host.close(); return; }
   panel.classList.toggle('crafting-panel', craft); panel.classList.toggle('machine-panel', !craft);
   // Entrance motion plays once per opening, not on every live redraw.
   panel.classList.toggle('redraw', !fresh); fresh = false;
-  const title = station === 'hand' ? 'Мастерская' : b?.kind === 'workbench' ? 'Верстак ' + (b.level === 2 ? 'II' : 'I') : station === 'capsule' ? 'Капсула' : station.startsWith('crate-') ? 'Ящик снабжения' : b ? ITEMS[b.kind].name : 'Станция';
+  const title = structure ? (door ? 'Шлюз' : 'Стеклянное помещение') : station === 'hand' ? 'Мастерская' : b?.kind === 'workbench' ? 'Верстак ' + (b.level === 2 ? 'II' : 'I') : station === 'capsule' ? 'Капсула' : station.startsWith('crate-') ? 'Ящик снабжения' : b ? ITEMS[b.kind].name : 'Станция';
   panel.querySelector('h2')!.textContent = title;
-  el('production-kicker').textContent = station === 'hand' ? 'Карманный крафт · где угодно' : station === 'capsule' ? 'Кислородный порт' : station.startsWith('crate-') ? '24 ячейки · хранение' : b ? KICKER[b.kind] ?? '' : '';
-  const icon = el('production-icon'), iconId = station === 'hand' ? 'fiber' : station === 'capsule' ? 'oxygen' : station.startsWith('crate-') ? 'stone' : b ? (b.kind === 'workbench' && b.level === 2 ? 'workbench_2' : b.kind) : 'workbench';
+  el('production-kicker').textContent = structure ? (door ? 'Вход в помещение · цикл 6 с' : 'Стеклоблоки · герметичность') : station === 'hand' ? 'Карманный крафт · где угодно' : station === 'capsule' ? 'Кислородный порт' : station.startsWith('crate-') ? '24 ячейки · хранение' : b ? KICKER[b.kind] ?? '' : '';
+  const icon = el('production-icon'), iconId = structure ? (door ? 'airlock' : 'window') : station === 'hand' ? 'fiber' : station === 'capsule' ? 'oxygen' : station.startsWith('crate-') ? 'stone' : b ? (b.kind === 'workbench' && b.level === 2 ? 'workbench_2' : b.kind) : 'workbench';
   if (icon.dataset.item !== iconId) { icon.dataset.item = iconId; icon.replaceChildren(itemArt(iconId)); }
   tabs(g, craft);
   const chip = el('production-message'); chip.textContent = message; chip.dataset.tone = messageTone; chip.hidden = !message || performance.now() - messageAt > 2600;
@@ -72,7 +74,7 @@ export function createProductionPanel(host: Host) {
    const view = crafting.draw(g, station, say, host.changed, draw, t => { host.navigate?.(t); });
    content.append(view); panel.classList.toggle('craft-upgrade-panel', view.dataset.mode === 'upgrade'); if (view.dataset.mode === 'upgrade') panel.querySelector('h2')!.textContent = 'Улучшение верстака';
    if (search) { const input = el<HTMLInputElement>('craft-search'); if (input) { input.focus({ preventScroll: true }); input.setSelectionRange(cursor![0] ?? 0, cursor![1] ?? 0); } }
-  } else { panel.classList.remove('craft-upgrade-panel'); content.append(machineView(g, station, { say, caution, changed: host.changed, draw, refill: host.refill, nav: t => host.navigate?.(t), inside: () => host.insideCapsule?.() ?? false })); tick(); }
+  } else { panel.classList.remove('craft-upgrade-panel'); content.append(machineView(g, station, { say, caution, changed: host.changed, draw, refill: host.refill, nav: t => host.navigate?.(t), inside: () => host.insideCapsule?.() ?? false, room: host.room })); tick(); }
   message = performance.now() - messageAt > 2600 ? '' : message;
   host.measure?.('production:draw', performance.now() - at);
  }

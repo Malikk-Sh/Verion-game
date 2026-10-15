@@ -3,7 +3,8 @@ import { reducedMotion } from './motion';
 import { boxes, box, heightAt } from './world';
 import { BUILDABLE, ITEMS, TANKS, type BuildingKind } from './game/defs';
 import { makeBuilding, telemetry, RECIPE_BY_ID, nearby, poweredComponent, type Building } from './game/production';
-import { cellOf, roomsRevision, stationProblem, stationRoom } from './game/rooms';
+import { stationProblem, stationRoom } from './game/rooms';
+import { createGlassView } from './glass';
 import { countItem } from './game/inventory';
 import type { GameState } from './game/state';
 import { buildStation, PORT_HEIGHT, type StationLook, type StationVisual } from './stationModels';
@@ -67,8 +68,8 @@ function stripeTexture(color: string) {
 const UP = new THREE.Vector3(0, 1, 0);
 export function createBuildings(scene: THREE.Scene, fx?: Fx) {
  const root = new THREE.Group(); scene.add(root);
- const glass = new THREE.MeshStandardMaterial({ color: 0x9fd6dd, transparent: true, opacity: .2, roughness: .05, metalness: .1, depthWrite: false, side: THREE.DoubleSide });
- const roofGlass = new THREE.MeshStandardMaterial({ color: 0xb6e2e6, transparent: true, opacity: .28, roughness: .08, metalness: .1, depthWrite: false, side: THREE.DoubleSide });
+ // Glass rooms and airlocks (S4): chunked faces, door models, lamps and their collision hash.
+ const glass = createGlassView(root, fx);
  const cableFlow = stripeTexture('#ffb070'), pipeFlow = stripeTexture('#9ff1ff');
  const cableMat = new THREE.MeshStandardMaterial({ color: 0x23282a, roughness: .7, metalness: .2 });
  const cableLive = new THREE.MeshStandardMaterial({ color: 0x23282a, roughness: .7, metalness: .2, emissive: 0xffffff, emissiveMap: cableFlow, emissiveIntensity: 1.4 });
@@ -83,7 +84,8 @@ export function createBuildings(scene: THREE.Scene, fx?: Fx) {
  let key = '', time = 0, initial = true;
  function clearLines() { for (const l of lines) { l.mesh.geometry.dispose(); root.remove(l.mesh); for (const e of l.extra) root.remove(e); } lines.length = 0; }
  function sync(g: GameState) {
-  const next = JSON.stringify([g.world.base.buildings.map(b => [b.id, b.kind, b.level, b.rot, b.x, b.y, b.z]), g.world.base.links, roomsRevision(g)]);
+  glass.sync(g);
+  const next = JSON.stringify([g.world.base.buildings.map(b => [b.id, b.kind, b.level, b.rot, b.x, b.y, b.z]), g.world.base.links]);
   if (next === key) return; key = next;
   for (let i = boxes.length - 1; i >= 0; i--) if (boxes[i].id.startsWith('build-')) boxes.splice(i, 1);
   const alive = new Set(g.world.base.buildings.map(b => b.id));
@@ -99,7 +101,6 @@ export function createBuildings(scene: THREE.Scene, fx?: Fx) {
    if (b.kind === 'workbench') { const h = b.level === 2 ? 1.55 : 1.1; boxes.push(box(b.id, b.x, b.y + h / 2, b.z, .98, h, .82)); }
    else { const h = b.kind === 'kiln' ? 1.35 : b.kind === 'refill' ? 1.45 : b.kind === 'distributor' ? .95 : 1.25; const w = b.kind === 'refill' ? .7 : .94; boxes.push(box(b.id, b.x, b.y + h / 2, b.z, w, h, w)); }
   }
-  syncGlass(g);
   clearLines();
   for (const l of g.world.base.links) {
    const ta = l.to === 'capsule' ? { x: 40, z: 40 } : g.world.base.buildings.find(b => b.id === l.to)!, fa = g.world.base.buildings.find(b => b.id === l.from)!;
@@ -133,28 +134,11 @@ export function createBuildings(scene: THREE.Scene, fx?: Fx) {
   if (initial) for (const l of g.world.base.links) knownLinks.add(l.id);
   initial = false;
  }
- /** Placeholder glass rooms (R1 of S4): one instanced cube per block and door, plus plain colliders. The chunked
-  *  face mesh, the door model and the spatial collision hash replace it. */
- const glassMeshes: THREE.InstancedMesh[] = [];
- function syncGlass(g: GameState) {
-  for (const m of glassMeshes) { root.remove(m); m.dispose(); } glassMeshes.length = 0;
-  const cells = g.world.base.glass, doors = g.world.base.doors;
-  if (cells.length) {
-   const mesh = new THREE.InstancedMesh(cube, glass, cells.length), m = new THREE.Matrix4();
-   cells.forEach((key, i) => { const c = cellOf(key); m.makeScale(.98, .98, .98).setPosition(c.i + .5, c.k + .5, c.j + .5); mesh.setMatrixAt(i, m); boxes.push(box('build-glass-' + key, c.i + .5, c.k + .5, c.j + .5, 1, 1, 1)); });
-   mesh.renderOrder = 2; root.add(mesh); glassMeshes.push(mesh);
-  }
-  if (doors.length) {
-   const mesh = new THREE.InstancedMesh(cube, roofGlass, doors.length), m = new THREE.Matrix4();
-   doors.forEach((d, i) => { m.makeScale(.9, 1.96, .9).setPosition(d.x + .5, d.y + 1, d.z + .5); mesh.setMatrixAt(i, m); boxes.push(box('build-' + d.id, d.x + .5, d.y + 1, d.z + .5, 1, 2, 1)); });
-   mesh.renderOrder = 2; root.add(mesh); glassMeshes.push(mesh);
-  }
- }
  /** A newly loaded world appears as saved; only later placements animate. */
- function reset() { key = ''; initial = true; knownLinks.clear(); puff.clear(); for (const s of stations.values()) { root.remove(s.group); s.v.dispose(); } stations.clear(); clearLines(); born.clear(); }
+ function reset() { glass.reset(); key = ''; initial = true; knownLinks.clear(); puff.clear(); for (const s of stations.values()) { root.remove(s.group); s.v.dispose(); } stations.clear(); clearLines(); born.clear(); }
  /** Animates stations and flow; `dt` is real frame time (0 while frozen). */
  function update(g: GameState | null, dt: number) {
-  if (!g) return; time += dt;
+  if (!g) return; time += dt; glass.update(g, dt);
   // Reduced motion: no flow, spin, drop-in, draw-in or smoke; lamps and colours still show the state.
   const still = reducedMotion(), m = still ? 0 : dt;
   cableFlow.offset.x -= m * 1.6; pipeFlow.offset.x -= m * 1.2;
@@ -188,5 +172,5 @@ export function createBuildings(scene: THREE.Scene, fx?: Fx) {
  }
  /** Newly placed station drops in with a short settle animation. */
  function celebrate(id: string) { born.set(id, 0); }
- return { sync, reset, update, celebrate, root, /** A station is dropping in: its shadow must follow. */ get animating() { return born.size > 0; }, tankFull: (t: { itemId: string; milliGU?: number }) => (t.milliGU ?? 0) >= TANKS[t.itemId].capacity };
+ return { sync, reset, update, celebrate, root, glass, /** A station is dropping in: its shadow must follow. */ get animating() { return born.size > 0; }, tankFull: (t: { itemId: string; milliGU?: number }) => (t.milliGU ?? 0) >= TANKS[t.itemId].capacity };
 }

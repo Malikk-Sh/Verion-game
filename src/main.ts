@@ -16,7 +16,8 @@ import { itemArt } from './ui/art';
 import { createProductionPanel } from './ui/production';
 import { createBuildings } from './buildings';
 import { productionTick, manualWork, releaseHandOnDeath, machine } from './game/production';
-import { breathingRoom } from './game/rooms';
+import { allRooms, around, breathingRoom, doorById, doorKeys, habitableRoom, removeDoor, removeGlass, roomAtCell, roomDoors, type RoomEdit } from './game/rooms';
+import { structureStatus } from './game/stationStatus';
 import * as THREE from 'three';
 import './style.css';
 import './ui/hud.css';
@@ -65,7 +66,7 @@ function boot(){
  renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFShadowMap;
  const scene=new THREE.Scene();const camera=new THREE.PerspectiveCamera(68,1,.15,1400);
  const fx=createFx(scene,{ground:heightAt}),built=createBuildings(scene,fx),interaction=createWorldInteraction(scene,camera);
- const world=createWorld(scene),actor=new Character(boxes),audio=new Ambience(),settings=loadSettings();
+ const world=createWorld(scene),actor=new Character(boxes,(a,b,c,d,out)=>built.glass.query(a,b,c,d,out)),audio=new Ambience(),settings=loadSettings();
  world.lightRoots.push(built.root);const prints=createFootprints(scene,heightAt);
  const diagnostics=new Diagnostics(),gl=renderer.getContext(),rendererVersion=String(gl.getParameter(gl.VERSION));
  const gpuExtension=gl.getExtension('WEBGL_debug_renderer_info');
@@ -174,7 +175,7 @@ function boot(){
   navigate:target=>{guideOverride=target;selected='guide';updateUI();}});
  const openQuests=()=>{if(!started||!game||game.player.vitals.health<=0||saver?.halted)return;if(dialog==='quest-panel'){questBook.escape();return;}if(running||liveDialogs.has(dialog)||dialog==='paused')questBook.open();};
  el('quests-button').onclick=openQuests;
- const production=createProductionPanel({game:()=>game,show:()=>setDialog('production-panel'),close:()=>{void saver?.save();const back=workshopReturn;if(back)setDialog(back);else resume();},changed:()=>{if(game)built.sync(game);world.invalidateShadows();syncDrops();hudKey='';updateHotbar();void saver?.save();},measure:(name,ms)=>{diagnostics.span(name,ms);diagnostics.event(name,ms,{dialog,quality:settings.quality});},refill:id=>{const wasRefilling=refillMachine!==null;refillMachine=id;if(wasRefilling&&!id)void saver?.save();},tone:ok=>audio.tone(ok?'item':'warn'),insideCapsule:()=>insideCapsule(),
+ const production=createProductionPanel({game:()=>game,room:{edited:r=>afterEdit(r,false),tint:key=>{if(game)built.glass.tintRooms(game,key,3);}},show:()=>setDialog('production-panel'),close:()=>{void saver?.save();const back=workshopReturn;if(back)setDialog(back);else resume();},changed:()=>{if(game)built.sync(game);world.invalidateShadows();syncDrops();hudKey='';updateHotbar();void saver?.save();},measure:(name,ms)=>{diagnostics.span(name,ms);diagnostics.event(name,ms,{dialog,quality:settings.quality});},refill:id=>{const wasRefilling=refillMachine!==null;refillMachine=id;if(wasRefilling&&!id)void saver?.save();},tone:ok=>audio.tone(ok?'item':'warn'),insideCapsule:()=>insideCapsule(),
   navigate:t=>{guideOverride=t;selected='guide';audio.tone('ui');void saver?.save();resume();updateUI();}});
  el('craft-button').onclick=()=>production.open();
 
@@ -188,14 +189,46 @@ function boot(){
   lastSurvivalEvent='none';hudKey='';updateUI();updateAimUI();
   void (saver?.save()??Promise.resolve()).finally(()=>{respawnBtn.disabled=false;resume();});
  };
- function retrieveStation(){if(!game||!running||!nearMachine)return;const error=packStation(game,nearMachine);toast(error?'Не удалось забрать':'Станция в рюкзаке',error||'Содержимое сохранено');if(!error){built.sync(game);world.invalidateShadows();hudKey='';updateHotbar();void saver?.save();}}
+ // ---------- Glass blocks and airlocks (S4): place with F (hold for a row), take back with R, confirm venting ----------
+ let holdPlace=false,lastPlace=0,pendingRemove:{key:number;until:number;text:string}|null=null;const placedInHold=new Set<number>();
+ /** Rebuild, effects and save after a glass/door edit. */
+ function afterEdit(r:RoomEdit,save=true){
+  if(!game)return;built.sync(game);world.invalidateShadows();hudKey='';updateHotbar();
+  if(r.breached&&r.at){const p=game.player;built.glass.breach(r.at,{x:p.x,y:p.y,z:p.z});audio.hiss();toast('Разгерметизация',`Воздух ушёл: ${Math.ceil(r.ventGU)} GU`);}
+  if(save)void saver?.save();
+ }
+ /** One placement from the cell tool; quiet on success (a held F places a row), the reason otherwise. */
+ function placeCell(){
+  if(!game||!running)return;const r=interaction.placeCell(game);if(!r)return;
+  if(r.error){if(!holdPlace||!placedInHold.size){toast('Строительство',r.error);audio.tone('warn');}return;}
+  placedInHold.add(r.key);lastPlace=performance.now();audio.tone('ui');afterEdit(r,!holdPlace);interaction.update(game,true);updateAimUI();
+ }
+ function endHold(){if(holdPlace&&placedInHold.size)void saver?.save();holdPlace=false;placedInHold.clear();}
+ /** Takes back the aimed block or airlock; a removal that lets air out asks for a second press within 3 s. */
+ function removeStructure(){
+  const s=interaction.struck;if(!game||!running||!s)return;
+  const confirmed=!!pendingRemove&&pendingRemove.key===s.key&&performance.now()<pendingRemove.until;
+  const r=s.door?removeDoor(game,s.door,confirmed):removeGlass(game,s.key,confirmed);
+  if(r.needConfirm){pendingRemove={key:s.key,until:performance.now()+3000,text:r.error};built.glass.tintRooms(game,s.key,3);audio.tone('warn');toast('Внимание',r.error);updateAimUI();return;}
+  pendingRemove=null;built.glass.clearTint();
+  if(r.error){toast('Не удалось забрать',r.error);audio.tone('warn');return;}
+  audio.tone('item');if(!r.breached)toast(s.door?'Шлюз в рюкзаке':'Стеклоблок в рюкзаке','Возвращено в рюкзак');afterEdit(r);interaction.update(game,true);updateAimUI();
+ }
+ /** The room window of the aimed block or airlock; a leaking structure shows its leak path for 6 s. */
+ function openStructure(id:string){
+  if(!game)return;const key=id.startsWith('glass:')?Number(id.slice(6)):doorKeys(doorById(game,id)!)[0],st=structureStatus(game,key);
+  if(st.leak.length)built.glass.showLeak(st.leak,6);production.open(id);
+ }
+ function retrieveStation(){if(!game||!running)return;if(!nearMachine){removeStructure();return;}const error=packStation(game,nearMachine);toast(error?'Не удалось забрать':'Станция в рюкзаке',error||'Содержимое сохранено');if(!error){built.sync(game);world.invalidateShadows();hudKey='';updateHotbar();void saver?.save();}}
  el('retrieve-station').onclick=retrieveStation;
- const rotateBuild=()=>{if(!running||!interaction.building)return;interaction.rotate();audio.tone('ui');};
+ const rotateBuild=()=>{if(!running||!(interaction.building||interaction.cellTool))return;interaction.rotate();audio.tone('ui');};
  el('rotate-build').onclick=rotateBuild;
  let lastAction='';
  function doAction(){
   lastAction=`${actionKind}:${running}:${nearMachine??''}`;
   if(!running||!game)return;
+  if(interaction.cellTool){placeCell();return;}
+  if(actionKind==='room'&&interaction.target){openStructure(interaction.target);return;}
   const before=game.world.base.buildings.length,linksBefore=game.world.base.links.length;
   const result=interaction.action(game);if(result!==null){toast(result?'Действие в мире':'Готово',result||(game.world.base.links.length>linksBefore?'Соединено':'Установлено'));if(!result&&game.world.base.buildings.length>before)audio.tone('discover');
    if(!result&&game.world.base.links.length>linksBefore)audio.tone('item');built.sync(game);world.invalidateShadows();hudKey='';updateHotbar();interaction.update(game,true);updateAimUI();void saver?.save();return;}
@@ -207,8 +240,8 @@ function boot(){
   else if(actionKind==='scan')inspect();
   else if(actionKind==='eat' && game && eatPulp(game)==='ate'){ audio.tone('item'); toast('Питание','Пульпа использована · +8 сытости'); hudKey=''; updateVitals(); updateHotbar(); updateAimUI(); }
  }
- actionBtn.addEventListener('pointerdown',e=>{e.preventDefault();if(!running)return;if(actionKind==='mine'||actionKind==='refill'){holdMine=actionKind==='mine';holdRefill=actionKind==='refill';capture(actionBtn,e);}else doAction();});
- for(const type of ['pointerup','pointercancel','lostpointercapture'])actionBtn.addEventListener(type,()=>{if(holdRefill)void saver?.save();holdMine=holdRefill=false;});
+ actionBtn.addEventListener('pointerdown',e=>{e.preventDefault();if(!running)return;if(interaction.cellTool){holdPlace=game?.player.inventory[game.player.hotbar]?.itemId==='window';placedInHold.clear();capture(actionBtn,e);placeCell();return;}if(actionKind==='mine'||actionKind==='refill'){holdMine=actionKind==='mine';holdRefill=actionKind==='refill';capture(actionBtn,e);}else doAction();});
+ for(const type of ['pointerup','pointercancel','lostpointercapture'])actionBtn.addEventListener(type,()=>{if(holdRefill)void saver?.save();holdMine=holdRefill=false;endHold();});
  actionBtn.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&!e.repeat){e.preventDefault();if(actionKind==='mine'||actionKind==='refill'){holdMine=actionKind==='mine';holdRefill=actionKind==='refill';}else doAction();}});
  actionBtn.addEventListener('keyup',()=>{if(holdRefill)void saver?.save();holdMine=holdRefill=false;});
  // ---------- Hotbar: the first six cells of the backpack ----------
@@ -312,11 +345,12 @@ function boot(){
   if(event.code==='KeyQ'&&!event.repeat){event.preventDefault();rotateBuild();return;}
   if(event.code==='KeyN'&&!event.repeat){event.preventDefault();toggleDay();return;}
   if(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','ShiftLeft','ShiftRight','KeyE','KeyF'].includes(event.code))event.preventDefault();
-  if(event.code==='KeyF'&&!event.repeat){if(actionKind==='mine'||actionKind==='refill'){holdMine=actionKind==='mine';holdRefill=actionKind==='refill';}else doAction();}
+  if(event.code==='KeyF'&&!event.repeat&&interaction.cellTool){holdPlace=game?.player.inventory[game.player.hotbar]?.itemId==='window';placedInHold.clear();placeCell();}
+  else if(event.code==='KeyF'&&!event.repeat){if(actionKind==='mine'||actionKind==='refill'){holdMine=actionKind==='mine';holdRefill=actionKind==='refill';}else doAction();}
   keys.add(event.code);if(event.code==='Space'&&!event.repeat)input.jump=true;
   if(event.code==='KeyE'&&!event.repeat)inspect();updateRun();
  });
- addEventListener('keyup',event=>{keys.delete(event.code);if(event.code==='KeyF'){if(holdRefill)void saver?.save();holdMine=holdRefill=false;}updateRun();});
+ addEventListener('keyup',event=>{keys.delete(event.code);if(event.code==='KeyF'){if(holdRefill)void saver?.save();holdMine=holdRefill=false;endHold();}updateRun();});
  const stick=el('joystick');
  const capture=(target:HTMLElement,event:PointerEvent)=>{try{target.setPointerCapture(event.pointerId);}catch{/* Synthetic pointer events have no OS capture; real pointers do. */}};
  function moveStick(event:PointerEvent){const r=stick.getBoundingClientRect();let x=event.clientX-(r.left+r.width/2),y=event.clientY-(r.top+r.height/2);const len=Math.hypot(x,y),max=Math.max(1,(r.width-el('stick').getBoundingClientRect().width)/2-r.width*.06);if(len>max){x*=max/len;y*=max/len;}joyX=x/max;joyY=-y/max;if(Math.abs(joyX)<.1)joyX=0;if(Math.abs(joyY)<.1)joyY=0;el('stick').style.transform=`translate(${x}px,${y}px)`;}
@@ -485,16 +519,23 @@ function boot(){
   else if(kind!=='eat'&&nearMachine){kind='machine';label='Открыть станцию';iconId='i-plug';const b=game&&machine(game,nearMachine);if(b){if(selected?.itemId==='wrench'&&b.kind==='workbench'&&b.level===1){kind='upgrade';label='Улучшить';iconId='i-gear';}box.hidden=!running;const st=stationStatus(game!,b);el('aim-name').textContent=b.kind==='workbench'?'Верстак '+(b.level===2?'II':'I'):ITEMS[b.kind].name;el('aim-meta').textContent=kind==='upgrade'?'Ключ · улучшение до II · F':st.title+' · F';box.classList.toggle('blocked',st.tone==='warn');(el('aim-bar').firstElementChild as HTMLElement).style.transform='scaleX(0)';document.body.dataset.aim='true';}}
   else if(kind==='eat'){blocked=game!.player.survival.foodCooldownMs>0?'Подождите перед следующей порцией':'';}
   else if(nearest){kind='scan';label='Сканировать';iconId='i-scan';}
-  if(game&&interaction.building){kind='place';label='Установить';iconId='i-pack';el('aim-name').textContent=selected?ITEMS[selected.itemId].name:'';el('aim-meta').textContent=interaction.problem||'Установить · F';blocked=interaction.problem;}
+  if(game&&interaction.cellTool){const id=selected?.itemId;kind='cell';label=id==='airlock'?'Встроить шлюз':'Поставить';iconId='i-pack';el('aim-name').textContent=(selected?ITEMS[selected.itemId].name:'')+(id==='airlock'?' · Q — поворот':'');el('aim-meta').textContent=interaction.problem||(id==='window'?'Поставить · F, удерживать — ряд':'Встроить · F');blocked=interaction.problem;box.classList.toggle('blocked',!!blocked);}
+  else if(game&&!nearMachine&&(interaction.target?.startsWith('glass:')||interaction.target?.startsWith('door-'))){
+   const door=interaction.target.startsWith('door-')?doorById(game,interaction.target):undefined,key=door?doorKeys(door)[0]:Number(interaction.target.slice(6));
+   // Cheap caption (no leak search every frame): the room beside the block, if any.
+   const room=around(key).map(n=>roomAtCell(game!,n)).find(Boolean);kind='room';label=door?'Открыть шлюз':'Открыть помещение';iconId='i-plug';
+   el('aim-name').textContent=door?'Шлюз':room?`Помещение · ${room.volume} м³`:'Стеклоблок';el('aim-meta').textContent=(room?(habitableRoom(room)?'Воздух пригоден':`Воздух ${Math.floor(room.zone.q/1000)} GU · непригоден`):'Не замкнуто')+' · F · R — забрать';box.classList.toggle('blocked',!room||!habitableRoom(room));(el('aim-bar').firstElementChild as HTMLElement).style.transform='scaleX(0)';}
+  else if(game&&interaction.building){kind='place';label='Установить';iconId='i-pack';el('aim-name').textContent=selected?ITEMS[selected.itemId].name:'';el('aim-meta').textContent=interaction.problem||'Установить · F';blocked=interaction.problem;}
   else if(game&&interaction.linking){kind='link';label='Соединить';iconId='i-plug';el('aim-name').textContent=selected?ITEMS[selected.itemId].name:'';el('aim-meta').textContent=interaction.hint;box.classList.toggle('blocked',!interaction.linkOk);}
   else if(game&&interaction.target?.startsWith('crate-')){kind='crate';label='Открыть ящик';iconId='i-pack';el('aim-name').textContent='Ящик';el('aim-meta').textContent='Открыть · F';}
   else if(game&&interaction.target==='capsule'&&kind!=='eat'){kind='capsule';label='Открыть заправку';iconId='i-plug';el('aim-name').textContent='Капсула · кислородный порт';el('aim-meta').textContent='Заправить баллоны · F';}
+  if(pendingRemove&&performance.now()<pendingRemove.until&&interaction.struck?.key===pendingRemove.key){if(!el('aim-name').textContent)el('aim-name').textContent=interaction.struck.door?'Шлюз':'Стеклоблок';el('aim-meta').textContent=pendingRemove.text;box.classList.add('blocked');}
   box.hidden=!running||!el('aim-name').textContent;document.body.dataset.aim=String(!box.hidden);
   if(box.hidden){el('aim-name').textContent='';el('aim-meta').textContent='';box.classList.remove('blocked');(el('aim-bar').firstElementChild as HTMLElement).style.transform='scaleX(0)';}
-  el('retrieve-station').hidden=!running||!nearMachine||interaction.building||interaction.linking;
-  el('rotate-build').hidden=!running||!interaction.building;
+  el('retrieve-station').hidden=!running||!(nearMachine||interaction.struck)||interaction.building||interaction.linking;
+  el('rotate-build').hidden=!running||!(interaction.building||interaction.cellTool&&selected?.itemId==='airlock');
   const disabled=kind==='none' ||!!blocked||!running;
-  actionKind=disabled?'none':kind;if(disabled||kind!=='mine')holdMine=false;if(disabled||kind!=='refill')holdRefill=false;
+  actionKind=disabled?'none':kind;if(disabled||kind!=='mine')holdMine=false;if(kind!=='cell'&&holdPlace)endHold();if(disabled||kind!=='refill')holdRefill=false;
   actionBtn.dataset.kind=kind;actionBtn.setAttribute('aria-disabled',String(disabled));actionBtn.style.setProperty('--p',String(mineRatio));
   const actionLabel=kind==='mine'?'Добыть (удерживать)':kind==='refill'?label+' (удерживать)':label;
   if(actionBtn.getAttribute('aria-label')!==actionLabel){el('action-icon').innerHTML=`<use href="#${iconId}"/>`;actionBtn.setAttribute('aria-label',actionLabel);}
@@ -632,7 +673,7 @@ function boot(){
   const o=objective();if(o!==lastObjective){lastObjective=o;el('objective-text').textContent=o;const ob=el('objective');ob.classList.remove('advance');void ob.offsetWidth;ob.classList.add('advance');}
   updateVitals();updateHotbar();updateDayButton();
  }
- function state(){const sorted=[...frames].sort((a,b)=>a-b);return {ready:true,version:'S3',linkSource:interaction.source,lastAction,fx:fx.stats(),guide:game?{current:currentStep(game),objective:el('objective-text').textContent,task:el('objective-task').textContent,nav:navTarget(),selected}:null,station:production.station,worldTarget:interaction.target,quests:game?structuredClone(game.progress.quests):null,questBook:questBook.debug(),vitals:game?{...game.player.vitals}:null,survival:game?{...game.player.survival}:null,capsuleMilliGU:game?.world.capsuleMilliGU??0,base:game?structuredClone(game.world.base):null,visibleDrops:dropGroup.children.length,slotId,revision:saver?.revision??0,saveStatus:saver?.status.kind??(game?'none':'idle'),halted:!!saver?.halted,activeTicks:clock.activeTicks,clockRunning:clock.running,hotbar:game?.player.hotbar??0,cells:game?game.player.inventory.map(s=>s?{...s}:null):[],suit:game?Object.fromEntries(Object.entries(game.player.suit).map(([k,v])=>[k,v?.itemId??null])):null,worn:game?wornParts(game):0,bottles:game?game.player.bottles.map(b=>b?{...b}:null):[],oxygenGU:game?oxygenGU(game):0,dayPhase:dayPhase(),dayOffsetTicks:game?.world.dayOffsetTicks??0,nightValue:world.nightValue,action:actionKind,handItem:hand.visible,panel:panels.debug,aimNode,mineRatio,nodes:game?{...game.world.nodes}:null,inventory:game?game.player.inventory.filter(Boolean).map(s=>({...s})):[],drops:game?game.world.drops.length:0,storage:!!store,grassCount:world.grassCount,fullscreen:!!document.fullscreenElement,running,dialog,night:!isDay(dayPhase()),selected,visited:[...visited],activeTime:clock.activeSeconds,position:{x:actor.x,y:actor.y,z:actor.z},yaw:actor.yaw,pitch:actor.pitch,grounded:actor.grounded,input:{...input,joyX,joyY,joyPointer,lookPointer},quality:settings.quality,sound:settings.sound,bob:settings.bob,fov:settings.fov,fineTerrainBlocks:world.terrain.fineBlocks,midTerrainBlocks:world.terrain.midBlocks,drawCalls:renderCalls,triangles:renderTriangles,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0,viewport:{width:innerWidth,height:innerHeight},renderer:rendererVersion,diagnostics:diagnostics.enabled,shadowTarget:world.sunLight.target.position.toArray(),shadowRedraws:world.shadowRedraws,footprints:{count:prints.count,visible:prints.visible},motes:world.motes.count,wind:{gust:world.wind.gust,angle:world.wind.angle,time:world.wind.time},pointLights:{pool:world.lights.count,active:world.lights.active,emitters:world.lights.emitters},shadowBias:world.sunLight.shadow.bias};}
+ function state(){const sorted=[...frames].sort((a,b)=>a-b);return {ready:true,version:'S3',linkSource:interaction.source,lastAction,fx:fx.stats(),guide:game?{current:currentStep(game),objective:el('objective-text').textContent,task:el('objective-task').textContent,nav:navTarget(),selected}:null,station:production.station,worldTarget:interaction.target,quests:game?structuredClone(game.progress.quests):null,questBook:questBook.debug(),vitals:game?{...game.player.vitals}:null,survival:game?{...game.player.survival}:null,capsuleMilliGU:game?.world.capsuleMilliGU??0,base:game?structuredClone(game.world.base):null,rooms:game?allRooms(game).map(r=>({cell:r.cell,volume:r.volume,q:r.zone.q/1000,purity:r.zone.purity,temperature:r.zone.temperature,habitable:habitableRoom(r),doors:roomDoors(game!,r).map(d=>d.id)})):[],glass:game?{count:game.world.base.glass.length,...built.glass.stats()}:null,cellTarget:interaction.cell,cellProblem:interaction.cellTool?interaction.problem:'',struck:interaction.struck,pendingRemove:pendingRemove&&performance.now()<pendingRemove.until?pendingRemove.text:'',visibleDrops:dropGroup.children.length,slotId,revision:saver?.revision??0,saveStatus:saver?.status.kind??(game?'none':'idle'),halted:!!saver?.halted,activeTicks:clock.activeTicks,clockRunning:clock.running,hotbar:game?.player.hotbar??0,cells:game?game.player.inventory.map(s=>s?{...s}:null):[],suit:game?Object.fromEntries(Object.entries(game.player.suit).map(([k,v])=>[k,v?.itemId??null])):null,worn:game?wornParts(game):0,bottles:game?game.player.bottles.map(b=>b?{...b}:null):[],oxygenGU:game?oxygenGU(game):0,dayPhase:dayPhase(),dayOffsetTicks:game?.world.dayOffsetTicks??0,nightValue:world.nightValue,action:actionKind,handItem:hand.visible,panel:panels.debug,aimNode,mineRatio,nodes:game?{...game.world.nodes}:null,inventory:game?game.player.inventory.filter(Boolean).map(s=>({...s})):[],drops:game?game.world.drops.length:0,storage:!!store,grassCount:world.grassCount,fullscreen:!!document.fullscreenElement,running,dialog,night:!isDay(dayPhase()),selected,visited:[...visited],activeTime:clock.activeSeconds,position:{x:actor.x,y:actor.y,z:actor.z},yaw:actor.yaw,pitch:actor.pitch,grounded:actor.grounded,input:{...input,joyX,joyY,joyPointer,lookPointer},quality:settings.quality,sound:settings.sound,bob:settings.bob,fov:settings.fov,fineTerrainBlocks:world.terrain.fineBlocks,midTerrainBlocks:world.terrain.midBlocks,drawCalls:renderCalls,triangles:renderTriangles,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0,viewport:{width:innerWidth,height:innerHeight},renderer:rendererVersion,diagnostics:diagnostics.enabled,shadowTarget:world.sunLight.target.position.toArray(),shadowRedraws:world.shadowRedraws,footprints:{count:prints.count,visible:prints.visible},motes:world.motes.count,wind:{gust:world.wind.gust,angle:world.wind.angle,time:world.wind.time},pointLights:{pool:world.lights.count,active:world.lights.active,emitters:world.lights.emitters},shadowBias:world.sunLight.shadow.bias};}
  const dev=!!(import.meta as unknown as {env?:{DEV?:boolean}}).env?.DEV;
  Object.defineProperty(window,'__vireon',{value:{getState:state,save:()=>saver?.save(),snapshot:()=>game?snapshot():null,diagnostics:()=>diagnosticReport(),
   // Development-only verification helpers; absent from production builds.
@@ -725,7 +766,9 @@ function boot(){
   }
   measured=diagnostics.stage('render-submit',measured);
   if(!frozen)audio.update(dt,started&&insideCapsule()?1:0,world.nightValue,world.wind.gust);
-  if(started){drawCompass(bearing(Math.sin(actor.yaw),Math.cos(actor.yaw)));updateMarker();interaction.update(game,running,dt);computeAim();updateAimUI();}
+  if(started){drawCompass(bearing(Math.sin(actor.yaw),Math.cos(actor.yaw)));updateMarker();interaction.update(game,running,dt);computeAim();updateAimUI();
+   // Held F: one more block every 0.25 s as the aim moves to a new cell resting on something that was there before the hold.
+   if(holdPlace&&running&&game&&interaction.cellTool&&performance.now()-lastPlace>=250&&interaction.cell!==null&&!interaction.problem&&!placedInHold.has(interaction.cell)&&!placedInHold.has(interaction.support))placeCell();}
   if(game&&started){built.update(game,frozen?0:dt);if(built.animating||game.world.base.passage)world.invalidateShadows();}
   if(running&&dt>0){frames.push(actualFrameMs);if(frames.length>180)frames.shift();}
   if(now-lastUI>150){updateUI();lastUI=now;if(showMetrics){const sorted=[...frames].sort((a,b)=>a-b),s={drawCalls:renderCalls,triangles:renderTriangles,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0};const ob=el('objective').getBoundingClientRect();el('metrics').style.top=`${Math.round(ob.bottom+8)}px`;el('metrics').textContent=`S3 / WebGL2 / DPR ${renderer.getPixelRatio()} / ${settings.quality}\nВызовы: ${s.drawCalls} · треуг.: ${s.triangles}\nКадр p95: ${s.frameP95Ms.toFixed(1)} мс\nX ${actor.x.toFixed(1)} · Z ${actor.z.toFixed(1)}\nЭто замер текущего браузера`;}}
