@@ -56,7 +56,10 @@ try{
  assert.deepEqual(lastAir,{warned:true,kept:true,confirmed:true,back:true});
  await page.locator('#st-worn-0').tap();await page.waitForSelector('#production-message[data-tone="amber"]:not([hidden])');await shot('oxygen-last-air');assert.equal(await charging(),null);
  check('Taking the last breathable tank off outside first shows the amber chip; the same tap again confirms, a tap on the charging slot wears it back');
- await suit([tank(100),tank(600)]);await page.locator('#st-worn-0').tap();await page.waitForFunction(()=>window.__vireon.snapshot().player.bottles[0]===null);const mounted=(await charging()).milliGU;assert.ok(mounted>50000&&mounted<=100000);assert.equal(await page.locator('#production-message[data-tone="amber"]:not([hidden])').count(),0);
+ await suit([tank(100),tank(600)]);await page.locator('#st-worn-0').tap();
+ // Read both tanks in the frame the move lands: the generator charges the mounted tank from then on (fast on a slow runner), so only the identities are exact.
+ const moved0=await (await page.waitForFunction(e=>{const s=window.__vireon.snapshot();return s.player.bottles[0]===null&&{mounted:s.world.base.buildings.find(b=>b.id===e).input[1]?.milliGU??0,kept:s.player.bottles[1]?.milliGU??0};},electro)).jsonValue(),mounted=moved0.mounted;
+ assert.ok(mounted>50000&&mounted<400000&&moved0.kept>500000,JSON.stringify(moved0));assert.equal(await page.locator('#production-message[data-tone="amber"]:not([hidden])').count(),0);
  await page.waitForFunction(([e,n])=>window.__vireon.snapshot().world.base.buildings.find(b=>b.id===e).input[1].milliGU>n,[electro,mounted],{timeout:120000});check('With a second tank worn a tap puts the worn tank on charge straight from the suit; the generator fills it');
  const charged=(await charging()).milliGU,moved=await drag('#st-charge','#st-worn-0');assert.deepEqual(moved,{ghost:true,left:false});await page.waitForFunction(()=>window.__vireon.snapshot().player.bottles[0]!==null);
  let worn=await snapshot();assert.ok(worn.player.bottles[0].milliGU>=charged-3000);assert.equal(worn.player.bottles[1].milliGU>0,true);assert.equal(await charging(),null);check('A touch drag from the charging slot to a worn connector wears the charged tank at once');
