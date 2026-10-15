@@ -95,7 +95,7 @@ export function guideStep(g: GameState, id: QuestId): GuideStep {
    tasks: [material(g, 'ice', 2, D || inv(g, 'water') > 0 || fact(g, 'craft:melt_in_generator')), flag('Растопить лёд в воду', fact(g, 'craft:melt_in_generator') || D, nearestStation(g, 'kiln'), 'melt_in_generator'), flag('Получить кислород электролизом', fact(g, 'craft:electrolysis'), nearestStation(g, 'electrolyzer'))] }),
   refill: () => ({ chapter: 2, title: 'Заправленный баллон', item: 'bottle_1', recipes: ['craft_bottle_1', 'craft_refill', 'craft_gas_pipe'],
    why: 'Свой газ в баллонах — это свобода дальних вылазок. Второй баллон удваивает запас.',
-   how: ['Откройте генератор кислорода и установите баллон из костюма в его слот — он заправится.', 'Или поставьте заправочную станцию, протяните к ней трубу O₂ и подключите кабель.'],
+   how: ['Откройте генератор кислорода и перетащите баллон костюма в слот заправки (или нажмите на него) — он заправится. Заправленный верните так же: прямо на костюм.', 'Или поставьте заправочную станцию, протяните к ней трубу O₂ и подключите кабель.'],
    tasks: [flag('Заправить баллон своим кислородом', fact(g, 'system:refill'), nearestStation(g, 'electrolyzer')), material(g, 'bottle_1', 1, D || g.player.bottles.filter(Boolean).length >= 2)] }),
   circuit: () => ({ chapter: 1, title: 'Электроника', item: 'circuit', recipes: ['craft_circuit'],
    why: 'Электроника нужна распределителю купола и улучшенному верстаку.',

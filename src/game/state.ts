@@ -1,6 +1,6 @@
 import { electricPort } from './production';
 import { heightAt } from '../world';
-import { freshBase, RECIPE_BY_ID, domeFaces, domeFront, LINK_RANGE, MAX_REPEAT, type BaseState, type Job, type Building, type Link } from './production';
+import { freshBase, RECIPE_BY_ID, domeFaces, domeFront, LINK_RANGE, MAX_REPEAT, GEN_BUFFER, FIBER_EU, ELECTROLYZER_O2, PORT_O2, CAPSULE_CAPACITY, type BaseState, type Job, type Building, type Link } from './production';
 import { BASIC_SUIT, BUILDABLE, CONTENT_VERSION, GENERATOR_VERSION, ITEMS, LEGACY_CONTENT_VERSIONS, SUIT_PARTS, TANKS, TOOLS, type SuitPart } from './defs';
 import { emptyInventory, INVENTORY_SIZE, type Slot } from './inventory';
 import { NODES, NODE_BY_ID, LATER_NODES, S3_NODES, nodeCovered, bodyHalf } from './resources';
@@ -52,7 +52,7 @@ export function newGame(worldId: string, seed: number, createdAt: number, y: num
  return {
   meta: { worldId, name, seed: seed >>> 0, planetId: 'verdana', generatorVersion: GENERATOR_VERSION, contentVersion: CONTENT_VERSION, stateVersion: STATE_VERSION, createdAt, activeTicks: 0 },
   player: { x: SPAWN_POSE.x, y, z: SPAWN_POSE.z, yaw: SPAWN_POSE.yaw, pitch: SPAWN_POSE.pitch, vitals: { health: 100, satiety: 100 }, survival: freshSurvival(), suit: basicSuit(), bottles: [{ itemId: 'bottle_1', count: 1, milliGU: TANKS.bottle_1.capacity }, null], inventory, hotbar: 0 },
-  world: { crates: {'crate-a':emptyInventory(),'crate-b':emptyInventory()}, base: freshBase(), capsuleMilliGU: 2400000, nodes: Object.fromEntries(NODES.map(n => [n.id, n.amount])), regrow: {}, drops: [], nextDropId: 1, dayOffsetTicks: START_OFFSET_TICKS },
+  world: { crates: {'crate-a':emptyInventory(),'crate-b':emptyInventory()}, base: freshBase(), capsuleMilliGU: CAPSULE_CAPACITY, nodes: Object.fromEntries(NODES.map(n => [n.id, n.amount])), regrow: {}, drops: [], nextDropId: 1, dayOffsetTicks: START_OFFSET_TICKS },
   progress: { visited: [], discovered: [], selected: 'guide', quests: freshQuestProgress() },
  };
 }
@@ -110,7 +110,7 @@ function migratePrevious(raw: unknown): unknown {
   if (!('base' in world)) world.base = freshBase();
   const existingNodes = obj(world.nodes, 'world.nodes');
   for (const n of NODES) if (!(n.id in existingNodes) && LATER_NODES.has(n.id)) existingNodes[n.id] = n.amount;
-  if (!('capsuleMilliGU' in world)) world.capsuleMilliGU = 2400000;
+  if (!('capsuleMilliGU' in world)) world.capsuleMilliGU = CAPSULE_CAPACITY;
   }
   // v3 already required survival, capsule and base fields; never refill a corrupt v3 save.
   for(const b of arr(obj(world.base,'world.base').buildings,'buildings',64)){const body=obj(b,'building');kilnFuelFix(body,world);if(body.kind==='electrolyzer'&&isObj(body.job)&&body.job.recipeId==='melt_in_generator')body.job.recipeId='legacy_melt';if(body.kind==='electrolyzer')body.queue=arr(body.queue,'queue',5).filter(v=>v!=='melt_in_generator');}
@@ -126,7 +126,7 @@ function migratePrevious(raw: unknown): unknown {
  if (pl.suit !== 'suit') throw new InvalidState('player.suit', 'неизвестный костюм старого формата');
  pl.suit = basicSuit();
  pl.vitals = { health: 100, satiety: 100 };
- pl.hotbar = 0; pl.survival = freshSurvival(); w.capsuleMilliGU = 2400000;
+ pl.hotbar = 0; pl.survival = freshSurvival(); w.capsuleMilliGU = CAPSULE_CAPACITY;
  w.dayOffsetTicks = START_OFFSET_TICKS;
  m.contentVersion = CONTENT_VERSION; m.stateVersion = V6;
  w.base = freshBase();
@@ -240,7 +240,7 @@ export function sanitizeState(input: unknown): GameState {
    survival, suit: Object.fromEntries(SUIT_PARTS.map(p => [p, suitSlot(suitRaw[p], p)])) as Suit,
    bottles: [bottleSlot(bottles[0], 'player.bottles[0]'), bottleSlot(bottles[1], 'player.bottles[1]')], inventory: inv.map((s, i) => slot(s, `player.inventory[${i}]`)),
    hotbar: int(pl.hotbar, 'player.hotbar', 0, HOTBAR_SIZE - 1) },
-  world: { crates:Object.fromEntries(['crate-a','crate-b'].map(id=>{const a=arr(obj(w.crates,'world.crates')[id],'crate.'+id,24);if(a.length!==24)throw new InvalidState('crate','нужно 24 слота');return [id,a.map((v,i)=>slot(v,'crate.'+id+'.'+i))];})), base: validateBase(w.base), capsuleMilliGU: int(w.capsuleMilliGU, 'world.capsuleMilliGU', 0, 2400000), nodes, regrow, drops, nextDropId, dayOffsetTicks: int(w.dayOffsetTicks, 'world.dayOffsetTicks', 0, CYCLE_TICKS - 1) },
+  world: { crates:Object.fromEntries(['crate-a','crate-b'].map(id=>{const a=arr(obj(w.crates,'world.crates')[id],'crate.'+id,24);if(a.length!==24)throw new InvalidState('crate','нужно 24 слота');return [id,a.map((v,i)=>slot(v,'crate.'+id+'.'+i))];})), base: validateBase(w.base), capsuleMilliGU: int(w.capsuleMilliGU, 'world.capsuleMilliGU', 0, CAPSULE_CAPACITY), nodes, regrow, drops, nextDropId, dayOffsetTicks: int(w.dayOffsetTicks, 'world.dayOffsetTicks', 0, CYCLE_TICKS - 1) },
   progress: { visited: ids(pr.visited, 'progress.visited'), discovered: ids(pr.discovered, 'progress.discovered'), selected: str(pr.selected, 'progress.selected', 32, ID), quests:{facts,completed,tracked:qp.tracked as QuestId|null} },
  };
 }
@@ -267,7 +267,7 @@ function validateBase(value: unknown, legacy = false): BaseState {
   if(kind==='biogenerator'&&input.some(s=>s&&s.itemId!=='fiber'))throw new InvalidState('building.input','генератор принимает только волокна');
   const level=legacy?1:int(o.level,'building.level',1,2) as 1|2;
   if(level===2&&kind!=='workbench')throw new InvalidState('building.level','нет такого улучшения');
-  const b:Building={level,rot:legacy&&o.rot===undefined?0:int(o.rot,'building.rot',0,3),id:register(o.id,'building.id','build'),kind:kind as Building['kind'],x:int(o.x,'building.x',-195,355),y:num(o.y,'building.y',-100,200),z:int(o.z,'building.z',-195,355),input,output,job:job(o.job,kind),queue:queue(o.queue,kind),enabled:o.enabled,lowPriority:o.lowPriority,energy:int(o.energy,'building.energy',0,400000),fuel:int(o.fuel,'building.fuel',0,200000),water:int(o.water,'building.water',0,20000),oxygen:int(o.oxygen,'building.oxygen',0,480000),zone:{q:int(z.q,'zone.q',0,960000),temperature:num(z.temperature,'zone.temperature',-150,150),purity:num(z.purity,'zone.purity',0,1),lossRemainder:int(z.lossRemainder,'zone.lossRemainder',0,999),breachMs:int(z.breachMs,'zone.breachMs',0,1000),shell:shell.map(v=>int(v,'zone.shell.HP',0,180))}};
+  const b:Building={level,rot:legacy&&o.rot===undefined?0:int(o.rot,'building.rot',0,3),id:register(o.id,'building.id','build'),kind:kind as Building['kind'],x:int(o.x,'building.x',-195,355),y:num(o.y,'building.y',-100,200),z:int(o.z,'building.z',-195,355),input,output,job:job(o.job,kind),queue:queue(o.queue,kind),enabled:o.enabled,lowPriority:o.lowPriority,energy:int(o.energy,'building.energy',0,GEN_BUFFER),fuel:int(o.fuel,'building.fuel',0,FIBER_EU),water:int(o.water,'building.water',0,20000),oxygen:int(o.oxygen,'building.oxygen',0,kind==='electrolyzer'?ELECTROLYZER_O2:PORT_O2),zone:{q:int(z.q,'zone.q',0,960000),temperature:num(z.temperature,'zone.temperature',-150,150),purity:num(z.purity,'zone.purity',0,1),lossRemainder:int(z.lossRemainder,'zone.lossRemainder',0,999),breachMs:int(z.breachMs,'zone.breachMs',0,1000),shell:shell.map(v=>int(v,'zone.shell.HP',0,180))}};
   if(!legacy&&(kind==='workbench'&&level===1?b.queue.length>0:b.queue.length+(b.job?1:0)>5))throw new InvalidState('building.queue','очередь недоступна/переполнена');
   if(kind!=='biogenerator'&&(b.energy||b.fuel))throw new InvalidState('building','энергия/топливо не у генератора');if(kind!=='electrolyzer'&&b.water)throw new InvalidState('building.water','вода не у электролиза');if(!['electrolyzer','refill','distributor'].includes(kind)&&b.oxygen)throw new InvalidState('building.oxygen','нет газового буфера');if(kind!=='dome'&&b.zone.q)throw new InvalidState('zone.q','газ не у купола');return b;
  });
