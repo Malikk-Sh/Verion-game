@@ -24,13 +24,13 @@ test('S3: grass regrows one plant per period of active time, never in a burst an
  advance(g, 50); assert.equal(g.world.nodes[n.id], n.amount - 2);
  // A huge step still adds at most what the elapsed periods allow, and stops at the amount.
  natureTick(g, n.regrowSeconds! * 1000 * 10); assert.equal(g.world.nodes[n.id], n.amount); assert.equal(g.world.regrow[n.id], undefined);
- // Finite deposits never regrow.
+ // A static deposit never refills itself (S4, D33: a new vein appears at a fixed spot instead, tests/veins.test.ts).
  g.world.nodes['iron-a'] = 0; natureTick(g, 1e7); assert.equal(g.world.nodes['iron-a'], 0);
  assert.deepEqual(sanitizeState(JSON.parse(JSON.stringify(g))), g);
  const bad = cloneState(g) as any; bad.world.regrow['iron-a'] = 10; assert.throws(() => sanitizeState(bad), /не отрастает/);
 });
 
-test('S3: a version 6 save migrates to 7 without losing anything; new deposits arrive full', () => {
+test('S3: a version 6 save migrates to 7 (and on to 8) without losing anything; new deposits arrive full', () => {
  const g = fresh(), old: any = cloneState(g);
  old.meta.stateVersion = 6; delete old.world.regrow;
  for (const id of ['stone-b', 'iron-c', 'ice-crater', 'grass-g']) delete old.world.nodes[id];
@@ -38,7 +38,7 @@ test('S3: a version 6 save migrates to 7 without losing anything; new deposits a
  k.job = { recipeId: 'glass', workMs: 3000, reserved: [{ itemId: 'sand', count: 2 }, { itemId: 'fiber', count: 2 }], water: 0 } as any;
  old.player.inventory[5] = { itemId: 'workbench', count: 1, packed: { kind: 'workbench', level: 1, input: [null, null, null, null], output: [null, null, null, null], job: null, queue: [], enabled: true, lowPriority: false, energy: 0, fuel: 0, water: 0, oxygen: 0, zone: k.zone } };
  const m = sanitizeState(old);
- assert.equal(m.meta.stateVersion, 7);
+ assert.equal(m.meta.stateVersion, 8);
  for (const id of ['stone-b', 'iron-c', 'ice-crater', 'grass-g']) assert.equal(m.world.nodes[id], NODE_BY_ID.get(id)!.amount);
  const forged: any = cloneState(g); forged.meta.stateVersion = 6; delete forged.world.regrow; delete forged.world.nodes['iron-a'];
  assert.throws(() => sanitizeState(forged), 'A deleted pre-S3 deposit is not refilled by migration');

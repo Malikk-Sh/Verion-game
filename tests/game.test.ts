@@ -22,7 +22,7 @@ test('valley deposits keep the WORLD §2 guarantee and S3 adds secondary and far
  const sum = (list: typeof NODES, id: string) => list.filter(n => n.itemId === id).reduce((a, n) => a + n.amount, 0);
  assert.deepEqual([sum(start, 'iron_raw'), sum(start, 'copper_raw'), sum(start, 'stone'), sum(start, 'ice'), sum(start, 'sand'), sum(start, 'grass')], [48, 32, 48, 24, 32, 100]);
  for (const n of NODES.filter(n => !n.far)) assert.ok(Math.hypot(n.x - 40, n.z - 40) <= 120, n.id);
- // Every finite material has at least two valley deposits; only grass regrows.
+ // Every finite material has at least two valley deposits; only grass regrows (an exhausted deposit returns as a new vein elsewhere, D33).
  for (const id of ['iron_raw', 'copper_raw', 'stone', 'ice', 'sand']) assert.ok(NODES.filter(n => n.itemId === id && !n.far).length >= 2, id);
  for (const n of NODES) assert.equal(!!n.regrowSeconds, n.material === 'grass', n.id);
  assert.deepEqual([sum(NODES, 'iron_raw'), sum(NODES, 'copper_raw'), sum(NODES, 'stone'), sum(NODES, 'ice'), sum(NODES, 'sand')], [144, 112, 108, 264, 200]);

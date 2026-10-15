@@ -1,5 +1,5 @@
 import { LANDMARKS, MIN, MAX, SIZE } from '../world';
-import { NODES, NODE_BY_ID, GRASS_PATCHES, bodyHalf } from '../game/resources';
+import { NODES, GRASS_PATCHES, bodyHalf, depositById, depositLeft, isVeinId, veinNode } from '../game/resources';
 import { stationStatus, type Tone } from '../game/stationStatus';
 import { stationName, stationRadius, nodeRadius, clampWaypoint, type Waypoint } from '../game/navigation';
 import { reducedMotion } from '../motion';
@@ -48,7 +48,7 @@ export function createMap(d: Deps) {
  const host = el('map-view'), canvas = el<HTMLCanvasElement>('map'), ctx = canvas.getContext('2d')!;
  const layers = loadLayers();
  let w = 0, h = 0, dpr = 1, view: View = { cx: 40, cz: 40, zoom: 2 }, chosenZoom: number | null = null, card: Card | null = null, dirty = true, lastDraw = -Infinity, open = false;
- let anim: { from: View; to: View; t0: number } | null = null, hits: (Hit & { card: Card })[] = [], labelCount = 0, markerCount = 0, draws = 0;
+ let anim: { from: View; to: View; t0: number } | null = null, hits: (Hit & { card: Card })[] = [], labelCount = 0, markerCount = 0, draws = 0, veinMarks = 0;
  // ---------- Relief raster: built in slices at idle, drawn under a transform ----------
  const N = rasterSize(CELL), raster = document.createElement('canvas'); raster.width = raster.height = N;
  const rctx = raster.getContext('2d')!, image = rctx.createImageData(N, N);
@@ -81,7 +81,7 @@ export function createMap(d: Deps) {
   const g = d.game(); if (!g) return null;
   if (c.kind === 'point') { const p = d.waypoint(); return p ? { name: 'Метка', x: p.x, z: p.z, radius: 3 } : null; }
   if (c.kind === 'landmark') { const l = LANDMARKS.find(v => v.id === c.id); return l ? { name: l.name, x: l.x, z: l.z, radius: l.radius } : null; }
-  if (c.kind === 'node') { const n = NODE_BY_ID.get(c.id); return n ? { name: n.name, x: n.x, z: n.z, radius: nodeRadius(n) } : null; }
+  if (c.kind === 'node') { const n = depositById(g, c.id); return n ? { name: n.name, x: n.x, z: n.z, radius: nodeRadius(n) } : null; }
   if (c.kind === 'station') { const b = g.world.base.buildings.find(v => v.id === c.id); return b ? { name: stationName(b), x: b.x, z: b.z, radius: stationRadius(b) } : null; }
   const dr = g.world.drops.find(v => v.id === c.id); return dr ? { name: 'Груз', x: dr.x, z: dr.z, radius: 2.2 } : null;
  }
@@ -101,8 +101,8 @@ export function createMap(d: Deps) {
    const l = LANDMARKS.find(v => v.id === card!.id)!; kind = l.kind; text = l.description;
    data.push(['Состояние', d.visited.has(l.id) ? 'Просканировано' : d.discovered.has(l.id) ? 'Найдено' : 'Не найдено']);
   } else if (card.kind === 'node') {
-   const ids = card.ids ?? [card.id], n = NODE_BY_ID.get(card.id)!, left = ids.reduce((s, id) => s + (g.world.nodes[id] ?? 0), 0), amount = ids.reduce((s, id) => s + NODE_BY_ID.get(id)!.amount, 0);
-   kind = 'Залежь · ' + MAT[n.material].name.toLowerCase(); text = left > 0 ? `Осталось ${left} / ${amount}${ids.length > 1 ? ` · ${ids.length} выхода рядом` : ''}` : n.regrowSeconds ? 'Всё собрано — растения отрастают в активное время.' : 'Запас исчерпан.';
+   const ids = card.ids ?? [card.id], n = depositById(g, card.id)!, left = ids.reduce((s, id) => s + depositLeft(g, id), 0), amount = ids.reduce((s, id) => s + (depositById(g, id)?.amount ?? 0), 0);
+   kind = (isVeinId(n.id) ? 'Новая жила · ' : 'Залежь · ') + MAT[n.material].name.toLowerCase(); text = left > 0 ? `Осталось ${left} / ${amount}${ids.length > 1 ? ` · ${ids.length} выхода рядом` : ''}` : n.regrowSeconds ? 'Всё собрано — растения отрастают в активное время.' : 'Запас исчерпан.';
    if (n.regrowSeconds) data.push(['Отрастает', `1 растение за ${n.regrowSeconds} с`]);
    data.push(['Добыча', itemName(n.itemId)]); canGo = left > 0;
   } else if (card.kind === 'station') {
@@ -149,7 +149,7 @@ export function createMap(d: Deps) {
  function draw(now: number) {
   const g = d.game(); if (!g || !w) return;
   if (anim) { const k = Math.min(1, (now - anim.t0) / 300), e = k * k * (3 - 2 * k); view = { cx: anim.from.cx + (anim.to.cx - anim.from.cx) * e, cz: anim.from.cz + (anim.to.cz - anim.from.cz) * e, zoom: anim.from.zoom + (anim.to.zoom - anim.from.zoom) * e }; if (k >= 1) anim = null; }
-  draws++; dirty = false; lastDraw = now; hits = []; const labels: Lbl[] = [];
+  draws++; dirty = false; lastDraw = now; hits = []; veinMarks = 0; const labels: Lbl[] = [];
   const S = (x: number, z: number) => toScreen(view, w, h, x, z), z = view.zoom, p = d.player(), pp = S(p.x, p.z);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = '#061518'; ctx.fillRect(0, 0, w, h);
   const tl = S(MAX, MAX); ctx.imageSmoothingEnabled = true; ctx.drawImage(raster, tl.x, tl.y, SIZE * z, SIZE * z);
@@ -183,6 +183,16 @@ export function createMap(d: Deps) {
     const lead = c.ids.slice().sort((a, b) => (g.world.nodes[b] ?? 0) - (g.world.nodes[a] ?? 0))[0];
     hits.push({ id: lead, x: s.x, y: s.y, priority: 20, card: { kind: 'node', id: lead, ids: c.ids } });
     if (z >= 2.2) labels.push({ id: lead, text: empty ? 'пусто' : String(c.left), color: empty ? '#9aa9a6' : m.color, priority: 20, cx: s.x, y: s.y + r + 2, small: true });
+   }
+   // S4 (D33): new veins stand apart from the clusters, with a halo and the «Новая жила» label.
+   for (const v of g.world.veins) {
+    const n = veinNode(v), s = S(n.x, n.z), m = MAT[v.material], r = 8; markers++; veinMarks++;
+    if (s.x < -20 || s.y < -20 || s.x > w + 20 || s.y > h + 20) continue;
+    ctx.beginPath(); ctx.arc(s.x, s.y, r + 4, 0, Math.PI * 2); ctx.strokeStyle = m.color; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI * 2); ctx.fillStyle = m.color; ctx.fill(); ctx.strokeStyle = 'rgba(6,21,24,.9)'; ctx.stroke();
+    ctx.font = '700 9px system-ui,sans-serif'; ctx.fillStyle = '#0a1a1c'; ctx.fillText(m.glyph, s.x, s.y + .5);
+    hits.push({ id: v.id, x: s.x, y: s.y, priority: 30, card: { kind: 'node', id: v.id } });
+    labels.push({ id: v.id, text: 'Новая жила', sub: z >= 2.2 ? String(v.amount) : undefined, color: m.color, priority: 30, cx: s.x, y: s.y + r + 6 });
    }
    ctx.textBaseline = 'alphabetic';
   }
@@ -273,7 +283,7 @@ export function createMap(d: Deps) {
  el('map-guide').onclick = () => d.leadGuide();
  remove.onclick = () => { d.setWaypoint(null); d.tone(); showCard(null); };
  el('map-back').onclick = () => { d.tone(); showCard(null); };
- function firstLive(c: Card) { const g = d.game()!, p = d.player(); return (c.ids ?? [c.id]).filter(id => (g.world.nodes[id] ?? 0) > 0).sort((a, b) => { const A = NODE_BY_ID.get(a)!, B = NODE_BY_ID.get(b)!; return Math.hypot(A.x - p.x, A.z - p.z) - Math.hypot(B.x - p.x, B.z - p.z); })[0] ?? c.id; }
+ function firstLive(c: Card) { const g = d.game()!, p = d.player(); return (c.ids ?? [c.id]).filter(id => depositLeft(g, id) > 0).sort((a, b) => { const A = depositById(g, a)!, B = depositById(g, b)!; return Math.hypot(A.x - p.x, A.z - p.z) - Math.hypot(B.x - p.x, B.z - p.z); })[0] ?? c.id; }
  return {
   prepare,
   open() {
@@ -301,7 +311,7 @@ export function createMap(d: Deps) {
    return true;
   },
   showCard: (c: Card | null) => showCard(c),
-  debug: () => ({ zoom: (anim?.to ?? view).zoom, center: { x: (anim?.to ?? view).cx, z: (anim?.to ?? view).cz }, layers: { ...layers }, card: card ? { kind: card.kind, id: card.id } : null, raster: rows / N, draws, markers: markerCount, labels: labelCount, size: { w, h, dpr, backing: canvas.width } }),
+  debug: () => ({ zoom: (anim?.to ?? view).zoom, center: { x: (anim?.to ?? view).cx, z: (anim?.to ?? view).cz }, layers: { ...layers }, card: card ? { kind: card.kind, id: card.id } : null, raster: rows / N, draws, markers: markerCount, veins: veinMarks, labels: labelCount, size: { w, h, dpr, backing: canvas.width } }),
  };
  function updateVitals() {
   const v = d.vitals(), o2 = el('map-o2'), hp = el('map-hp');

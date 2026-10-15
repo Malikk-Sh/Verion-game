@@ -1,4 +1,4 @@
-import { NODES } from './resources';
+import { NODES, VEIN_LOOK } from './resources';
 import { RECIPES, habitable, insideDome, WORKBENCH_UPGRADE } from './production';
 import { recordQuestFact } from './questFacts';
 import { countItem } from './inventory';
@@ -22,6 +22,7 @@ export function refreshQuestProgress(g: GameState): boolean {
  const slots=[...g.player.inventory,...g.player.bottles,...g.world.drops.flatMap(d=>d.items),...g.world.base.buildings.flatMap(b=>[...b.input,...b.output,...(b.job?.reserved??[])]),...(g.world.base.hand?.reserved??[])];
  for(const s of slots)if(s)see(s.itemId);
  for(const n of NODES)if(g.world.nodes[n.id]<n.amount)see(n.itemId);
+ for(const v of g.world.veins)if(v.amount<v.size)see(VEIN_LOOK[v.material].itemId);
  for(const b of g.world.base.buildings){
   // A placed body proves that its canonical construction inputs were paid.
   const recipe=RECIPES.find(r=>r.outputs[b.kind]);

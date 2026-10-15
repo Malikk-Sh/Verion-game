@@ -1,5 +1,5 @@
 import { countItem } from './inventory';
-import { NODES } from './resources';
+import { allDeposits, depositLeft } from './resources';
 import { RECIPE_BY_ID, WORKBENCH_UPGRADE, habitable, insideDome, DOME_CAPACITY, type Building } from './production';
 import { ITEMS } from './defs';
 import { questStatus } from './quests';
@@ -20,9 +20,9 @@ export const GUIDE_ORDER: QuestId[] = ['materials', 'bench', 'kiln', 'metals', '
 const BASE_AREA: GuideTarget = { name: 'Площадка базы', x: 58, z: 44, kind: 'area' };
 const CAPSULE: GuideTarget = { name: 'Капсула', x: 40, z: 42, kind: 'capsule' };
 const dist = (g: GameState, x: number, z: number) => Math.hypot(g.player.x - x, g.player.z - z);
-/** Nearest deposit with stock of an item: in the valley that is a valley deposit, beside a far one it is that one. */
+/** Nearest deposit with stock of an item (a static deposit or a new vein, D33): in the valley that is a valley deposit, beside a far one it is that one. */
 export function nearestNode(g: GameState, itemId: string): GuideTarget | null {
- const live = NODES.filter(n => n.itemId === itemId && (g.world.nodes[n.id] ?? 0) > 0);
+ const live = allDeposits(g).filter(n => n.itemId === itemId && depositLeft(g, n.id) > 0);
  const n = live.sort((a, b) => dist(g, a.x, a.z) - dist(g, b.x, b.z))[0];
  return n ? { name: n.name, x: n.x, z: n.z, kind: 'node' } : null;
 }

@@ -1,10 +1,10 @@
 import { LANDMARKS, MIN, MAX } from '../world';
-import { NODE_BY_ID, bodyHalf, type ResourceNode } from './resources';
+import { depositById, depositLeft, bodyHalf, type ResourceNode } from './resources';
 import { ITEMS } from './defs';
 import type { GameState } from './state';
 /**
  * One navigation model (S4, D34). `progress.selected` names what the compass, the world marker and the
- * map lead to: 'guide' (the expedition journal), a landmark id, a deposit id, a station 'build-N', a cargo
+ * map lead to: 'guide' (the expedition journal), a landmark id, a deposit or new-vein id ('vein-N', D33), a station 'build-N', a cargo
  * 'drop-N' or 'point' (the player's own map mark, `progress.waypoint`). A target that stops existing —
  * a station picked up, a deposit exhausted, cargo collected, the mark removed — is invalid and the
  * caller falls back to the guide; reaching a target (distance < radius) also returns to the guide.
@@ -24,8 +24,8 @@ export function resolveNav(g: GameState, id: string, waypoint: Waypoint | null |
  if (id === 'point') return waypoint ? { id, kind: 'point', name: 'Метка', x: waypoint.x, z: waypoint.z, radius: 3 } : 'invalid';
  const l = LANDMARKS.find(p => p.id === id);
  if (l) return { id, kind: 'landmark', name: l.name, x: l.x, z: l.z, radius: l.radius };
- const n = NODE_BY_ID.get(id);
- if (n) return (g.world.nodes[id] ?? 0) > 0 ? { id, kind: 'node', name: n.name, x: n.x, z: n.z, radius: nodeRadius(n) } : 'invalid';
+ const n = depositById(g, id);
+ if (n) return depositLeft(g, id) > 0 ? { id, kind: 'node', name: n.name, x: n.x, z: n.z, radius: nodeRadius(n) } : 'invalid';
  const b = g.world.base.buildings.find(v => v.id === id);
  if (b) return { id, kind: 'station', name: stationName(b), x: b.x, z: b.z, radius: stationRadius(b) };
  const d = g.world.drops.find(v => v.id === id);

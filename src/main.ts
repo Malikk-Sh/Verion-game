@@ -29,9 +29,9 @@ import { installFullscreen } from './fullscreen';
 import { createWorld, type Quality } from './scene';
 import { Character, type Input } from './controller';
 import { Ambience } from './audio';
-import { boxes, EYE, FIXED_DT, heightAt, LANDMARKS, type Landmark } from './world';
+import { boxes, box, EYE, FIXED_DT, heightAt, LANDMARKS, type Landmark } from './world';
 import { createMap } from './ui/map';
-import { DIRS } from './ui/mapView';
+import { DIRS, directionName } from './ui/mapView';
 import { resolveNav, type Waypoint } from './game/navigation';
 import { SimClock } from './game/clock';
 import { ITEMS, MATERIALS, TANKS, TOOLS } from './game/defs';
@@ -40,7 +40,7 @@ import { selectHotbar, oxygenGU, wornParts } from './game/backpack';
 import { survivalTick, survivalSpeed, eatPulp, refillCapsule, refillFromCapsule, loseCargo, respawnAtCapsule, accessibleOxygen, CAPSULE_CAPACITY } from './game/survival';
 import { createPanels, cellContent, cellAria } from './ui/panels';
 import { createViewModel } from './viewmodel';
-import { NODES, NODE_BY_ID, depositScale, type ResourceNode } from './game/resources';
+import { NODES, NODE_BY_ID, depositScale, depositById, depositLeft, allDeposits, veinNode, VEIN_LOOK, type ResourceNode } from './game/resources';
 import { newGame, cloneState, sanitizeState, SPAWN_POSE, HOTBAR_SIZE, type GameState } from './game/state';
 import { mineTick, pickUp, toolSlot, itemName, REACH, mineSeconds, stockText, wearText, type Mining } from './game/mining';
 import { natureTick } from './game/nature';
@@ -357,9 +357,14 @@ function boot(){
   dropGroup.clear();if(!game)return;
   for(const d of game.world.drops){const g=new THREE.Group(),y=heightAt(d.x,d.z);const c=new THREE.Mesh(crateGeo,crateMat);c.position.y=.19;c.castShadow=true;const st=new THREE.Mesh(strapGeo,strapMat);st.position.y=.3;g.add(c,st);g.position.set(d.x,y,d.z);g.rotation.y=(d.x*7+d.z*3)%6.28;dropGroup.add(g);}
  }
- function applyNodes(){
+ /** Deposit models and colliders from the state; `fresh` names veins that have just appeared (they rise out of the ground). */
+ function applyNodes(fresh:string[]=[]){
   if(!game)return;
+  world.syncVeins(game.world.veins,fresh);
   for(const n of NODES)world.setNodeAmount(n.id,game.world.nodes[n.id],n.amount);
+  // S4 (D33): new veins mine like deposits and get a collider that squats with them. The 'vein-' ids are not 'build-', so placement refuses them.
+  for(let i=boxes.length-1;i>=0;i--)if(boxes[i].id.startsWith('vein-'))boxes.splice(i,1);
+  for(const v of game.world.veins){const n=veinNode(v),[bw,bh,bd]=n.box!,{xz,y}=depositScale(v.amount,v.size),y0=heightAt(n.x,n.z)-.1;world.setNodeAmount(v.id,v.amount,v.size);boxes.push(box(v.id,n.x,y0+bh*y/2,n.z,bw*xz,bh*y,bd*xz));}
   for(const [id,nodeId] of [['iron-outcrop','iron-a'],['copper-outcrop','copper-a'],['stone-outcrop','stone-a'],['ice-outcrop','ice-a'],...NODES.filter(n=>n.box).map(n=>['node-'+n.id,n.id])]){
    const original=mineralBoxes.get(id);if(!original)continue;const i=boxes.findIndex(b=>b.id===id);if(i>=0)boxes.splice(i,1);
    const n=NODE_BY_ID.get(nodeId)!,left=game.world.nodes[nodeId];if(left<=0)continue;
@@ -472,13 +477,13 @@ function boot(){
  /** Point on a deposit facing the camera: where chips fly from. */
  // S4: `hitNormal` is the struck face's outward direction: chips fly out of it, towards the player.
  const hitNormal=new THREE.Vector3();
- function nodeHitPoint(id:string){const n=NODE_BY_ID.get(id)!,k=depositScale(game?game.world.nodes[id]:n.amount,n.amount),c=new THREE.Vector3(n.x,heightAt(n.x,n.z)+n.height*k.y*.55,n.z),d=camera.position.clone().sub(c);d.y*=.4;hitNormal.copy(d.normalize());return c.add(d.multiplyScalar(n.radius*k.xz*.75));}
+ function nodeHitPoint(n:ResourceNode){const k=depositScale(game?depositLeft(game,n.id):n.amount,n.amount),c=new THREE.Vector3(n.x,heightAt(n.x,n.z)+n.height*k.y*.55,n.z),d=camera.position.clone().sub(c);d.y*=.4;hitNormal.copy(d.normalize());return c.add(d.multiplyScalar(n.radius*k.xz*.75));}
  /** S4: the exact struck point — one raycast against the aimed deposit per strike (the ground under the reticle for grass); else the estimate above. */
  function aimHit(n:ResourceNode){
   const g=world.nodeGroups.get(n.id);raycaster.set(camera.position,viewDirection);raycaster.far=REACH+n.radius*2+1;
   if(g){const hit=raycaster.intersectObject(g,true)[0];if(hit?.face){hitPoint.copy(hit.point);hitNormal.copy(hit.face.normal).transformDirection(hit.object.matrixWorld);if(hitNormal.dot(viewDirection)>0)hitNormal.negate();lastHit='ray';return hitPoint;}}
   else for(let d=.3;d<=REACH+1.5;d+=.1){hitPoint.copy(camera.position).addScaledVector(viewDirection,d);const y=heightAt(hitPoint.x,hitPoint.z);if(hitPoint.y<=y+.05){if(Math.hypot(hitPoint.x-n.x,hitPoint.z-n.z)>n.radius+1.5)break;hitPoint.y=y+.08;hitNormal.set(0,1,0);lastHit='ground';return hitPoint;}}
-  lastHit='fallback';return nodeHitPoint(n.id);
+  lastHit='fallback';return nodeHitPoint(n);
  }
  /** Screen side of a world point, −1 (left) … 1 (right): pans the strike sound and tilts the camera kick. */
  const screenX=(p:THREE.Vector3)=>{screen.copy(p).project(camera);return Math.max(-1,Math.min(1,screen.x));};
@@ -487,7 +492,7 @@ function boot(){
  function kick(weight:number,pan:number){kickT=0;kickPitch=.0072*weight;kickYaw=-pan*.0026*weight;}
  /** One impact of the timeline before the break: sound, chips, haptic, camera kick, model punch and the crack stage. */
  function strike(id:string,impacts:number,need:number){
-  const n=NODE_BY_ID.get(id)!,p=aimHit(n),w=STRIKE_WEIGHT[n.material]??1,pan=screenX(p);strikesLanded++;swingStruck=true;
+  const n=depositById(game!,id);if(!n)return;const p=aimHit(n),w=STRIKE_WEIGHT[n.material]??1,pan=screenX(p);strikesLanded++;swingStruck=true;
   audio.strike(n.material,mineRatio,pan);fx.strike(p.x,p.y,p.z,n.material,hitNormal);haptics.play('strike');kick(w,pan);world.deposits.impact(id,w);
   if(impacts===1)crackHit.copy(p);world.deposits.setCrack(id,crackStage(impacts,strikeCount(need)),crackHit);
  }
@@ -495,7 +500,7 @@ function boot(){
  const nodeCenter=new THREE.Vector3(),toNode=new THREE.Vector3();
  function computeAim(){
   aimNode=null;if(!game||!started)return;let best=Infinity;
-  for(const n of NODES){if(game.world.nodes[n.id]<=0)continue;const k=depositScale(game.world.nodes[n.id],n.amount),r=n.radius*k.xz;
+  for(const n of allDeposits(game)){const left=depositLeft(game,n.id);if(left<=0)continue;const k=depositScale(left,n.amount),r=n.radius*k.xz;
    nodeCenter.set(n.x,heightAt(n.x,n.z)+n.height*k.y*.5,n.z);toNode.copy(nodeCenter).sub(camera.position);
    const along=toNode.dot(viewDirection),perp=Math.sqrt(Math.max(0,toNode.lengthSq()-along*along)),horiz=Math.hypot(actor.x-n.x,actor.z-n.z)-r;
    // Ray hits the deposit's bounding sphere within reach, or the player stands right next to it facing it (easier on touch).
@@ -505,7 +510,7 @@ function boot(){
  /** Aim label under the reticle and the context action button (mine / pick up / scan / none). */
  function updateAimUI(){
   nearMachine=game&&interaction.target&&machine(game,interaction.target)?interaction.target:null;
-  const box=el('aim'),n=aimNode&&game&&!interaction.target?NODE_BY_ID.get(aimNode):undefined;
+  const box=el('aim'),n=aimNode&&game&&!interaction.target?depositById(game,aimNode):undefined;
   el('aim-name').textContent='';el('aim-meta').textContent='';el('aim-wear').textContent='';box.hidden=true;document.body.dataset.aim='false';
   let kind='none',label='Действие',iconId='i-hand',blocked='';
   const selected=game?.player.inventory[game.player.hotbar];
@@ -514,7 +519,7 @@ function boot(){
    const ti=toolSlot(game),sel=game.player.inventory[game.player.hotbar],secs=mineSeconds(game,n.material);
    blocked=game.world.base.hand||manualWork(game)?'Ручная работа: завершите или отмените':secs===null?(sel&&TOOLS[sel.itemId]?'Инструмент сломан':game.player.inventory.some(x=>x&&TOOLS[x.itemId])?'Выберите мультитул':'Нужен инструмент'):'';
    el('aim-name').textContent=itemName(n.itemId)+(secs!==null?` · ${secs%1?secs.toFixed(1):secs} с${ti<0&&n.material!=='grass'?' · руками':''}`:'');
-   el('aim-meta').textContent=aimReason||blocked||stockText(game.world.nodes[n.id],n.amount,countItem(game.player.inventory,n.itemId));box.classList.toggle('blocked',!!(aimReason||blocked));
+   el('aim-meta').textContent=aimReason||blocked||stockText(depositLeft(game,n.id),n.amount,countItem(game.player.inventory,n.itemId));box.classList.toggle('blocked',!!(aimReason||blocked));
    const tool=ti>=0&&n.material!=='grass'?game.player.inventory[ti]:null;el('aim-wear').textContent=aimReason||blocked||!tool?'':wearText(tool.durability,TOOLS[tool.itemId]?.durability);
    (el('aim-bar').firstElementChild as HTMLElement).style.transform=`scaleX(${mineRatio})`;
    kind='mine';label='Добыть';iconId='i-pick';
@@ -548,7 +553,7 @@ function boot(){
  /** The final impact of a block: the break replaces the strike (no extra strike after it), then «+1» and, at 0, the crumble. */
  function onMined(ev:Extract<ReturnType<typeof mineTick>,{kind:'block'}>){
   world.invalidateShadows();
-  const n=NODE_BY_ID.get(ev.nodeId)!,p=aimHit(n).clone(),w=STRIKE_WEIGHT[n.material]??1,pan=screenX(p);strikesLanded++;swingStruck=true;
+  const n=ev.node,p=aimHit(n).clone(),w=STRIKE_WEIGHT[n.material]??1,pan=screenX(p);strikesLanded++;swingStruck=true;
   audio.crack(n.material,pan);audio.tone('item',.06,.5);applyNodes();
   if(ev.toGround){syncDrops();toast('Рюкзак полон',`${itemName(ev.itemId)} оставлена на земле`);}
   else{const inv=game!.player.inventory,cell=inv.slice(0,HOTBAR_SIZE).findIndex(v=>v?.itemId===ev.itemId);feed.add(ev.itemId,ev.toInventory,countItem(inv,ev.itemId),cell>=0?hotCells[cell]:el('inventory-button'),project(p.x,p.y,p.z));}
@@ -559,6 +564,13 @@ function boot(){
   else world.deposits.impact(n.id,w*1.5);
   if(ev.toolBroke){haptics.play('broke');audio.tone('warn');toast('Инструмент сломан',itemName('tool_stone')+' · новый мультитул: 4 камня + 2 волокна в мастерской');}
   hudKey='';updateHotbar();
+ }
+ /** S4 (D33): a new vein appeared somewhere (never within 24 m): toast with material and direction, a dust ring where it rose. */
+ function announceVeins(ids:string[]){
+  for(const id of ids){const n=depositById(game!,id);if(!n)continue;const look=VEIN_LOOK[n.material as keyof typeof VEIN_LOOK],d=Math.hypot(n.x-actor.x,n.z-actor.z);
+   toast(`Новая жила: ${itemName(look.itemId).toLowerCase()} — ${directionName(n.x-actor.x,n.z-actor.z)}`,`${n.name} · ${Math.round(d)} м`);
+   fx.landing(n.x,heightAt(n.x,n.z),n.z,world.groundColorAt(n.x,n.z,new THREE.Color()));}
+  audio.tone('discover');world.invalidateShadows();void saver?.save();
  }
  // ---------- Compass strip ----------
  const compass=el<HTMLCanvasElement>('compass'),cctx=compass.getContext('2d')!;
@@ -650,7 +662,7 @@ function boot(){
   const o=objective();if(o!==lastObjective){lastObjective=o;el('objective-text').textContent=o;const ob=el('objective');ob.classList.remove('advance');void ob.offsetWidth;ob.classList.add('advance');}
   updateVitals();updateHotbar();updateDayButton();
  }
- function state(){const sorted=[...frames].sort((a,b)=>a-b);return {ready:true,version:'S3',linkSource:interaction.source,lastAction,fx:fx.stats(),guide:game?{current:currentStep(game),objective:el('objective-text').textContent,task:el('objective-task').textContent,nav:navTarget(),selected}:null,map:mapUI.debug(),waypoint,station:production.station,worldTarget:interaction.target,quests:game?structuredClone(game.progress.quests):null,questBook:questBook.debug(),vitals:game?{...game.player.vitals}:null,survival:game?{...game.player.survival}:null,capsuleMilliGU:game?.world.capsuleMilliGU??0,base:game?structuredClone(game.world.base):null,visibleDrops:dropGroup.children.length,slotId,revision:saver?.revision??0,saveStatus:saver?.status.kind??(game?'none':'idle'),halted:!!saver?.halted,activeTicks:clock.activeTicks,clockRunning:clock.running,hotbar:game?.player.hotbar??0,cells:game?game.player.inventory.map(s=>s?{...s}:null):[],suit:game?Object.fromEntries(Object.entries(game.player.suit).map(([k,v])=>[k,v?.itemId??null])):null,worn:game?wornParts(game):0,bottles:game?game.player.bottles.map(b=>b?{...b}:null):[],oxygenGU:game?oxygenGU(game):0,dayPhase:dayPhase(),dayOffsetTicks:game?.world.dayOffsetTicks??0,nightValue:world.nightValue,action:actionKind,handItem:hand.item!==null,feel:{strikes:strikesLanded,hit:lastHit,swing:swingPoseValue,crack:world.deposits.crackLevel,shell:world.deposits.shell.visible,pops:feed.pops,crumbling:world.deposits.crumbling,punching:world.deposits.punching,ring:reticle.classList.contains('mining'),haptics:haptics.played,model:hand.item},haptics:settings.haptics,panel:panels.debug,aimNode,mineRatio,nodes:game?{...game.world.nodes}:null,inventory:game?game.player.inventory.filter(Boolean).map(s=>({...s})):[],drops:game?game.world.drops.length:0,storage:!!store,grassCount:world.grassCount,fullscreen:!!document.fullscreenElement,running,dialog,night:!isDay(dayPhase()),selected,visited:[...visited],activeTime:clock.activeSeconds,position:{x:actor.x,y:actor.y,z:actor.z},yaw:actor.yaw,pitch:actor.pitch,grounded:actor.grounded,input:{...input,joyX,joyY,joyPointer,lookPointer},quality:settings.quality,sound:settings.sound,bob:settings.bob,fov:settings.fov,fineTerrainBlocks:world.terrain.fineBlocks,midTerrainBlocks:world.terrain.midBlocks,drawCalls:renderCalls,triangles:renderTriangles,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0,viewport:{width:innerWidth,height:innerHeight},renderer:rendererVersion,diagnostics:diagnostics.enabled,shadowTarget:world.sunLight.target.position.toArray(),shadowRedraws:world.shadowRedraws,footprints:{count:prints.count,visible:prints.visible},motes:world.motes.count,wind:{gust:world.wind.gust,angle:world.wind.angle,time:world.wind.time},pointLights:{pool:world.lights.count,active:world.lights.active,emitters:world.lights.emitters},shadowBias:world.sunLight.shadow.bias};}
+ function state(){const sorted=[...frames].sort((a,b)=>a-b);return {ready:true,version:'S3',linkSource:interaction.source,lastAction,fx:fx.stats(),guide:game?{current:currentStep(game),objective:el('objective-text').textContent,task:el('objective-task').textContent,nav:navTarget(),selected}:null,map:mapUI.debug(),waypoint,station:production.station,worldTarget:interaction.target,quests:game?structuredClone(game.progress.quests):null,questBook:questBook.debug(),vitals:game?{...game.player.vitals}:null,survival:game?{...game.player.survival}:null,capsuleMilliGU:game?.world.capsuleMilliGU??0,base:game?structuredClone(game.world.base):null,visibleDrops:dropGroup.children.length,slotId,revision:saver?.revision??0,saveStatus:saver?.status.kind??(game?'none':'idle'),halted:!!saver?.halted,activeTicks:clock.activeTicks,clockRunning:clock.running,hotbar:game?.player.hotbar??0,cells:game?game.player.inventory.map(s=>s?{...s}:null):[],suit:game?Object.fromEntries(Object.entries(game.player.suit).map(([k,v])=>[k,v?.itemId??null])):null,worn:game?wornParts(game):0,bottles:game?game.player.bottles.map(b=>b?{...b}:null):[],oxygenGU:game?oxygenGU(game):0,dayPhase:dayPhase(),dayOffsetTicks:game?.world.dayOffsetTicks??0,nightValue:world.nightValue,action:actionKind,handItem:hand.item!==null,feel:{strikes:strikesLanded,hit:lastHit,swing:swingPoseValue,crack:world.deposits.crackLevel,shell:world.deposits.shell.visible,pops:feed.pops,crumbling:world.deposits.crumbling,punching:world.deposits.punching,ring:reticle.classList.contains('mining'),haptics:haptics.played,model:hand.item},haptics:settings.haptics,panel:panels.debug,aimNode,mineRatio,nodes:game?{...game.world.nodes}:null,veins:game?structuredClone(game.world.veins):[],respawn:game?structuredClone(game.world.respawn):[],nextVeinId:game?.world.nextVeinId??0,veinGroups:[...world.nodeGroups.keys()].filter(k=>k.startsWith('vein-')).length,veinBoxes:boxes.filter(b=>b.id.startsWith('vein-')).length,toast:{kind:el('toast-kind').textContent,text:el('toast-text').textContent},inventory:game?game.player.inventory.filter(Boolean).map(s=>({...s})):[],drops:game?game.world.drops.length:0,storage:!!store,grassCount:world.grassCount,fullscreen:!!document.fullscreenElement,running,dialog,night:!isDay(dayPhase()),selected,visited:[...visited],activeTime:clock.activeSeconds,position:{x:actor.x,y:actor.y,z:actor.z},yaw:actor.yaw,pitch:actor.pitch,grounded:actor.grounded,input:{...input,joyX,joyY,joyPointer,lookPointer},quality:settings.quality,sound:settings.sound,bob:settings.bob,fov:settings.fov,fineTerrainBlocks:world.terrain.fineBlocks,midTerrainBlocks:world.terrain.midBlocks,drawCalls:renderCalls,triangles:renderTriangles,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0,viewport:{width:innerWidth,height:innerHeight},renderer:rendererVersion,diagnostics:diagnostics.enabled,shadowTarget:world.sunLight.target.position.toArray(),shadowRedraws:world.shadowRedraws,footprints:{count:prints.count,visible:prints.visible},motes:world.motes.count,wind:{gust:world.wind.gust,angle:world.wind.angle,time:world.wind.time},pointLights:{pool:world.lights.count,active:world.lights.active,emitters:world.lights.emitters},shadowBias:world.sunLight.shadow.bias};}
  const dev=!!(import.meta as unknown as {env?:{DEV?:boolean}}).env?.DEV;
  Object.defineProperty(window,'__vireon',{value:{getState:state,save:()=>saver?.save(),snapshot:()=>game?snapshot():null,diagnostics:()=>diagnosticReport(),
   // Development-only verification helpers; absent from production builds.
@@ -677,14 +689,14 @@ function boot(){
    input.right=(keys.has('KeyD')||keys.has('ArrowRight')?1:0)-(keys.has('KeyA')||keys.has('ArrowLeft')?1:0)+joyX;
   }else{input.forward=input.right=0;input.jump=false;}
   // One accepted clock drives everything: ≤5 fixed 50 ms steps per frame, nothing while paused/hidden.
-  const steps=clock.advance(actualFrameMs);let productionChanged=false,regrown=false;
+  const steps=clock.advance(actualFrameMs);let productionChanged=false,regrown=false;const spawned:string[]=[];
   for(let i=0;i<steps;i++){const px=actor.x,pz=actor.z,wasAir=!actor.grounded;if(game?.world.base.passage){input.forward=input.right=0;input.run=false;input.jump=false;}actor.step(FIXED_DT,input,game?survivalSpeed(game):1);input.jump=false;
    if(wasAir&&actor.grounded){if(airTime>.25)footstep(false,true);airTime=0;}else if(!actor.grounded)airTime+=FIXED_DT;
    const moved=Math.hypot(actor.x-px,actor.z-pz);if(actor.grounded&&moved>0){stride+=moved;bob+=moved*(input.run?2.4:2.9);if(stride>(input.run?.82:.68)){stride=0;audio.step(input.run,insideCapsule());footstep(input.run);}}
    if(game){
     Object.assign(game.player,{x:actor.x,y:actor.y,z:actor.z});
     const produced=productionTick(game,50,refillMachine,isDay(dayPhase())?10:-10);
-    if(natureTick(game,50).length)regrown=true;
+    const natural=natureTick(game,50,clock.activeTicks);if(natural.length){regrown=true;for(const id of natural)if(id.startsWith('vein-'))spawned.push(id);}
     // A finished transfer ends its mode: a tank installed later never starts filling (or draining) without a new press.
     const port=dialog==='production-panel'&&insideCapsule();
     if(port&&refillMachine==='capsule-out'&&!refillFromCapsule(game,FIXED_DT)||port&&refillMachine==='capsule-in'&&!refillCapsule(game,FIXED_DT)||refillMachine&&!refillMachine.startsWith('capsule')&&(game.player.bottles.every(t=>!t||(t.milliGU??0)>=TANKS[t.itemId].capacity)||(machine(game,refillMachine)?.oxygen??0)<=0)){refillMachine=null;void saver?.save();}
@@ -704,7 +716,8 @@ function boot(){
     else if(ev.kind==='block'){swingActive=true;swingNeed=ev.need;onMined(ev);}
     else if(swingActive){swingActive=swingStruck=false;world.deposits.setCrack(null);}}
   }
-  if(regrown)applyNodes();
+  if(regrown)applyNodes(spawned);
+  if(spawned.length&&game){announceVeins(spawned);spawned.length=0;}
   if(game&&steps>0&&refreshQuestProgress(game))productionChanged=true;
   if(productionChanged&&game&&game.player.vitals.health>0){hudKey='';updateHotbar();if(dialog==='production-panel')production.draw();void saver?.save();}
   if(game&&saver)saver.tick(clock.activeTicks);measured=diagnostics.stage('simulation',measured);if(dialog==='production-panel')production.tick();measured=diagnostics.stage('production-ui',measured);

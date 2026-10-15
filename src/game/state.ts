@@ -3,8 +3,8 @@ import { heightAt } from '../world';
 import { freshBase, RECIPE_BY_ID, domeFaces, domeFront, LINK_RANGE, MAX_REPEAT, GEN_BUFFER, FIBER_EU, ELECTROLYZER_O2, PORT_O2, CAPSULE_CAPACITY, type BaseState, type Job, type Building, type Link } from './production';
 import { BASIC_SUIT, BUILDABLE, CONTENT_VERSION, GENERATOR_VERSION, ITEMS, LEGACY_CONTENT_VERSIONS, SUIT_PARTS, TANKS, TOOLS, type SuitPart } from './defs';
 import { emptyInventory, INVENTORY_SIZE, type Slot } from './inventory';
-import { NODES, NODE_BY_ID, LATER_NODES, S3_NODES, nodeCovered, bodyHalf } from './resources';
-import { covers } from './nature';
+import { NODES, NODE_BY_ID, LATER_NODES, S3_NODES, nodeCovered, bodyHalf, VEIN_MATERIALS, VEIN_SPOT_BY_ID, veinSizeRange, type Vein, type Respawn, type VeinMaterial } from './resources';
+import { covers, veinDelay, VEIN_CAP, VEIN_TOTAL, RESPAWN_MAX, VEIN_DELAY_RANGE } from './nature';
 import { CYCLE_TICKS, START_OFFSET_TICKS } from './daycycle';
 import { freshQuestProgress, QUEST_FACTS, type QuestProgress } from './questFacts';
 import { QUEST_IDS, type QuestId } from './questCatalog';
@@ -12,6 +12,7 @@ import { QUEST_IDS, type QuestId } from './questCatalog';
  * Complete persistent game state. Plain JSON only: no class instances, GPU objects or
  * functions (TECHNICAL §2). Revision numbers live in save manifests.
  *
+ * State version 8 (S4, D33) adds new veins: `world.veins`, the `world.respawn` queue and `world.nextVeinId` (toV8).
  * State version 7 (S3) adds regrowing grass, new deposits, building rotation, repeated crafting
  * and longer multi-segment links. Version 6 adds crates, packed bodies and portable water; paid legacy jobs survive.
  * State version 5 adds bounded quest facts and milestones. Version 4 adds workstation levels.
@@ -20,9 +21,11 @@ import { QUEST_IDS, type QuestId } from './questCatalog';
  * the first inventory row — not a separate container), display-only vitals and the day-phase
  * offset. Version 1/2 saves (including content 1.0.0) are migrated by sanitizeState() without loss.
  */
-export const STATE_VERSION = 7;
+export const STATE_VERSION = 8;
 /** Last version produced by the pre-S3 migration chain. */
 const V6 = 6;
+/** S3 state; S4 migrates it with toV8. */
+const V7 = 7;
 export const HOTBAR_SIZE = 6;
 export type ItemStack = NonNullable<Slot>;
 export type Drop = { id: string; x: number; z: number; items: ItemStack[] };
@@ -40,7 +43,8 @@ export type GameState = {
   /** Selected cell of the first inventory row (0…5). */
   hotbar: number;
  };
- world: { crates: Record<string,Slot[]>; base: BaseState; capsuleMilliGU: number; nodes: Record<string, number>; /** Active-time accumulators (ms) of regrowing deposits. */ regrow: Record<string, number>; drops: Drop[]; nextDropId: number; dayOffsetTicks: number };
+ world: { crates: Record<string,Slot[]>; base: BaseState; capsuleMilliGU: number; nodes: Record<string, number>; /** Active-time accumulators (ms) of regrowing deposits. */ regrow: Record<string, number>; drops: Drop[]; nextDropId: number; dayOffsetTicks: number;
+  /** S4 (D33): live new veins, the queue of veins still to appear (active ms) and the next vein number. */ veins: Vein[]; respawn: Respawn[]; nextVeinId: number };
  progress: { visited: string[]; discovered: string[]; selected: string; quests: QuestProgress; /** S4 map mark («Метка», D34); optional: older pages drop it, sanitize defaults it to null. */ waypoint?: { x: number; z: number } | null };
 };
 export const SPAWN_POSE = { x: 40, z: 42, yaw: .38, pitch: -.035 };
@@ -52,7 +56,7 @@ export function newGame(worldId: string, seed: number, createdAt: number, y: num
  return {
   meta: { worldId, name, seed: seed >>> 0, planetId: 'verdana', generatorVersion: GENERATOR_VERSION, contentVersion: CONTENT_VERSION, stateVersion: STATE_VERSION, createdAt, activeTicks: 0 },
   player: { x: SPAWN_POSE.x, y, z: SPAWN_POSE.z, yaw: SPAWN_POSE.yaw, pitch: SPAWN_POSE.pitch, vitals: { health: 100, satiety: 100 }, survival: freshSurvival(), suit: basicSuit(), bottles: [{ itemId: 'bottle_1', count: 1, milliGU: TANKS.bottle_1.capacity }, null], inventory, hotbar: 0 },
-  world: { crates: {'crate-a':emptyInventory(),'crate-b':emptyInventory()}, base: freshBase(), capsuleMilliGU: CAPSULE_CAPACITY, nodes: Object.fromEntries(NODES.map(n => [n.id, n.amount])), regrow: {}, drops: [], nextDropId: 1, dayOffsetTicks: START_OFFSET_TICKS },
+  world: { crates: {'crate-a':emptyInventory(),'crate-b':emptyInventory()}, base: freshBase(), capsuleMilliGU: CAPSULE_CAPACITY, nodes: Object.fromEntries(NODES.map(n => [n.id, n.amount])), regrow: {}, drops: [], nextDropId: 1, dayOffsetTicks: START_OFFSET_TICKS, veins: [], respawn: [], nextVeinId: 1 },
   progress: { visited: [], discovered: [], selected: 'guide', quests: freshQuestProgress(), waypoint: null },
  };
 }
@@ -138,7 +142,17 @@ export function migrateRaw(raw:unknown):unknown{
  const r=migratePrevious(raw);if(!isObj(r)||!isObj(r.meta))return r;
  const rawVersion=isObj(raw)&&isObj(raw.meta)?Number(raw.meta.stateVersion):NaN;
  const v6=rawVersion===V6||rawVersion===STATE_VERSION||![5,6].includes(Number(r.meta.stateVersion))?r:toV6(r);
- return isObj(v6)&&isObj(v6.meta)&&v6.meta.stateVersion===V6?toV7(v6):v6;
+ const v7=isObj(v6)&&isObj(v6.meta)&&v6.meta.stateVersion===V6?toV7(v6):v6;
+ return isObj(v7)&&isObj(v7.meta)&&v7.meta.stateVersion===V7?toV8(v7):v7;
+}
+/** v7 → v8 (S4). */
+function toV8(r:Obj):Obj{const next=structuredClone(r),m=obj(next.meta,'meta');addVeinState(obj(next.world,'world'),Number(m.seed)>>>0);m.stateVersion=STATE_VERSION;return next;}
+/** S4 vein fields (D33): no veins yet; every non-grass deposit an older world already exhausted queues one, so it recovers too. */
+function addVeinState(world:Obj,seed:number){
+ if(!('veins' in world))world.veins=[];if(!('nextVeinId' in world))world.nextVeinId=1;if('respawn' in world)return;
+ const nodes=isObj(world.nodes)?world.nodes:{},q:Respawn[]=[];
+ for(const n of NODES)if(n.material!=='grass'&&nodes[n.id]===0&&q.length<RESPAWN_MAX)q.push({material:n.material as VeinMaterial,ms:veinDelay(seed,q.length,n.material as VeinMaterial)});
+ world.respawn=q;
 }
 /** S3 halves kiln fuel: a paid batch keeps one fiber, the other returns to the fuel slot (or a spare slot / a pile). */
 function kilnFuelFix(b:Obj,world:Obj,at?:{x:number;z:number}){
@@ -173,7 +187,7 @@ function toV7(r:Obj):Obj{
  packed(pl.inventory);
  if(isObj(world.crates))for(const c of Object.values(world.crates))packed(c);
  for(const d of [...drops])if(isObj(d))packed(d.items);
- obj(next.meta,'meta').stateVersion=STATE_VERSION;return next;
+ obj(next.meta,'meta').stateVersion=V7;return next;
 }
 function toV6(r:Obj):Obj{
  const next=structuredClone(r),world=obj(next.world,'world');
@@ -240,7 +254,7 @@ export function sanitizeState(input: unknown): GameState {
    survival, suit: Object.fromEntries(SUIT_PARTS.map(p => [p, suitSlot(suitRaw[p], p)])) as Suit,
    bottles: [bottleSlot(bottles[0], 'player.bottles[0]'), bottleSlot(bottles[1], 'player.bottles[1]')], inventory: inv.map((s, i) => slot(s, `player.inventory[${i}]`)),
    hotbar: int(pl.hotbar, 'player.hotbar', 0, HOTBAR_SIZE - 1) },
-  world: { crates:Object.fromEntries(['crate-a','crate-b'].map(id=>{const a=arr(obj(w.crates,'world.crates')[id],'crate.'+id,24);if(a.length!==24)throw new InvalidState('crate','нужно 24 слота');return [id,a.map((v,i)=>slot(v,'crate.'+id+'.'+i))];})), base: validateBase(w.base), capsuleMilliGU: int(w.capsuleMilliGU, 'world.capsuleMilliGU', 0, CAPSULE_CAPACITY), nodes, regrow, drops, nextDropId, dayOffsetTicks: int(w.dayOffsetTicks, 'world.dayOffsetTicks', 0, CYCLE_TICKS - 1) },
+  world: { crates:Object.fromEntries(['crate-a','crate-b'].map(id=>{const a=arr(obj(w.crates,'world.crates')[id],'crate.'+id,24);if(a.length!==24)throw new InvalidState('crate','нужно 24 слота');return [id,a.map((v,i)=>slot(v,'crate.'+id+'.'+i))];})), base: validateBase(w.base), capsuleMilliGU: int(w.capsuleMilliGU, 'world.capsuleMilliGU', 0, CAPSULE_CAPACITY), nodes, regrow, drops, nextDropId, dayOffsetTicks: int(w.dayOffsetTicks, 'world.dayOffsetTicks', 0, CYCLE_TICKS - 1), ...validateVeins(w) },
   progress: { visited: ids(pr.visited, 'progress.visited'), discovered: ids(pr.discovered, 'progress.discovered'), selected: str(pr.selected, 'progress.selected', 32, ID), quests:{facts,completed,tracked:qp.tracked as QuestId|null}, waypoint: pr.waypoint == null ? null : { x: num(obj(pr.waypoint, 'progress.waypoint').x, 'progress.waypoint.x', -200, 360), z: num(obj(pr.waypoint, 'progress.waypoint').z, 'progress.waypoint.z', -200, 360) } },
  };
 }
@@ -282,4 +296,22 @@ function validateBase(value: unknown, legacy = false): BaseState {
  let passage:BaseState['passage']=null;if(raw.passage!==null){const o=obj(raw.passage,'base.passage'),domeId=str(o.domeId,'passage.domeId',32,ID);if(!buildings.some(b=>b.id===domeId&&b.kind==='dome')||(o.direction!=='in'&&o.direction!=='out'))throw new InvalidState('passage','неверный шлюз');passage={domeId,direction:o.direction,remainingMs:int(o.remainingMs,'passage.remainingMs',0,6000)};}
  const handQueue=queue(raw.handQueue,'hand');if(!legacy&&handQueue.length)throw new InvalidState('handQueue','ручная очередь недоступна');
  return {buildings,links,nextId,hand:job(raw.hand,'hand'),handQueue,passage};
+}
+
+/** S4 veins (D33): only checked spots, the right material, unique ids below the counter, stock within the size range and the caps. */
+function validateVeins(w: Obj): { veins: Vein[]; respawn: Respawn[]; nextVeinId: number } {
+ const nextVeinId = int(w.nextVeinId, 'world.nextVeinId', 1, Number.MAX_SAFE_INTEGER), ids = new Set<string>(), spots = new Set<string>();
+ const material = (v: unknown, p: string) => { if (!(VEIN_MATERIALS as readonly unknown[]).includes(v)) throw new InvalidState(p, 'неизвестный материал жилы'); return v as VeinMaterial; };
+ const veins = arr(w.veins, 'world.veins', VEIN_TOTAL).map((x, i): Vein => {
+  const p = `world.veins[${i}]`, o = obj(x, p), id = str(o.id, p + '.id', 24, ID), at = /^vein-([1-9][0-9]*)$/.exec(id);
+  if (!at || ids.has(id)) throw new InvalidState(p + '.id', 'неверный или повторный ID жилы'); ids.add(id);
+  if (Number(at[1]) >= nextVeinId) throw new InvalidState('world.nextVeinId', 'счётчик должен быть больше всех жил');
+  const m = material(o.material, p + '.material'), spot = str(o.spot, p + '.spot', 24, ID), s = VEIN_SPOT_BY_ID.get(spot);
+  if (!s || s.material !== m) throw new InvalidState(p + '.spot', 'нет такого места для жилы'); if (spots.has(spot)) throw new InvalidState(p + '.spot', 'две жилы в одном месте'); spots.add(spot);
+  const [lo, hi] = veinSizeRange(m), size = int(o.size, p + '.size', lo, hi);
+  return { id, spot, material: m, amount: int(o.amount, p + '.amount', 1, size), size, spawnedAt: int(o.spawnedAt, p + '.spawnedAt', 0, Number.MAX_SAFE_INTEGER) };
+ });
+ for (const m of VEIN_MATERIALS) if (veins.filter(v => v.material === m).length > VEIN_CAP) throw new InvalidState('world.veins', 'слишком много жил одного материала');
+ const respawn = arr(w.respawn, 'world.respawn', RESPAWN_MAX).map((x, i): Respawn => { const p = `world.respawn[${i}]`, o = obj(x, p); return { material: material(o.material, p + '.material'), ms: int(o.ms, p + '.ms', 0, VEIN_DELAY_RANGE[1]) }; });
+ return { veins, respawn, nextVeinId };
 }

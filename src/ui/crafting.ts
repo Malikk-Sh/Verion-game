@@ -3,6 +3,7 @@ import { countItem } from '../game/inventory';
 import { RECIPES, RECIPE_BY_ID, WORKBENCH_UPGRADE, cancelJob, clearQueue, collectInput, collectOutput, energyRate, loadRecipeInputs, machine, nearby, queueJob, removeQueuedJob, startJob, upgradeBuilding, powerRate, MAX_REPEAT, type Recipe, type Building } from '../game/production';
 import { readyWorldItem } from '../game/backpack';
 import { nearestNode, nearestStation, type GuideTarget } from '../game/guide';
+import { nextVeinSeconds } from '../game/nature';
 import { stationStatus } from '../game/stationStatus';
 import type { GameState } from '../game/state';
 import { itemArt } from './art';
@@ -57,7 +58,7 @@ export function createCraftingView() {
   if (RAW.has(id)) {
    const t = nearestNode(g, id);
    if (t) { const go = button(`${t.name} · ${Math.round(Math.hypot(t.x - g.player.x, t.z - g.player.z))} м`, () => navigate?.(t), 'cr-go'); go.title = 'Показать на компасе'; box.append(go); }
-   else box.textContent = 'Запасы исчерпаны — ищите дальние залежи на карте';
+   else { const s = nextVeinSeconds(g, id); box.textContent = s !== null ? `Залежи выработаны — новая жила появится примерно через ${Math.max(1, Math.round(s / 60))} мин` : 'Запасы исчерпаны — ищите дальние залежи на карте'; }
    return box;
   }
   const r = VISIBLE.find(v => v.outputs[id]);
