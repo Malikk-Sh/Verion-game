@@ -29,7 +29,6 @@ export const LANDMARKS: Landmark[] = [
 ];
 /** Landmarks outside the B3 valley; they motivate a future rover. */
 export const FAR_IDS = ['canyon','mesa','crater'];
-export const ROUTE = ['grass','iron','copper','ice','cave','canyon','mesa','crater','capsule'];
 export const SPAWN = { x: 40, z: 42.0, yaw: 0.38 };
 export type Box = { id: string; minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number };
 export const boxes: Box[] = [];

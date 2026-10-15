@@ -22,13 +22,17 @@ import * as THREE from 'three';
 import './style.css';
 import './ui/hud.css';
 import './ui/motion.css';
+import './ui/map.css';
 import { HUD_GROUPS, HUD_MIN, HUD_MAX, HUD_STEP, HUD_VERSION, loadHudSettings, defaultHudSettings, applyHudSettings, type HudSettings, type HudGroup } from './ui/hud';
 import { VISOR_CONTROLS, defaultVisorSettings, parseVisorSettings, applyVisorSettings, type VisorGroup, type VisorSettings } from './ui/visor';
 import { installFullscreen } from './fullscreen';
 import { createWorld, type Quality } from './scene';
 import { Character, type Input } from './controller';
 import { Ambience } from './audio';
-import { boxes, EYE, FIXED_DT, heightAt, LANDMARKS, ROUTE, MIN, MAX, SIZE, type Landmark } from './world';
+import { boxes, EYE, FIXED_DT, heightAt, LANDMARKS, type Landmark } from './world';
+import { createMap } from './ui/map';
+import { DIRS } from './ui/mapView';
+import { resolveNav, type Waypoint } from './game/navigation';
 import { SimClock } from './game/clock';
 import { ITEMS, MATERIALS, TANKS, TOOLS } from './game/defs';
 import { phaseSeconds, isDay, offsetFor, MORNING_S, EVENING_S } from './game/daycycle';
@@ -75,7 +79,7 @@ function boot(){
  const viewDirection=new THREE.Vector3(),viewPos=new THREE.Vector3(),shadowAnchor=new THREE.Vector3(),tmp=new THREE.Vector3();
  const keys=new Set<string>(),input:Input={forward:0,right:0,run:false,jump:false};
  let joyX=0,joyY=0,runToggle=false,joyPointer:number|null=null,lookPointer:number|null=null,lastX=0,lastY=0;
- let started=false,running=false,selected='guide',nearest:Landmark|undefined,last=performance.now(),lastDiagnosticFrame=last,hiddenSinceFrame=false,lastUI=0;
+ let started=false,running=false,selected='guide',waypoint:Waypoint|null=null,nearest:Landmark|undefined,last=performance.now(),lastDiagnosticFrame=last,hiddenSinceFrame=false,lastUI=0;
  // ---------- S1 game state: one clock, finite deposits, inventory, saves ----------
  const clock=new SimClock(),mining:Mining={nodeId:null,ticks:0};
  let lastSurvivalEvent='none';
@@ -127,7 +131,7 @@ function boot(){
   document.body.dataset.running=String(running);
   el('objective').setAttribute('aria-expanded',String(which==='quest-panel'));
   if(which==='quest-panel')questBook.draw();
-  if(which==='production-panel')production.draw();if(which==='map-panel')drawMap();if(which==='inventory-panel')panels.drawInventory();if(which==='suit-panel')panels.drawSuit();if(which==='saves-panel')void refreshSlots();if(which==='paused')updatePauseInfo();
+  if(which==='production-panel')production.draw();if(which==='map-panel')mapUI.open();else mapUI.close();if(which==='inventory-panel')panels.drawInventory();if(which==='suit-panel')panels.drawSuit();if(which==='saves-panel')void refreshSlots();if(which==='paused')updatePauseInfo();
   if(running)audio.resume();else if(started&&(which==='paused'||which==='settings'||which==='hud-settings-panel'||which==='visor-settings-panel'))audio.suspend();
  }
  function pause(reason='Пауза'){if(!started)return;el('pause-title').textContent=reason;setDialog('paused');void saver?.save();}
@@ -148,7 +152,7 @@ function boot(){
  function refreshHud(){applyHudSettings(settings.hud);
   const c=el<HTMLCanvasElement>('compass'),r=c.getBoundingClientRect();c.width=Math.max(1,Math.round(r.width*devicePixelRatio));c.height=Math.max(1,Math.round(r.height*devicePixelRatio));
  }
- function resize(){lastRender=-Infinity;const portrait=innerHeight>innerWidth;el('portrait').hidden=!portrait;renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();refreshHud();
+ function resize(){lastRender=-Infinity;const portrait=innerHeight>innerWidth;el('portrait').hidden=!portrait;renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();refreshHud();if(dialog==='map-panel')mapUI.resize();
   if(portrait&&started)pause('Продолжим в горизонтальном режиме');}
  addEventListener('resize',resize);
  addEventListener('blur',()=>pause('Экспедиция приостановлена'));
@@ -273,6 +277,12 @@ function boot(){
  el('day').onclick=toggleDay;
  // The map keeps time running, so it opens from play or another live panel — never out of the pause.
  const openMap=()=>{if(started&&(running||liveDialogs.has(dialog)))setDialog('map-panel');};
+ // S4 (D34): one navigation model — the map's «Вести» and «Цель журнала» set `selected`; the mark is `waypoint`.
+ const leadTo=(id:string)=>{selected=id;if(id!=='guide')guideOverride=null;audio.tone('ui');void saver?.save();resume();updateUI();};
+ const mapUI=createMap({game:()=>game,player:()=>({x:actor.x,z:actor.z,yaw:actor.yaw}),selected:()=>selected,waypoint:()=>waypoint,target:()=>navTarget(),visited,discovered,tone:()=>audio.tone('ui'),
+  guide:()=>({title:game?el('objective-text').textContent??'':'',task:el('objective-task').textContent??'',target:guideNav()}),
+  vitals:()=>{const src=game?accessibleOxygen(game,insideCapsule()):{amount:0,capacity:1,unit:'GU'},hp=game?.player.vitals.health??0;return {o2:src.amount,unit:src.unit,o2Low:src.capacity>0&&src.amount/src.capacity<=.2,hp,hpLow:hp<=20};},
+  lead:id=>leadTo(id),leadGuide:()=>{guideOverride=null;leadTo('guide');},setWaypoint:p=>{waypoint=p;if(!p&&selected==='point')selected='guide';void saver?.save();}});
  el('map-button').onclick=()=>{audio.tone('ui');openMap();};el('close-map').onclick=resume;
  el('close-info').onclick=resume;
  function diagnosticContext(){return {quality:settings.quality,dialog,running,visible:!document.hidden,calls:renderCalls,triangles:renderTriangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures,fineBlocks:world.terrain.fineBlocks,buildings:game?.world.base.buildings.length??0,links:game?.world.base.links.length??0,activeTicks:clock.activeTicks};}
@@ -309,6 +319,7 @@ function boot(){
   if(event.target instanceof HTMLElement && (event.target.isContentEditable || event.target.closest('input,textarea,select')))return;
   if(event.code==='KeyJ'&&started&&!event.repeat){event.preventDefault();openQuests();return;}
   if(event.code==='KeyM'&&started&&!event.repeat){event.preventDefault();if(dialog==='map-panel')resume();else openMap();return;}
+  if(dialog==='map-panel'&&mapUI.key(event)){event.preventDefault();return;}
   if(event.code==='KeyI'&&started&&!event.repeat){event.preventDefault();openPanel('inventory-panel');return;}
   if(event.code==='KeyB'&&started&&!event.repeat){event.preventDefault();if(running||liveDialogs.has(dialog))production.open();return;}
   if(event.code==='KeyC'&&started&&!event.repeat){event.preventDefault();openPanel('suit-panel');return;}
@@ -362,7 +373,7 @@ function boot(){
   const g=game!;g.meta.activeTicks=clock.activeTicks;
   Object.assign(g.player,{x:actor.x,y:actor.y,z:actor.z,yaw:actor.yaw,pitch:actor.pitch});
   refreshQuestProgress(g);
-  Object.assign(g.progress,{visited:[...visited],discovered:[...discovered],selected});
+  Object.assign(g.progress,{visited:[...visited],discovered:[...discovered],selected,waypoint});
   return cloneState(g);
  }
  function setSaveStatus(st:SaverStatus|{kind:'none'|'idle';message?:string}){
@@ -418,7 +429,7 @@ function boot(){
  function startGame(state:GameState,id:string|null,revision:number,baseRevision=revision){
   game=state;refreshQuestProgress(state);questBook.reset();prints.clear();slotId=id;clock.stop();clock.activeTicks=state.meta.activeTicks;mining.nodeId=null;mining.ticks=0;
   actor.reset();Object.assign(actor,{x:state.player.x,y:state.player.y,z:state.player.z,yaw:state.player.yaw,pitch:state.player.pitch});actor.previous={x:actor.x,y:actor.y,z:actor.z};lastSurvivalEvent='none';holdMine=holdRefill=false;
-  visited.clear();discovered.clear();state.progress.visited.forEach(v=>visited.add(v));state.progress.discovered.forEach(v=>discovered.add(v));selected=LANDMARKS.some(l=>l.id===state.progress.selected)?state.progress.selected:'guide';guideOverride=null;lastCompleted=-1;lastStep=null;lastTaskKey='';
+  visited.clear();discovered.clear();state.progress.visited.forEach(v=>visited.add(v));state.progress.discovered.forEach(v=>discovered.add(v));waypoint=state.progress.waypoint??null;selected=resolveNav(state,state.progress.selected,waypoint)==='invalid'?'guide':state.progress.selected;guideOverride=null;lastCompleted=-1;lastStep=null;lastTaskKey='';
   applyNodes();built.reset();built.sync(state);world.invalidateShadows();syncDrops();hudKey='';updateHotbar();shownDay=null;world.setTime(phaseSeconds(state.meta.activeTicks,state.world.dayOffsetTicks),true);updateDayButton();panels.reset();
   if(id&&store){saver=new Saver(store,id,token,revision,state.meta.activeTicks,snapshot,setSaveStatus,baseRevision,(name,ms)=>diagnostics.span(name,ms));saver.startHeartbeat();setSaveStatus(saver.status);}else{saver=null;setSaveStatus({kind:'none'});}
   updateUI();
@@ -549,45 +560,8 @@ function boot(){
   if(ev.toolBroke){haptics.play('broke');audio.tone('warn');toast('Инструмент сломан',itemName('tool_stone')+' · новый мультитул: 4 камня + 2 волокна в мастерской');}
   hudKey='';updateHotbar();
  }
- // ---------- Holographic map (mirrored x so it matches the first-person view: east = −x) ----------
- let mapBase:HTMLCanvasElement|null=null;
- const MAP=480,MARGIN=18,MS=(MAP-2*MARGIN)/SIZE,mpx=(x:number)=>MARGIN+(MAX-x)*MS,mpy=(z:number)=>MAP-MARGIN-(z-MIN)*MS;
- function mapTerrain(){
-  // Rendered once: relief shading, height tint and 4 m contours for the whole 560 m square.
-  const c=document.createElement('canvas');c.width=c.height=MAP;const ctx=c.getContext('2d')!;ctx.fillStyle='#061518';ctx.fillRect(0,0,MAP,MAP);
-  const S=2,N=SIZE/S;
-  for(let j=0;j<N;j++)for(let i=0;i<N;i++){const x=MIN+i*S,z=MIN+j*S,h=heightAt(x,z),e=heightAt(x+S,z)-heightAt(x-S,z)-(heightAt(x,z+S)-heightAt(x,z-S)),shade=Math.max(-10,Math.min(14,e*6));
-   const band=Math.floor(h/4)!==Math.floor(heightAt(x+S,z)/4)||Math.floor(h/4)!==Math.floor(heightAt(x,z+S)/4);
-   ctx.fillStyle=band?`rgba(127,230,218,${h>30?.28:.4})`:`hsl(${182-Math.min(40,h)*.8} ${20+Math.min(30,Math.max(0,h))}% ${Math.max(4,10+Math.min(40,h)*.55+shade)}%)`;
-   ctx.fillRect(mpx(x+S),mpy(z+S),S*MS+.6,S*MS+.6);}
-  ctx.strokeStyle='rgba(127,230,218,.09)';ctx.lineWidth=1;for(let v=MIN;v<=MAX;v+=80){ctx.beginPath();ctx.moveTo(mpx(v),mpy(MIN));ctx.lineTo(mpx(v),mpy(MAX));ctx.moveTo(mpx(MIN),mpy(v));ctx.lineTo(mpx(MAX),mpy(v));ctx.stroke();}
-  ctx.strokeStyle='rgba(242,180,96,.35)';ctx.setLineDash([2,4]);ctx.strokeRect(mpx(160),mpy(160),160*MS,160*MS);ctx.setLineDash([]);
-  ctx.font='600 8px ui-monospace,monospace';ctx.fillStyle='rgba(242,180,96,.6)';ctx.textAlign='left';ctx.fillText('ДОЛИНА ПРИБЫТИЯ',mpx(160)+3,mpy(160)+10);
-  return c;
- }
- function drawMap(){
-  const m=el<HTMLCanvasElement>('map'),ctx=m.getContext('2d')!;mapBase??=mapTerrain();ctx.drawImage(mapBase,0,0);
-  ctx.strokeStyle='rgba(242,180,96,.55)';ctx.setLineDash([4,6]);ctx.beginPath();['capsule',...ROUTE].forEach((id,i)=>{const p=LANDMARKS.find(x=>x.id===id)!;i?ctx.lineTo(mpx(p.x),mpy(p.z)):ctx.moveTo(mpx(p.x),mpy(p.z));});ctx.stroke();ctx.setLineDash([]);
-  ctx.font='600 9px ui-monospace,monospace';ctx.textAlign='center';
-  for(const p of LANDMARKS){const sel=p.id===selected;ctx.save();ctx.translate(mpx(p.x),mpy(p.z));ctx.rotate(Math.PI/4);ctx.fillStyle=sel?'#f2b460':visited.has(p.id)?'rgba(127,230,218,.5)':'#bfeee6';const r=sel?5:3;ctx.fillRect(-r,-r,r*2,r*2);ctx.restore();
-   if(sel){ctx.strokeStyle='rgba(242,180,96,.5)';ctx.beginPath();ctx.arc(mpx(p.x),mpy(p.z),11,0,Math.PI*2);ctx.stroke();}
-   const far=Math.hypot(p.x-80,p.z-80)>100;if(far||sel){ctx.fillStyle=sel?'#f2b460':'#d7f3ee';ctx.fillText(p.short,mpx(p.x),mpy(p.z)-11);}}
-  const x=mpx(actor.x),y=mpy(actor.z);ctx.save();ctx.translate(x,y);ctx.rotate(-actor.yaw);
-  ctx.fillStyle='rgba(127,230,218,.16)';ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,34,-Math.PI/2-.6,-Math.PI/2+.6);ctx.fill();
-  ctx.beginPath();ctx.moveTo(0,-9);ctx.lineTo(5.5,6);ctx.lineTo(0,3.5);ctx.lineTo(-5.5,6);ctx.closePath();ctx.fillStyle='#ffffff';ctx.fill();ctx.restore();
-  ctx.font='600 10px ui-monospace,monospace';ctx.fillStyle='rgba(215,236,230,.75)';ctx.textAlign='left';ctx.fillText('С ↑',MARGIN+2,MARGIN+10);
-  // Scale bar: 100 m.
-  ctx.fillRect(MAP-MARGIN-100*MS,MAP-MARGIN+6,100*MS,2);ctx.textAlign='right';ctx.fillText('100 м',MAP-MARGIN,MAP-MARGIN+2);
-  const guide=navTarget(),follow=selected==='guide';
-  if(follow&&guide){ctx.save();ctx.translate(mpx(guide.x),mpy(guide.z));ctx.rotate(Math.PI/4);ctx.fillStyle='#ffb43c';ctx.fillRect(-5,-5,10,10);ctx.restore();ctx.strokeStyle='rgba(255,180,60,.6)';ctx.beginPath();ctx.arc(mpx(guide.x),mpy(guide.z),12,0,Math.PI*2);ctx.stroke();ctx.fillStyle='#ffb43c';ctx.textAlign='center';ctx.fillText(guide.name.toUpperCase(),mpx(guide.x),mpy(guide.z)-15);}
-  const journal=document.createElement('button');journal.setAttribute('aria-pressed',String(follow));journal.className='landmark-guide';
-  {const b=document.createElement('b');b.textContent='Цель журнала';const m=document.createElement('small');m.textContent=guide&&follow?`${guide.name} · ${Math.round(Math.hypot(guide.x-actor.x,guide.z-actor.z))} м`:'Вести по текущему шагу';const sp=document.createElement('span');sp.textContent='◆';journal.append(b,m,sp);}
-  journal.onclick=()=>{selected='guide';guideOverride=null;audio.tone('ui');resume();updateUI();};
-  el('landmark-list').replaceChildren(journal,...LANDMARKS.map(p=>{const button=document.createElement('button');const d=Math.round(Math.hypot(p.x-actor.x,p.z-actor.z));button.innerHTML='';const name=document.createElement('b');name.textContent=p.name;const meta=document.createElement('small');meta.textContent=`${d} м`;button.append(name,meta);button.setAttribute('aria-label',p.name);button.setAttribute('aria-pressed',String(p.id===selected));const span=document.createElement('span');span.textContent=visited.has(p.id)?'✓':'◇';button.append(span);button.onclick=()=>{selected=p.id;audio.tone('ui');resume();updateUI();};return button;}));
- }
  // ---------- Compass strip ----------
  const compass=el<HTMLCanvasElement>('compass'),cctx=compass.getContext('2d')!;
- const DIRS=['С','СВ','В','ЮВ','Ю','ЮЗ','З','СЗ'];
  function drawCompass(heading:number){
   const w=compass.width,h=compass.height,dpr=devicePixelRatio,scale=h/(28*dpr),span=Math.PI*.95;if(!w)return;
   cctx.clearRect(0,0,w,h);const X=(a:number)=>w/2+wrap(a-heading)/span*w;
@@ -614,13 +588,17 @@ function boot(){
  }
  /** Guide target the player chose in the journal; cleared when reached or when the step changes. */
  let guideOverride:GuideTarget|null=null,lastStep:QuestId|null=null,lastCompleted=-1,lastTaskKey='',guideCache:{at:number;target:GuideTarget|null}={at:-1,target:null};
- /** Where the compass and world marker lead: a landmark chosen on the map, or the current guide target. */
- function navTarget():{name:string;x:number;z:number;radius:number;landmark:boolean}|null{
-  const l=LANDMARKS.find(p=>p.id===selected);if(l)return {name:l.name,x:l.x,z:l.z,radius:l.radius,landmark:true};
-  if(!game)return null;
-  if(guideOverride)return {...guideOverride,radius:3,landmark:false};
+ /** The journal's target: the task the player chose in the journal or workshop, else the current step's own target. */
+ function guideNav():GuideTarget|null{
+  if(!game)return null;if(guideOverride)return guideOverride;
   const now=performance.now();if(now-guideCache.at>500){const id=currentStep(game);guideCache={at:now,target:id?stepTarget(game,guideStep(game,id)):null};}
-  const t=guideCache.target;return t?{...t,radius:t.kind==='area'?8:3,landmark:false}:null;
+  return guideCache.target;
+ }
+ /** Where the compass, the world marker and the map lead (navigation.ts): the selection, or the journal's target.
+  *  A selection that no longer exists (station picked up, deposit exhausted, cargo collected) falls back to the journal. */
+ function navTarget():{name:string;x:number;z:number;radius:number;landmark:boolean}|null{
+  if(game&&selected!=='guide'){const t=resolveNav(game,selected,waypoint);if(t==='invalid')selected='guide';else if(t)return {name:t.name,x:t.x,z:t.z,radius:t.radius,landmark:t.kind==='landmark'};}
+  const t=guideNav();return t?{...t,radius:t.kind==='area'?8:3,landmark:false}:null;
  }
  function showBanner(title:string,next:string){const b=el('step-banner');b.hidden=true;void b.offsetWidth;el('step-banner-title').textContent=title;el('step-banner-next').textContent=next;b.hidden=false;audio.tone('discover');setTimeout(()=>{if(el('step-banner-title').textContent===title)b.hidden=true;},3700);}
  /** HUD tracker: current step, its next unfinished task with a counter, and overall progress. */
@@ -664,18 +642,19 @@ function boot(){
   const target=navTarget();el('navigation').hidden=!target;
   if(target){const d=Math.hypot(actor.x-target.x,actor.z-target.z);el('target-name').textContent=target.name;el('target-distance').textContent=`${Math.round(d)} м`;
    const angle=Math.atan2(target.x-actor.x,target.z-actor.z)-actor.yaw;(document.querySelector('.nav-arrow') as HTMLElement).style.transform=`rotate(${-angle}rad)`;
-   if(!target.landmark&&guideOverride&&d<target.radius)guideOverride=null;}
+   // Arrival ends the leading (D34): a chosen target returns to the journal with «На месте»; the journal's own target simply moves on.
+   if(d<target.radius&&started&&running){if(selected!=='guide'){selected='guide';toast('На месте',target.name);audio.tone('discover');void saver?.save();}else if(guideOverride){guideOverride=null;toast('На месте',target.name);}}}
   nearest=LANDMARKS.filter(p=>Math.hypot(actor.x-p.x,actor.z-p.z)<=p.radius).sort((a,b)=>Math.hypot(actor.x-a.x,actor.z-a.z)-Math.hypot(actor.x-b.x,actor.z-b.z))[0];
   document.body.dataset.near=String(!!nearest);
   if(nearest&&started&&!discovered.has(nearest.id)){discovered.add(nearest.id);if(nearest.id!=='capsule'){toast('Новое место',nearest.name);audio.tone('discover');}}
   const o=objective();if(o!==lastObjective){lastObjective=o;el('objective-text').textContent=o;const ob=el('objective');ob.classList.remove('advance');void ob.offsetWidth;ob.classList.add('advance');}
   updateVitals();updateHotbar();updateDayButton();
  }
- function state(){const sorted=[...frames].sort((a,b)=>a-b);return {ready:true,version:'S3',linkSource:interaction.source,lastAction,fx:fx.stats(),guide:game?{current:currentStep(game),objective:el('objective-text').textContent,task:el('objective-task').textContent,nav:navTarget(),selected}:null,station:production.station,worldTarget:interaction.target,quests:game?structuredClone(game.progress.quests):null,questBook:questBook.debug(),vitals:game?{...game.player.vitals}:null,survival:game?{...game.player.survival}:null,capsuleMilliGU:game?.world.capsuleMilliGU??0,base:game?structuredClone(game.world.base):null,visibleDrops:dropGroup.children.length,slotId,revision:saver?.revision??0,saveStatus:saver?.status.kind??(game?'none':'idle'),halted:!!saver?.halted,activeTicks:clock.activeTicks,clockRunning:clock.running,hotbar:game?.player.hotbar??0,cells:game?game.player.inventory.map(s=>s?{...s}:null):[],suit:game?Object.fromEntries(Object.entries(game.player.suit).map(([k,v])=>[k,v?.itemId??null])):null,worn:game?wornParts(game):0,bottles:game?game.player.bottles.map(b=>b?{...b}:null):[],oxygenGU:game?oxygenGU(game):0,dayPhase:dayPhase(),dayOffsetTicks:game?.world.dayOffsetTicks??0,nightValue:world.nightValue,action:actionKind,handItem:hand.item!==null,feel:{strikes:strikesLanded,hit:lastHit,swing:swingPoseValue,crack:world.deposits.crackLevel,shell:world.deposits.shell.visible,pops:feed.pops,crumbling:world.deposits.crumbling,punching:world.deposits.punching,ring:reticle.classList.contains('mining'),haptics:haptics.played,model:hand.item},haptics:settings.haptics,panel:panels.debug,aimNode,mineRatio,nodes:game?{...game.world.nodes}:null,inventory:game?game.player.inventory.filter(Boolean).map(s=>({...s})):[],drops:game?game.world.drops.length:0,storage:!!store,grassCount:world.grassCount,fullscreen:!!document.fullscreenElement,running,dialog,night:!isDay(dayPhase()),selected,visited:[...visited],activeTime:clock.activeSeconds,position:{x:actor.x,y:actor.y,z:actor.z},yaw:actor.yaw,pitch:actor.pitch,grounded:actor.grounded,input:{...input,joyX,joyY,joyPointer,lookPointer},quality:settings.quality,sound:settings.sound,bob:settings.bob,fov:settings.fov,fineTerrainBlocks:world.terrain.fineBlocks,midTerrainBlocks:world.terrain.midBlocks,drawCalls:renderCalls,triangles:renderTriangles,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0,viewport:{width:innerWidth,height:innerHeight},renderer:rendererVersion,diagnostics:diagnostics.enabled,shadowTarget:world.sunLight.target.position.toArray(),shadowRedraws:world.shadowRedraws,footprints:{count:prints.count,visible:prints.visible},motes:world.motes.count,wind:{gust:world.wind.gust,angle:world.wind.angle,time:world.wind.time},pointLights:{pool:world.lights.count,active:world.lights.active,emitters:world.lights.emitters},shadowBias:world.sunLight.shadow.bias};}
+ function state(){const sorted=[...frames].sort((a,b)=>a-b);return {ready:true,version:'S3',linkSource:interaction.source,lastAction,fx:fx.stats(),guide:game?{current:currentStep(game),objective:el('objective-text').textContent,task:el('objective-task').textContent,nav:navTarget(),selected}:null,map:mapUI.debug(),waypoint,station:production.station,worldTarget:interaction.target,quests:game?structuredClone(game.progress.quests):null,questBook:questBook.debug(),vitals:game?{...game.player.vitals}:null,survival:game?{...game.player.survival}:null,capsuleMilliGU:game?.world.capsuleMilliGU??0,base:game?structuredClone(game.world.base):null,visibleDrops:dropGroup.children.length,slotId,revision:saver?.revision??0,saveStatus:saver?.status.kind??(game?'none':'idle'),halted:!!saver?.halted,activeTicks:clock.activeTicks,clockRunning:clock.running,hotbar:game?.player.hotbar??0,cells:game?game.player.inventory.map(s=>s?{...s}:null):[],suit:game?Object.fromEntries(Object.entries(game.player.suit).map(([k,v])=>[k,v?.itemId??null])):null,worn:game?wornParts(game):0,bottles:game?game.player.bottles.map(b=>b?{...b}:null):[],oxygenGU:game?oxygenGU(game):0,dayPhase:dayPhase(),dayOffsetTicks:game?.world.dayOffsetTicks??0,nightValue:world.nightValue,action:actionKind,handItem:hand.item!==null,feel:{strikes:strikesLanded,hit:lastHit,swing:swingPoseValue,crack:world.deposits.crackLevel,shell:world.deposits.shell.visible,pops:feed.pops,crumbling:world.deposits.crumbling,punching:world.deposits.punching,ring:reticle.classList.contains('mining'),haptics:haptics.played,model:hand.item},haptics:settings.haptics,panel:panels.debug,aimNode,mineRatio,nodes:game?{...game.world.nodes}:null,inventory:game?game.player.inventory.filter(Boolean).map(s=>({...s})):[],drops:game?game.world.drops.length:0,storage:!!store,grassCount:world.grassCount,fullscreen:!!document.fullscreenElement,running,dialog,night:!isDay(dayPhase()),selected,visited:[...visited],activeTime:clock.activeSeconds,position:{x:actor.x,y:actor.y,z:actor.z},yaw:actor.yaw,pitch:actor.pitch,grounded:actor.grounded,input:{...input,joyX,joyY,joyPointer,lookPointer},quality:settings.quality,sound:settings.sound,bob:settings.bob,fov:settings.fov,fineTerrainBlocks:world.terrain.fineBlocks,midTerrainBlocks:world.terrain.midBlocks,drawCalls:renderCalls,triangles:renderTriangles,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0,viewport:{width:innerWidth,height:innerHeight},renderer:rendererVersion,diagnostics:diagnostics.enabled,shadowTarget:world.sunLight.target.position.toArray(),shadowRedraws:world.shadowRedraws,footprints:{count:prints.count,visible:prints.visible},motes:world.motes.count,wind:{gust:world.wind.gust,angle:world.wind.angle,time:world.wind.time},pointLights:{pool:world.lights.count,active:world.lights.active,emitters:world.lights.emitters},shadowBias:world.sunLight.shadow.bias};}
  const dev=!!(import.meta as unknown as {env?:{DEV?:boolean}}).env?.DEV;
  Object.defineProperty(window,'__vireon',{value:{getState:state,save:()=>saver?.save(),snapshot:()=>game?snapshot():null,diagnostics:()=>diagnosticReport(),
   // Development-only verification helpers; absent from production builds.
-  ...(dev?{captureFrame:()=>new Promise<string>(resolve=>{if(captureRequested)throw new Error('Capture already pending');captureRequested=resolve;}),setState:(raw:unknown)=>{if(!game)return;const next=sanitizeState(raw);if(next.meta.worldId!==game.meta.worldId)throw new Error('Test state belongs to another world');game=next;Object.assign(actor,{x:next.player.x,y:next.player.y,z:next.player.z,yaw:next.player.yaw,pitch:next.player.pitch});actor.vy=actor.vx=actor.vz=actor.airSpeed=0;actor.grounded=true;actor.previous={x:actor.x,y:actor.y,z:actor.z};clock.activeTicks=next.meta.activeTicks;built.sync(next);world.invalidateShadows();applyNodes();syncDrops();hudKey='';updateUI();updateAimUI();},agePrints:(seconds:number)=>prints.update(seconds),teleport:(x:number,z:number,yaw:number,pitch=-.2)=>{prints.clear();actor.x=x;actor.z=z;actor.y=heightAt(x,z);actor.yaw=yaw;actor.pitch=pitch;actor.vy=actor.vx=actor.vz=actor.airSpeed=0;actor.grounded=true;actor.previous={x,y:actor.y,z};}}:{})},writable:false});
+  ...(dev?{captureFrame:()=>new Promise<string>(resolve=>{if(captureRequested)throw new Error('Capture already pending');captureRequested=resolve;}),setState:(raw:unknown)=>{if(!game)return;const next=sanitizeState(raw);if(next.meta.worldId!==game.meta.worldId)throw new Error('Test state belongs to another world');game=next;waypoint=next.progress.waypoint??null;Object.assign(actor,{x:next.player.x,y:next.player.y,z:next.player.z,yaw:next.player.yaw,pitch:next.player.pitch});actor.vy=actor.vx=actor.vz=actor.airSpeed=0;actor.grounded=true;actor.previous={x:actor.x,y:actor.y,z:actor.z};clock.activeTicks=next.meta.activeTicks;built.sync(next);world.invalidateShadows();applyNodes();syncDrops();hudKey='';updateUI();updateAimUI();},agePrints:(seconds:number)=>prints.update(seconds),teleport:(x:number,z:number,yaw:number,pitch=-.2)=>{prints.clear();actor.x=x;actor.z=z;actor.y=heightAt(x,z);actor.yaw=yaw;actor.pitch=pitch;actor.vy=actor.vx=actor.vz=actor.airSpeed=0;actor.grounded=true;actor.previous={x,y:actor.y,z};}}:{})},writable:false});
 
  let handBobX=0,handBobY=0,airTime=0,foot=1;
  // S4: boot prints and a puff of the ground's own dust per stride; both feet and a dust ring on landing. Not in the
@@ -772,6 +751,7 @@ function boot(){
   }
   measured=diagnostics.stage('render-submit',measured);
   if(!frozen)audio.update(dt,started&&insideCapsule()?1:0,world.nightValue,world.wind.gust);
+  if(dialog==='map-panel')mapUI.tick(now);
   if(started){drawCompass(bearing(Math.sin(actor.yaw),Math.cos(actor.yaw)));updateMarker();interaction.update(game,running,dt);computeAim();updateAimUI();updateRing();feed.tick(running?dt:0,project);}
   if(game&&started){built.update(game,frozen?0:dt);if(built.animating||game.world.base.passage)world.invalidateShadows();}
   if(running&&dt>0){frames.push(actualFrameMs);if(frames.length>180)frames.shift();}
@@ -781,6 +761,6 @@ function boot(){
  };
  document.body.dataset.started='false';applyQuality(settings.quality);applySound(settings.sound);applyBob(settings.bob);applyHaptics(settings.haptics);applyFov(settings.fov);fov=settings.fov;world.setTime(516,true);updateUI();
  document.body.dataset.running='false';el<HTMLButtonElement>('start').disabled=true;requestAnimationFrame(draw);
- void (async()=>{fx.prewarm(true);world.prepare(renderer);await renderer.compileAsync(scene,camera);await hand.prewarm(renderer,camera,{sun:world.sunLight,hemi:world.hemiLight});renderer.render(scene,camera);fx.prewarm(false);sceneReady=true;last=performance.now();await initStore();el<HTMLButtonElement>('start').disabled=false;document.body.dataset.ready='true';})().catch(e=>{console.error(e);error('Не удалось подготовить сцену: '+String(e));});
+ void (async()=>{fx.prewarm(true);world.prepare(renderer);await renderer.compileAsync(scene,camera);await hand.prewarm(renderer,camera,{sun:world.sunLight,hemi:world.hemiLight});renderer.render(scene,camera);fx.prewarm(false);sceneReady=true;last=performance.now();mapUI.prepare(heightAt);await initStore();el<HTMLButtonElement>('start').disabled=false;document.body.dataset.ready='true';})().catch(e=>{console.error(e);error('Не удалось подготовить сцену: '+String(e));});
 }
 try { boot(); } catch(e){ console.error(e);error('Нужен браузер с WebGL 2. Попробуйте обновить браузер или открыть сцену на другом устройстве. '+(e instanceof Error?e.message:'')); }

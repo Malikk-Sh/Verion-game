@@ -41,7 +41,7 @@ export type GameState = {
   hotbar: number;
  };
  world: { crates: Record<string,Slot[]>; base: BaseState; capsuleMilliGU: number; nodes: Record<string, number>; /** Active-time accumulators (ms) of regrowing deposits. */ regrow: Record<string, number>; drops: Drop[]; nextDropId: number; dayOffsetTicks: number };
- progress: { visited: string[]; discovered: string[]; selected: string; quests: QuestProgress };
+ progress: { visited: string[]; discovered: string[]; selected: string; quests: QuestProgress; /** S4 map mark («Метка», D34); optional: older pages drop it, sanitize defaults it to null. */ waypoint?: { x: number; z: number } | null };
 };
 export const SPAWN_POSE = { x: 40, z: 42, yaw: .38, pitch: -.035 };
 const basicSuit = (): Suit => ({ helmet: { itemId: BASIC_SUIT.helmet, count: 1 }, chest: { itemId: BASIC_SUIT.chest, count: 1 }, legs: { itemId: BASIC_SUIT.legs, count: 1 }, boots: { itemId: BASIC_SUIT.boots, count: 1 } });
@@ -53,7 +53,7 @@ export function newGame(worldId: string, seed: number, createdAt: number, y: num
   meta: { worldId, name, seed: seed >>> 0, planetId: 'verdana', generatorVersion: GENERATOR_VERSION, contentVersion: CONTENT_VERSION, stateVersion: STATE_VERSION, createdAt, activeTicks: 0 },
   player: { x: SPAWN_POSE.x, y, z: SPAWN_POSE.z, yaw: SPAWN_POSE.yaw, pitch: SPAWN_POSE.pitch, vitals: { health: 100, satiety: 100 }, survival: freshSurvival(), suit: basicSuit(), bottles: [{ itemId: 'bottle_1', count: 1, milliGU: TANKS.bottle_1.capacity }, null], inventory, hotbar: 0 },
   world: { crates: {'crate-a':emptyInventory(),'crate-b':emptyInventory()}, base: freshBase(), capsuleMilliGU: CAPSULE_CAPACITY, nodes: Object.fromEntries(NODES.map(n => [n.id, n.amount])), regrow: {}, drops: [], nextDropId: 1, dayOffsetTicks: START_OFFSET_TICKS },
-  progress: { visited: [], discovered: [], selected: 'guide', quests: freshQuestProgress() },
+  progress: { visited: [], discovered: [], selected: 'guide', quests: freshQuestProgress(), waypoint: null },
  };
 }
 export const cloneState = (s: GameState): GameState => structuredClone(s);
@@ -241,7 +241,7 @@ export function sanitizeState(input: unknown): GameState {
    bottles: [bottleSlot(bottles[0], 'player.bottles[0]'), bottleSlot(bottles[1], 'player.bottles[1]')], inventory: inv.map((s, i) => slot(s, `player.inventory[${i}]`)),
    hotbar: int(pl.hotbar, 'player.hotbar', 0, HOTBAR_SIZE - 1) },
   world: { crates:Object.fromEntries(['crate-a','crate-b'].map(id=>{const a=arr(obj(w.crates,'world.crates')[id],'crate.'+id,24);if(a.length!==24)throw new InvalidState('crate','нужно 24 слота');return [id,a.map((v,i)=>slot(v,'crate.'+id+'.'+i))];})), base: validateBase(w.base), capsuleMilliGU: int(w.capsuleMilliGU, 'world.capsuleMilliGU', 0, CAPSULE_CAPACITY), nodes, regrow, drops, nextDropId, dayOffsetTicks: int(w.dayOffsetTicks, 'world.dayOffsetTicks', 0, CYCLE_TICKS - 1) },
-  progress: { visited: ids(pr.visited, 'progress.visited'), discovered: ids(pr.discovered, 'progress.discovered'), selected: str(pr.selected, 'progress.selected', 32, ID), quests:{facts,completed,tracked:qp.tracked as QuestId|null} },
+  progress: { visited: ids(pr.visited, 'progress.visited'), discovered: ids(pr.discovered, 'progress.discovered'), selected: str(pr.selected, 'progress.selected', 32, ID), quests:{facts,completed,tracked:qp.tracked as QuestId|null}, waypoint: pr.waypoint == null ? null : { x: num(obj(pr.waypoint, 'progress.waypoint').x, 'progress.waypoint.x', -200, 360), z: num(obj(pr.waypoint, 'progress.waypoint').z, 'progress.waypoint.z', -200, 360) } },
  };
 }
 
