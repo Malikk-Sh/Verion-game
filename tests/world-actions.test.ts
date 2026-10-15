@@ -5,6 +5,7 @@ import {addItems,transferSlot,countItem} from '../src/game/inventory';
 import {makeBuilding,productionTick,connect,startJob} from '../src/game/production';
 import {packStation,loadMachineSlot,takeSlot,moveTank,chargeWornTank,wearStationTank,moveTankGap} from '../src/game/worldActions';
 import {tankGap} from '../src/game/survival';
+import {allRooms,boxCells,bumpRooms,cellKey,lowestAir,shellOf} from '../src/game/rooms';
 import {place} from '../src/buildings';
 import {heightAt} from '../src/world';
 import {Character} from '../src/controller';
@@ -103,8 +104,10 @@ test('tankGap: only taking the last gas off a sealed suit with no other air is a
  assert.equal(ask(0,null,true),false,'inside the capsule with gas');g.world.capsuleMilliGU=0;assert.equal(ask(0,null,true),true,'an empty capsule');
  g.player.survival.emergencyMs=1000;assert.equal(ask(),false,'emergency air');g.player.survival.emergencyMs=0;
  g.player.suit.helmet=null;assert.equal(ask(),false,'an open suit does not breathe tanks');g.player.suit.helmet={itemId:'suit_helmet',count:1};
- const d=makeBuilding(g,'dome',44,0,43);d.zone.q=500000;d.zone.purity=1;assert.equal(ask(),false,'a breathable dome');
- d.zone.q=0;assert.equal(ask(),true);g.world.base.passage={domeId:d.id,direction:'in',remainingMs:3000};assert.equal(ask(),false,'a paid airlock cycle');g.world.base.passage.direction='out';assert.equal(ask(),true);g.world.base.passage=null;
+ // A 3×3×3 glass room around the player with an airlock in its +z wall (rooms.ts).
+ const k=lowestAir(44,43);g.world.base.glass=shellOf(boxCells(43,k,42,3,3,3)).filter(c=>c!==cellKey(44,k,45)&&c!==cellKey(44,k+1,45));g.world.base.doors=[{id:'door-'+g.world.base.nextId,x:44,y:k,z:45,rot:0}];g.world.base.nextId++;bumpRooms(g);
+ const room=allRooms(g)[0];Object.assign(room.zone,{q:500000,purity:1,temperature:20});assert.equal(ask(),false,'a breathable room');
+ room.zone.q=0;assert.equal(ask(),true);g.world.base.passage={doorId:g.world.base.doors[0].id,direction:'in',remainingMs:3000,paid:true};assert.equal(ask(),false,'a paid airlock cycle');g.world.base.passage.direction='out';assert.equal(ask(),true);g.world.base.passage=null;
  g.player.bottles[0]!.milliGU=0;assert.equal(ask(),false,'the removed tank is already empty');g.player.bottles[0]!.milliGU=600000;
  // The move helper picks the tank that replaces the worn one: the charging tank for a swap, nothing for a plain move.
  assert.equal(moveTankGap(g,false,{kind:'worn',b:0},{kind:'station',id:e.id}),true);e.input[1]=tank(9000);assert.equal(moveTankGap(g,false,{kind:'worn',b:0},{kind:'station',id:e.id}),false);

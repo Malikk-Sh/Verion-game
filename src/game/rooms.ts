@@ -36,6 +36,8 @@ export const cellKey = (i: number, k: number, j: number) => ((i + 256) * 1024 + 
 export function cellOf(key: number) { const y = key % 128, r = (key - y) / 128, z = r % 1024; return { i: (r - z) / 1024 - 256, k: y - 32, j: z - 256 }; }
 export const cellCenter = (key: number) => { const c = cellOf(key); return { x: c.i + .5, y: c.k + .5, z: c.j + .5 }; };
 export const placeable = (i: number, k: number, j: number) => [i, k, j].every(Number.isInteger) && i >= CELL_MIN && i <= CELL_MAX && j >= CELL_MIN && j <= CELL_MAX && k >= LEVEL_MIN && k <= LEVEL_MAX;
+/** Saved cells may lie a little past the building area: a v7 dome on its edge became a shell 3 cells wide. */
+export const STORE_MARGIN = 5, storable = (i: number, k: number, j: number) => [i, k, j].every(Number.isInteger) && i >= CELL_MIN - STORE_MARGIN && i <= CELL_MAX + STORE_MARGIN && j >= CELL_MIN - STORE_MARGIN && j <= CELL_MAX + STORE_MARGIN && k >= LEVEL_MIN && k <= LEVEL_MAX;
 const STEP_I = 131072, STEP_J = 128;
 /** The 6 face neighbours of a cell key (gas never passes edges or corners). */
 export const around = (key: number) => [key + 1, key - 1, key + STEP_J, key - STEP_J, key + STEP_I, key - STEP_I];
@@ -188,7 +190,12 @@ export function leakAt(g: GameState, key: number): { kind: 'open' | 'big'; path:
  const seen = [start], parent = new Map<number, number>([[start, start]]);
  for (let h = 0; h < seen.length && seen.length <= ROOM_MAX; h++) {
   const c = seen[h];
-  if (outsideIn(v, c)) { const path = [c]; while (parent.get(path[0]) !== path[0]) path.unshift(parent.get(path[0])!); return { kind: 'open', path }; }
+  if (outsideIn(v, c)) {
+   const path = [c]; while (parent.get(path[0]) !== path[0]) path.unshift(parent.get(path[0])!);
+   // Open to the sky: show the way up past the highest glass, where the air really leaves.
+   const e = cellOf(c), b = v.box; if (e.i >= b[0] - 1 && e.i <= b[1] + 1 && e.j >= b[4] - 1 && e.j <= b[5] + 1) for (let top = c; cellOf(top).k <= b[3]; ) path.push(++top);
+   return { kind: 'open', path };
+  }
   for (const n of around(c)) if (!parent.has(n) && !solidIn(v, n)) { parent.set(n, c); seen.push(n); }
  }
  return { kind: 'big', path: [] };
@@ -240,14 +247,17 @@ export function editRooms(g: GameState, change: RoomChange, outside = outsideTem
  base.glass = next.glass; base.doors = next.doors; base.zones = moved.zones; remember(base, after);
  return { error: '', vented: moved.vented / 1000, breached: moved.breached, at: first === undefined ? null : cellCenter(first) };
 }
-const PREDICT = new WeakMap<RoomsView, Map<number, number>>();
+/** Layouts after removing one cell, per current layout: the aim asks every frame, the air changes every tick. */
+const PREDICT = new WeakMap<RoomsView, Map<number, RoomsView>>();
 /** GU that would leave if the glass block or door at `key` were removed; the state is not touched. */
 export function predictRemove(g: GameState, key: number): number {
- const base = g.world.base, v = roomsView(base), memo = PREDICT.get(v) ?? new Map<number, number>(); PREDICT.set(v, memo);
- const known = memo.get(key); if (known !== undefined) return known;
- const d = v.doorAt.get(key), change: RoomChange = d ? { undoor: d.id } : v.glass.has(key) ? { remove: [key] } : {};
- const next = layout(base, change), gu = carry(v, base.zones, deriveRooms(next.glass, next.doors), 10).vented / 1000;
- memo.set(key, gu); return gu;
+ const base = g.world.base, v = roomsView(base), memo = PREDICT.get(v) ?? new Map<number, RoomsView>(); PREDICT.set(v, memo);
+ let after = memo.get(key);
+ if (!after) {
+  const d = v.doorAt.get(key), change: RoomChange = d ? { undoor: d.id } : v.glass.has(key) ? { remove: [key] } : {}, next = layout(base, change);
+  after = deriveRooms(next.glass, next.doors); if (memo.size >= 8) memo.delete(memo.keys().next().value!); memo.set(key, after);
+ }
+ return carry(v, base.zones, after, 10).vented / 1000;
 }
 // ---------- Placement rules ----------
 const overlaps = (a: number[], b: number[]) => a[0] < b[1] - 1e-6 && a[1] > b[0] + 1e-6 && a[2] < b[3] - 1e-6 && a[3] > b[2] + 1e-6 && a[4] < b[5] - 1e-6 && a[5] > b[4] + 1e-6;
@@ -304,8 +314,8 @@ export function doorProblem(g: GameState, key: number, rot: number, except?: str
   if (land.some(k => areaProblem(k))) return 'Шлюзу нужен проход с обеих сторон';
   if (g.world.base.buildings.some(b => overlaps(cellBox(land[0], 2), stationBox(b)))) return 'У шлюза стоит станция — оставьте проход свободным';
  }
- const front = cellBox(landingCells(d, 'front')[0], 2);
- if (boxes.some(b => !b.id.startsWith('build-') && overlaps(front, [b.minX, b.maxX, b.minY, b.maxY, b.minZ, b.maxZ]))) return 'Перед шлюзом препятствие — поверните шлюз';
+ // Rocks, deposits and the capsule (static colliders) would trap the player set down on either side.
+ for (const side of ['front', 'back'] as const) { const land = cellBox(landingCells(d, side)[0], 2); if (boxes.some(b => !b.id.startsWith('build-') && overlaps(land, [b.minX, b.maxX, b.minY, b.maxY, b.minZ, b.maxZ]))) return side === 'front' ? 'Перед шлюзом препятствие — поверните шлюз' : 'За шлюзом препятствие — поверните шлюз'; }
  return '';
 }
 /** Why a station footprint cannot stand here ('' = it can): glass, doors, airlock landings, a generator inside a room. */

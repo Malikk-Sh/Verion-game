@@ -92,6 +92,12 @@ test('Rooms: a breach empties only the opened part; expanding behind a second wa
  const done = removeGlass(g, outer, true); assert.equal(done.error, ''); assert.equal(done.ventGU, 70.001); assert.equal(done.breached, true); assert.deepEqual(done.at, { x: 55.5, y: 1.5, z: 43.5 });
  assert.equal(roomAt(g, 56.5, 1.5, 43.5), null); assert.equal(roomAt(g, 58.5, 1.5, 43.5)!.zone.q, 90000); assert.equal(countItem(g.player.inventory, 'window'), 1);
  assert.equal(structureStatus(g, cellKey(55, 2, 43)).title, 'Утечка'); assert.deepEqual(cellOf(leakAt(g, cellKey(55, 2, 43))!.path.at(-1)!).i <= 55, true);
+ // The prediction follows the air, not a stale first answer: an empty room asks nothing, a filled one asks again.
+ const right2 = roomAt(g, 58.5, 1.5, 43.5)!, side = cellKey(60, 1, 43); right2.zone.q = 0; assert.equal(predictRemove(g, side), 0); roomAt(g, 58.5, 1.5, 43.5)!.zone.q = 5000; assert.equal(predictRemove(g, side), 5);
+ roomAt(g, 58.5, 1.5, 43.5)!.zone.q = 90000;
+ // A roofless box leaks to the sky: the path climbs past the highest glass.
+ const open = fresh(); lay(open, CUBE().filter(k => cellOf(k).k < 3)); const up = leakAt(open, cellKey(55, 1, 43))!;
+ assert.equal(up.kind, 'open'); assert.equal(cellOf(up.path.at(-1)!).k, 3); assert.ok(up.path.every(k => !open.world.base.glass.includes(k)));
  // Expansion: the new shell is built outside first (a new, empty room), then the wall between them goes.
  const h = fresh(); lay(h, CUBE()); const a = allRooms(h)[0]; a.zone.q = 200000;
  const grow = editRooms(h, { add: shell(60, 0, 42, 3, 3, 3).filter(k => !h.world.base.glass.includes(k)) });
@@ -247,6 +253,8 @@ test('Save v7 → v8: a dome becomes a 4×4×3 glass room with its air, airlock 
  assert.deepEqual(sanitizeState(JSON.parse(JSON.stringify(m))), m, 'round trip');
  // The old exit spot (dome + front × 3.5) is exactly the new outer landing.
  assert.deepEqual([landingPoint(m, m.world.base.doors[0], 'front').x, landingPoint(m, m.world.base.doors[0], 'front').z], [61.5, 44.5]);
+ // A dome on the very edge of the old building area keeps its shell, 3 cells past it.
+ const corner = v7(fresh(), { x: -195, z: -195, rot: 3, q: 1000 }); corner.world.base.buildings = corner.world.base.buildings.slice(0, 1); const edge = sanitizeState(corner); assert.equal(cellOf(edge.world.base.glass[0]).i, -198); assert.deepEqual(sanitizeState(JSON.parse(JSON.stringify(edge))), edge);
  // Every rotation keeps the airlock on its turned side.
  for (const [rot, door] of [[0, { x: 58, z: 46 }], [2, { x: 58, z: 41 }], [3, { x: 55, z: 44 }]] as const) { const r = sanitizeState(v7(fresh(), { x: 58, z: 44, rot, q: 0 })); assert.deepEqual([r.world.base.doors[0].x, r.world.base.doors[0].z, r.world.base.doors[0].rot], [door.x, door.z, rot]); assert.equal(allRooms(r)[0].volume, 48); }
 });

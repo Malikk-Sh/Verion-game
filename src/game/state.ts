@@ -8,7 +8,7 @@ import { covers } from './nature';
 import { CYCLE_TICKS, START_OFFSET_TICKS } from './daycycle';
 import { freshQuestProgress, QUEST_FACTS, type QuestProgress } from './questFacts';
 import { QUEST_IDS, type QuestId } from './questCatalog';
-import { cellKey, cellOf, capacityOf, deriveRooms, doorFront, doorKeys, groundRoom, landingAt, lowestAir, placeable, shellOf, CELL_MAX, CELL_MIN, DOOR_LIMIT, GLASS_LIMIT, LEVEL_MAX, LEVEL_MIN, PASSAGE_MS, ROOM_LIMIT, ROOM_MAX, type Door, type Zone } from './rooms';
+import { cellKey, cellOf, capacityOf, deriveRooms, doorFront, doorKeys, groundRoom, landingAt, lowestAir, storable, STORE_MARGIN, shellOf, CELL_MAX, CELL_MIN, DOOR_LIMIT, GLASS_LIMIT, LEVEL_MAX, LEVEL_MIN, PASSAGE_MS, ROOM_LIMIT, ROOM_MAX, type Door, type Zone } from './rooms';
 /**
  * Complete persistent game state. Plain JSON only: no class instances, GPU objects or
  * functions (TECHNICAL §2). Revision numbers live in save manifests.
@@ -212,7 +212,10 @@ export function domesToGlass(base:Obj,player:Obj){
  for(const door of doors)for(const k of doorKeys(door))glass.delete(k);
  const sorted=[...glass].sort((a,b)=>a-b),view=deriveRooms(sorted,doors),zones=(Array.isArray(base.zones)?base.zones:[]) as unknown[];
  for(const m of made){const t=view.tag.get(m.inner);if(t===undefined||t<0)continue;const room=view.rooms[t],z=m.zone;
-  zones.push({cell:room.cell,q:Math.min(Number(z.q??0),capacityOf(room.volume)),temperature:Number(z.temperature??10),purity:Number(z.purity??0),lossRemainder:Number(z.lossRemainder??0)});}
+  const q=Math.min(Number(z.q??0),capacityOf(room.volume)),same=zones.find(v=>isObj(v)&&v.cell===room.cell) as Obj|undefined;
+  // Two old domes never touched (bodies kept 5 m apart); should their shells still close one room, the air adds up.
+  if(same){same.q=Math.min(Number(same.q)+q,capacityOf(room.volume));continue;}
+  zones.push({cell:room.cell,q,temperature:Number(z.temperature??10),purity:Number(z.purity??0),lossRemainder:Number(z.lossRemainder??0)});}
  Object.assign(base,{glass:sorted,doors,zones,nextId});
  const pass=base.passage;
  if(isObj(pass)&&'domeId' in pass){const m=made.find(v=>v.id===pass.domeId);if(m)Object.assign(player,landingAt(view,m.door,pass.direction==='in'?'back':'front'));base.passage=null;}
@@ -323,9 +326,9 @@ function validateBase(value: unknown, legacy = false): BaseState {
  const pairs=new Set<string>();for(const l of links){const k=l.kind+':'+(l.kind==='cable'?[l.from,l.to].sort():[l.from,l.to]).join(':');if(pairs.has(k))throw new InvalidState('links','повтор сегмента');pairs.add(k);}
  // S4 glass rooms: sorted unique cells in the building area, doors clear of glass and of each other.
  const list=(k:string,max:number)=>legacy&&raw[k]===undefined?[]:arr(raw[k],'base.'+k,max);
- const glass=list('glass',GLASS_LIMIT).map(v=>{const k=int(v,'base.glass',0,2**27-1),c=cellOf(k);if(!placeable(c.i,c.k,c.j))throw new InvalidState('base.glass','клетка вне участка');return k;});
+ const glass=list('glass',GLASS_LIMIT).map(v=>{const k=int(v,'base.glass',0,2**27-1),c=cellOf(k);if(!storable(c.i,c.k,c.j))throw new InvalidState('base.glass','клетка вне участка');return k;});
  for(let i=1;i<glass.length;i++)if(glass[i]<=glass[i-1])throw new InvalidState('base.glass','ключи не упорядочены или повторяются');
- const solid=new Set(glass),doors=list('doors',DOOR_LIMIT).map((v):Door=>{const o=obj(v,'door'),d={id:register(o.id,'door.id','door'),x:int(o.x,'door.x',CELL_MIN,CELL_MAX),y:int(o.y,'door.y',LEVEL_MIN,LEVEL_MAX-1),z:int(o.z,'door.z',CELL_MIN,CELL_MAX),rot:int(o.rot,'door.rot',0,3)};
+ const solid=new Set(glass),doors=list('doors',DOOR_LIMIT).map((v):Door=>{const o=obj(v,'door'),d={id:register(o.id,'door.id','door'),x:int(o.x,'door.x',CELL_MIN-STORE_MARGIN,CELL_MAX+STORE_MARGIN),y:int(o.y,'door.y',LEVEL_MIN,LEVEL_MAX-1),z:int(o.z,'door.z',CELL_MIN-STORE_MARGIN,CELL_MAX+STORE_MARGIN),rot:int(o.rot,'door.rot',0,3)};
   for(const k of doorKeys(d)){if(solid.has(k))throw new InvalidState('base.doors','шлюз пересекает стекло или другой шлюз');solid.add(k);}return d;});
  const nextId=int(raw.nextId,'base.nextId',1,Number.MAX_SAFE_INTEGER);if(generationIds.some(n=>n>=nextId))throw new InvalidState('base.nextId','счётчик не больше существующих ID');
  const view=deriveRooms(glass,doors);if(view.rooms.length>ROOM_LIMIT)throw new InvalidState('base.zones','больше '+ROOM_LIMIT+' помещений');
