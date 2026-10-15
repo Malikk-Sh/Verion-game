@@ -2,10 +2,11 @@ import * as THREE from 'three';
 import { MIN, MAX, SIZE, gridHeight, FORMATIONS } from './world';
 
 /**
- * Chunked terrain with two static levels of detail.
- * 80 m blocks: a coarse 4 m mesh everywhere, replaced near the viewer by four 40 m chunks
- * on the exact 1 m collision grid (built lazily, a couple per frame). Coarse vertices lie on
- * the same grid points; skirts hide the small cracks between levels.
+ * Chunked terrain with three static levels of detail.
+ * 80 m blocks: a coarse 4 m mesh everywhere, replaced near the viewer by four 40 m chunks on the exact
+ * 1 m collision grid (FINE_R), and between that and the quality radius by four 2 m chunks (S4). All levels
+ * are built lazily, one chunk per frame; their vertices lie on the same grid points; skirts hide the small
+ * cracks between levels.
  */
 /** `slope` (1 − n.y over 2 m) and `cavity` come from fixed 1 m-grid stencils in both levels of detail (no colour pop when a
  * block swaps); `surface` receives per-vertex surface weights (x: loose sand for wind ripples). */
@@ -21,7 +22,7 @@ function* patchSteps(x0:number,z0:number,len:number,step:number,color:GroundColo
  const put=(x:number,y:number,z:number,nx:number,ny:number,nz:number,slope:number,h:number,cavity=0)=>{
   pos[k*3]=x;pos[k*3+1]=y;pos[k*3+2]=z;nor[k*3]=nx;nor[k*3+1]=ny;nor[k*3+2]=nz;w.fill(0);color(x,z,h,slope,c,cavity,w);col[k*3]=c.r;col[k*3+1]=c.g;col[k*3+2]=c.b;uv[k*2]=x/2.6;uv[k*2+1]=z/2.6;surf[k*2]=w[0];surf[k*2+1]=slope;return k++;
  };
- const normal=(x:number,z:number)=>{const e=step,dx=H(x+e,z)-H(x-e,z),dz=H(x,z+e)-H(x,z-e),l=Math.hypot(dx,2*e,dz);return [-dx/l,2*e/l,-dz/l];};
+ const normal=(x:number,z:number)=>{const e=step>2?step:1,dx=H(x+e,z)-H(x-e,z),dz=H(x,z+e)-H(x,z-e),l=Math.hypot(dx,2*e,dz);return [-dx/l,2*e/l,-dz/l];};
  for(let j=0;j<n;j++){for(let i=0;i<n;i++){const x=x0+i*step,z=z0+j*step,h=H(x,z),[nx,ny,nz]=normal(x,z);put(x,h,z,nx,ny,nz,groundSlope(H,x,z),h,groundCavity(H,x,z,h));}yield;}
  for(let j=0;j<n-1;j++)for(let i=0;i<n-1;i++){const a=j*n+i;idx.push(a,a+n,a+1,a+1,a+n,a+n+1);}
  // Skirts: each border vertex duplicated downward (same colour and surface), stitched both windings (visible from either side).
@@ -42,46 +43,58 @@ export function groundCavity(H:Heights,x:number,z:number,h=H(x,z)){const l1=H(x+
 
 function buildPatch(x:number,z:number,len:number,step:number,color:GroundColor){const task=patchSteps(x,z,len,step,color);let r=task.next();while(!r.done)r=task.next();return r.value;}
 
-type TerrainBlock={x:number;z:number;coarse:THREE.Mesh;fine:THREE.Mesh[]|null;wantFine:boolean;used:number};
+type Level='fine'|'mid';
+type TerrainBlock={x:number;z:number;coarse:THREE.Mesh;fine:THREE.Mesh[]|null;mid:THREE.Mesh[]|null;want:Level|null;used:number;midUsed:number};
+/** S4: fine 1 m chunks within this distance of the viewer (80 m on High); a 2 m middle level from there to the quality radius. */
+export const FINE_R=55;
+const STEP={fine:1,mid:2} as const;
 export class Terrain {
  readonly group=new THREE.Group();
  private blocks:TerrainBlock[]=[];
  private order:typeof this.blocks=[];private lastX=Infinity;private lastZ=Infinity;private generation=0;
- private pending:{block:TerrainBlock;parts:THREE.Mesh[];task:ReturnType<typeof patchSteps>}|null=null;
- private radius=110;
+ private pending:{block:TerrainBlock;level:Level;parts:THREE.Mesh[];task:ReturnType<typeof patchSteps>}|null=null;
+ private radius=110;private fineR=FINE_R;
  constructor(private material:THREE.Material,private color:GroundColor){
   for(let z=MIN;z<MAX;z+=BLOCK)for(let x=MIN;x<MAX;x+=BLOCK){
    const coarse=new THREE.Mesh(buildPatch(x,z,BLOCK,4,color),material);coarse.receiveShadow=true;this.group.add(coarse);
-   this.blocks.push({x,z,coarse,fine:null,wantFine:false,used:0});
+   this.blocks.push({x,z,coarse,fine:null,mid:null,want:null,used:0,midUsed:0});
   }
  }
- setQuality(q:'low'|'standard'|'high'){this.radius=q==='low'?70:q==='standard'?110:140;this.lastX=Infinity;}
+ setQuality(q:'low'|'standard'|'high'){this.radius=q==='low'?70:q==='standard'?110:140;this.fineR=q==='high'?80:FINE_R;this.lastX=Infinity;}
  private dist(b:{x:number;z:number},p:THREE.Vector3){const dx=Math.max(b.x-p.x,0,p.x-(b.x+BLOCK)),dz=Math.max(b.z-p.z,0,p.z-(b.z+BLOCK));return Math.hypot(dx,dz);}
- /** Fine meshes are built row by row within a CPU budget; only complete blocks replace coarse ground. */
+ /** The level a block shows: the wanted one when complete, else the other built one (no drop to coarse while a level is
+  * being built), else the coarse block. */
+ private shown(b:TerrainBlock):Level|null{return b.want==='fine'?(b.fine?'fine':b.mid?'mid':null):b.want==='mid'?(b.mid?'mid':b.fine?'fine':null):null;}
+ private show(b:TerrainBlock){const s=this.shown(b);b.coarse.visible=!s;if(b.fine)for(const m of b.fine)m.visible=s==='fine';if(b.mid)for(const m of b.mid)m.visible=s==='mid';}
+ /** Fine and middle meshes are built row by row within a CPU budget; only complete blocks replace what is shown. */
  update(p:THREE.Vector3,budgetMs=2){
   if(Math.hypot(p.x-this.lastX,p.z-this.lastZ)>=2){this.lastX=p.x;this.lastZ=p.z;this.generation++;
    this.order=[...this.blocks].sort((a,b)=>this.dist(a,p)-this.dist(b,p));
-   for(const b of this.order){b.wantFine=this.dist(b,p)<(b.fine?.[0].visible?this.radius+15:this.radius);if(b.wantFine)b.used=this.generation;
-    const fine=b.wantFine&&!!b.fine;b.coarse.visible=!fine;if(b.fine)for(const m of b.fine)m.visible=fine;
+   // Hysteresis: a shown level is kept 10 m (fine) or 15 m (any detail) beyond its threshold.
+   for(const b of this.order){const d=this.dist(b,p),s=this.shown(b);
+    b.want=d<this.fineR+(s==='fine'?10:0)?'fine':d<this.radius+(s?15:0)?'mid':null;if(b.want==='fine')b.used=this.generation;if(b.want)b.midUsed=this.generation;this.show(b);
    }
    this.evictHidden();
   }
-  if(this.pending&&!this.pending.block.wantFine){for(const m of this.pending.parts){this.group.remove(m);m.geometry.dispose();}this.pending=null;}
-  if(!this.pending){const block=this.order.find(b=>b.wantFine&&!b.fine);if(!block)return;this.pending={block,parts:[],task:patchSteps(block.x,block.z,CHUNK,1,this.color)};}
+  if(this.pending&&this.pending.block.want!==this.pending.level){for(const m of this.pending.parts){this.group.remove(m);m.geometry.dispose();}this.pending=null;}
+  if(!this.pending){const block=this.order.find(b=>b.want&&!b[b.want]);if(!block)return;const level=block.want!;this.pending={block,level,parts:[],task:patchSteps(block.x,block.z,CHUNK,STEP[level],this.color)};}
   const deadline=performance.now()+budgetMs;
   while(this.pending&&performance.now()<deadline){const r=this.pending.task.next();if(!r.done)continue;
    const m=new THREE.Mesh(r.value,this.material);m.receiveShadow=true;m.visible=false;this.group.add(m);this.pending.parts.push(m);
-   if(this.pending.parts.length===4){const b=this.pending.block;b.fine=this.pending.parts;b.coarse.visible=false;for(const part of b.fine)part.visible=true;this.pending=null;this.evictHidden();}
-   else{const i=this.pending.parts.length;this.pending.task=patchSteps(this.pending.block.x+(i%2)*CHUNK,this.pending.block.z+Math.floor(i/2)*CHUNK,CHUNK,1,this.color);}
+   const {block:b,level,parts}=this.pending;
+   if(parts.length===4){b[level]=parts;this.show(b);this.pending=null;this.evictHidden();}
+   else{const i=parts.length;this.pending.task=patchSteps(b.x+(i%2)*CHUNK,b.z+Math.floor(i/2)*CHUNK,CHUNK,STEP[level],this.color);}
    break; // one upload-sized mesh per rendered frame
   }
  }
- /** Also prune on completion: waiting until the next movement lets a stationary cache exceed its limit. */
- private evictHidden(){const cached=this.blocks.filter(b=>b.fine),limit=this.radius<=70?20:32;let count=cached.length;
-  for(const b of cached.filter(b=>!b.wantFine).sort((a,b)=>a.used-b.used)){if(count<=limit)break;for(const m of b.fine!){this.group.remove(m);m.geometry.dispose();}b.fine=null;count--;}
+ /** Also prune on completion: waiting until the next movement lets a stationary cache exceed its limit. Shown meshes stay. */
+ private evictHidden(){
+  for(const level of ['fine','mid'] as const){const cached=this.blocks.filter(b=>b[level]),limit=(this.radius<=70?20:32)*(level==='mid'?1.5:1),key=level==='fine'?'used':'midUsed';let count=cached.length;
+   for(const b of cached.filter(b=>b.want!==level&&this.shown(b)!==level).sort((a,b)=>a[key]-b[key])){if(count<=limit)break;for(const m of b[level]!){this.group.remove(m);m.geometry.dispose();}b[level]=null;count--;}}
  }
- /** Fine chunks built so far (for the metrics overlay). */
+ /** Fine and middle blocks built so far (for the metrics overlay). */
  get fineBlocks(){return this.blocks.filter(b=>b.fine).length;}
+ get midBlocks(){return this.blocks.filter(b=>b.mid).length;}
 }
 
 /**

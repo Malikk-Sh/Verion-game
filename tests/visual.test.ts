@@ -7,6 +7,7 @@ import {printAllowed,PrintRing,printCorners,PRINT_W,PRINT_L,FOOTPRINTS} from '..
 import {ParticleSim,SHAPE,FX_CAPS} from '../src/fx';
 import {MOTES} from '../src/sky';
 import {Terrain,groundSlope,groundCavity} from '../src/terrain';
+import {heightAt} from '../src/world';
 
 test('Light pool picks the nearest active emitters within reach, priority breaking ties',()=>{
  const src=(x:number,intensity:number,priority:number,distance=6)=>({x,y:0,z:0,intensity,distance,priority});
@@ -87,6 +88,11 @@ test('Ground colour inputs (2 m slope, cavity, surface weights) match in both te
  for(let i=0;i<21*21;i++){const f=at.get(g.position.getX(i)+','+g.position.getZ(i));assert.ok(f);const c=[g.color.getX(i),g.color.getY(i),g.color.getZ(i),g.surface.getX(i),g.surface.getY(i)];
   for(let k=0;k<5;k++)assert.ok(Math.abs(c[k]-f[k])<1e-6,`vertex ${i} channel ${k}: ${c[k]} vs ${f[k]}`);compared++;if(c[0]>.1)steep++;}
  assert.equal(compared,441);assert.ok(steep>5,'the block must contain sloped ground for the check to mean anything');
+ // The 2 m middle level (diagonal neighbours) gets the very same inputs at its vertices.
+ for(let i=0;i<60&&!t.midBlocks;i++)t.update(p,1000);assert.ok(t.midBlocks>0);
+ const mids=(t.group.children as THREE.Mesh[]).filter(m=>m.visible&&m.geometry.attributes.position.count===21*21+21*4&&m.geometry.boundingBox!.max.x-m.geometry.boundingBox!.min.x===40);assert.equal(mids.length,4);
+ for(const m of mids){const a=m.geometry.attributes;
+  for(let i=0;i<21*21;i+=5){const x=a.position.getX(i),z=a.position.getZ(i);assert.ok(Math.abs(a.color.getX(i)-groundSlope(heightAt,x,z))<1e-6);assert.ok(Math.abs(a.color.getY(i)-(groundCavity(heightAt,x,z)*.5+.5))<1e-6);}}
  // The stencils themselves: a plane has no cavity; a bowl is a hollow (> 0), a dome a crest (< 0).
  const plane=(x:number,z:number)=>x*.3+z*.1,bowl=(x:number,z:number)=>(x*x+z*z)*.02;
  assert.ok(Math.abs(groundSlope(plane,5,5)-(1-1/Math.hypot(.3,1,.1)))<1e-12);assert.equal(groundCavity(plane,5,5),0);
