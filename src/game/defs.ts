@@ -30,12 +30,21 @@ export const ITEMS: Record<string, ItemDef> = {
  ice: def({ id: 'ice', name: 'Кусок льда', short: 'Лёд', stack: 64, kind: 'item', category: 'resource', description: 'В печи с волокном: 2 с → 1 WU переносимой воды.' }),
  stone: def({ id: 'stone', name: 'Камень', short: 'Камень', stack: 64, kind: 'item', category: 'resource', description: 'Строительное сырьё.' }),
 };
-/** Early production items use the canonical design catalog directly. */
-export const BUILDABLE = ['workbench', 'kiln', 'biogenerator', 'electrolyzer', 'refill', 'distributor', 'dome'] as const;
+/** Early production items use the canonical design catalog directly. Stations are bodies (`Building`); glass blocks and
+ *  airlocks (S4, D31) are cells of rooms placed by their own tool; `dome` is a legacy item only (dismantle_dome). */
+export const BUILDABLE = ['workbench', 'kiln', 'biogenerator', 'electrolyzer', 'refill', 'distributor'] as const;
 export type BuildingKind = typeof BUILDABLE[number];
-for (const id of ['water','wrench','grass', 'fiber', 'sand', 'iron', 'copper', 'glass', 'wire', 'circuit', ...BUILDABLE, 'cable', 'gas_pipe']) {
+const SPECIAL: Record<string, string> = {
+ wrench: 'Многоразовый ключ: выберите в быстром доступе и взаимодействуйте с верстаком для улучшения.',
+ cable: 'Выберите «Соединить» и отметьте два порта станций. Дальность одного участка — до 4 м.',
+ gas_pipe: 'Выберите «Соединить» и отметьте два порта станций. Дальность одного участка — до 4 м.',
+ window: 'Прозрачный герметичный блок 1 м. Стены и крыша помещений.',
+ airlock: 'Дверь 1×2 клетки: встраивается в стену помещения. Ручной цикл 6 с расходует 4 GU воздуха.',
+ dome: 'Купол прежней версии. Его больше не ставят: разберите в кармане (B) на 64 стеклоблока и шлюз.',
+};
+for (const id of ['water','wrench','grass', 'fiber', 'sand', 'iron', 'copper', 'glass', 'wire', 'circuit', ...BUILDABLE, 'window', 'airlock', 'dome', 'cable', 'gas_pipe']) {
  const d = catalog.items[id as keyof typeof catalog.items];
- ITEMS[id] = def({ id, name: d.name, short: d.name, stack: d.stack, kind: d.kind as ItemDef['kind'], category: id === 'wrench' ? 'tool' : d.kind === 'placeable' ? 'building' : 'resource', description: id === 'wrench' ? 'Многоразовый ключ: выберите в быстром доступе и взаимодействуйте с верстаком для улучшения.' : id === 'cable' || id === 'gas_pipe' ? 'Выберите «Соединить» и отметьте два порта станций. Дальность одного участка — до 4 м.' : d.kind === 'placeable' ? 'Выберите в быстром доступе и разместите перед собой. Новый корпус не содержит топлива, воды или кислорода.' : 'Материал для ранних рецептов производства.' });
+ ITEMS[id] = def({ id, name: d.name, short: d.name, stack: d.stack, kind: d.kind as ItemDef['kind'], category: id === 'wrench' ? 'tool' : d.kind === 'placeable' && id !== 'dome' ? 'building' : 'resource', description: SPECIAL[id] ?? (d.kind === 'placeable' ? 'Выберите в быстром доступе и разместите перед собой. Новый корпус не содержит топлива, воды или кислорода.' : 'Материал для ранних рецептов производства.') });
 }
 /** Basic suit set worn at start (SYSTEMS §1). */
 export const BASIC_SUIT: Record<SuitPart, string> = { helmet: 'suit_helmet', chest: 'suit_chest', legs: 'suit_legs', boots: 'suit_boots' };

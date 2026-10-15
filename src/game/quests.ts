@@ -1,5 +1,6 @@
 import { NODES } from './resources';
-import { RECIPES, habitable, insideDome, WORKBENCH_UPGRADE } from './production';
+import { RECIPES, WORKBENCH_UPGRADE } from './production';
+import { allRooms, habitableRoom, roomDoors, stationRoom } from './rooms';
 import { recordQuestFact } from './questFacts';
 import { countItem } from './inventory';
 import { QUESTS, QUEST_BY_ID, type QuestId } from './questCatalog';
@@ -28,22 +29,26 @@ export function refreshQuestProgress(g: GameState): boolean {
   if(recipe)for(const id of Object.keys(recipe.inputs))see(id);
   if(b.kind==='workbench'&&b.level===2){see('wrench');for(const id of Object.keys(WORKBENCH_UPGRADE.inputs))see(id);}
  }
+ // Placed glass blocks and airlocks are paid pieces too (S4).
+ if(g.world.base.glass.length)see('window');if(g.world.base.doors.length)see('airlock');
  const has=(kind:string)=>g.world.base.buildings.some(b=>b.kind===kind);
  const fact=(f:string)=>g.progress.quests.facts.includes(f);
  const item=(id:string)=>fact('item:'+id);
- const oxygenEvidence=g.world.base.buildings.some(b=>b.oxygen>0||b.kind==='dome'&&b.zone.q>0);
+ const oxygenEvidence=g.world.base.buildings.some(b=>b.oxygen>0)||g.world.base.zones.some(z=>z.q>0),rooms=allRooms(g);
  const waterEvidence=g.world.base.buildings.some(b=>b.kind==='electrolyzer'&&b.water>0);
  if(oxygenEvidence)changed=recordQuestFact(g,'craft:electrolysis')||changed;
- if(oxygenEvidence||waterEvidence||g.world.base.buildings.some(b=>b.kind==='dome'&&b.zone.purity>0))changed=recordQuestFact(g,'system:power')||changed;
+ if(oxygenEvidence||waterEvidence||g.world.base.zones.some(z=>z.purity>0))changed=recordQuestFact(g,'system:power')||changed;
  if(slots.filter(s=>s?.itemId==='tool_stone').length>=2)changed=recordQuestFact(g,'craft:craft_tool_stone')||changed;
  const achieved: Record<QuestId, boolean> = {
   // The first step asks for exactly what the workbench costs (the journal's counters), or a bench already standing.
   materials:has('workbench')||item('stone')&&item('fiber')&&countItem(g.player.inventory,'stone')>=8&&countItem(g.player.inventory,'fiber')>=4, bench:has('workbench'), tool:fact('craft:craft_tool_stone'), kiln:has('kiln'),
   metals:item('iron')&&item('copper'),glass:item('glass'),wrench:item('wrench'),circuit:item('circuit'),
-  generator:has('biogenerator'),electrolyzer:has('electrolyzer'),dome:has('dome'),
+  generator:has('biogenerator'),electrolyzer:has('electrolyzer'),
+  // S4: the shelter is a closed glass room with an airlock on its boundary.
+  dome:rooms.some(r=>roomDoors(g,r).length>0),
   bench2:g.world.base.buildings.some(b=>b.kind==='workbench'&&b.level===2),
-  power:fact('system:power'),distributor:g.world.base.buildings.some(b=>b.kind==='distributor'&&g.world.base.buildings.some(d=>insideDome(d,b.x,b.y,b.z))),auto:fact('system:auto'),
-  oxygen:fact('craft:electrolysis'),refill:fact('system:refill'),air:g.world.base.buildings.some(habitable),
+  power:fact('system:power'),distributor:g.world.base.buildings.some(b=>b.kind==='distributor'&&!!stationRoom(g,b)),auto:fact('system:auto'),
+  oxygen:fact('craft:electrolysis'),refill:fact('system:refill'),air:rooms.some(habitableRoom),
   base:fact('system:base'),
  };
  // Actual achievements count independently of the suggested order. Costs never gate quests.

@@ -145,7 +145,8 @@ function distributorBody(k: Kit, m: Mats) {
  k.box(m.blue, 0, .78, .415, .5, .04, .012); k.box(m.screen, -.2, .62, .418, .16, .1, .01);
  k.cyl(m.steel, -.3, .25, .42, .045, .12, Math.PI / 2);
 }
-function domeBody(k: Kit, m: Mats) {
+/** The retired prefab dome (S4: glass rooms replace it). Kept, unused, as the source of the airlock door model. */
+export function domeBody(k: Kit, m: Mats) {
  // Platform with a lip, slim dark frame over the 4×4×3 cell shell, an arched glass vault on top
  // and an airlock vestibule. The vault is visual: the sealed volume stays the 48 m³ cell grid.
  k.box(m.floor, 0, .05, 0, 4.3, .1, 4.3); k.box(m.hull, 0, .03, 0, 4.5, .06, 4.5);
@@ -180,7 +181,7 @@ function staticGroup(kind: BuildingKind, level: number): THREE.Group {
  const key = kind + level;
  if (!STATIC.has(key)) {
   const k = new Kit(), m = M();
-  ({ workbench: () => workbenchBody(k, m, level), kiln: () => kilnBody(k, m), biogenerator: () => generatorBody(k, m), electrolyzer: () => electrolyzerBody(k, m), refill: () => refillBody(k, m), distributor: () => distributorBody(k, m), dome: () => domeBody(k, m) } as Record<BuildingKind, () => void>)[kind]();
+  ({ workbench: () => workbenchBody(k, m, level), kiln: () => kilnBody(k, m), biogenerator: () => generatorBody(k, m), electrolyzer: () => electrolyzerBody(k, m), refill: () => refillBody(k, m), distributor: () => distributorBody(k, m) } as Record<BuildingKind, () => void>)[kind]();
   STATIC.set(key, k.finish());
  }
  return STATIC.get(key)!;
@@ -198,7 +199,7 @@ export function buildStation(kind: BuildingKind, level: number): StationVisual {
  for (const child of body.children) { const mesh = child as THREE.Mesh, copy = new THREE.Mesh(mesh.geometry, mesh.material); copy.castShadow = mesh.castShadow; copy.receiveShadow = true; group.add(copy); }
  const a: Animated = { kind, parts: {}, mats: {} };
  const own: THREE.Material[] = [];
- const status = kind === 'dome' ? lamp(group, .5, 1.25, 2.6) : kind === 'workbench' ? lamp(group, .36, .92, .4) : kind === 'kiln' ? lamp(group, .36, .85, .47) : kind === 'biogenerator' ? lamp(group, .44, .74, .36) : kind === 'electrolyzer' ? lamp(group, .38, .78, .45) : kind === 'refill' ? lamp(group, 0, 1.3, .13) : lamp(group, .2, .62, .42);
+ const status = kind === 'workbench' ? lamp(group, .36, .92, .4) : kind === 'kiln' ? lamp(group, .36, .85, .47) : kind === 'biogenerator' ? lamp(group, .44, .74, .36) : kind === 'electrolyzer' ? lamp(group, .38, .78, .45) : kind === 'refill' ? lamp(group, 0, 1.3, .13) : lamp(group, .2, .62, .42);
  a.mats.lamp = status.mat; own.push(status.mat);
  if (kind === 'kiln') {
   const fire = new THREE.MeshStandardMaterial({ color: '#2a1a12', emissive: '#ff7a2a', emissiveIntensity: 0, roughness: .8 }); own.push(fire);
@@ -230,14 +231,6 @@ export function buildStation(kind: BuildingKind, level: number): StationVisual {
   const scr = new THREE.MeshStandardMaterial({ color: '#0f2a2c', emissive: '#3fc4bb', emissiveIntensity: .4, roughness: .3 }); own.push(scr);
   const s = new THREE.Mesh(BOX, scr); s.position.set(-.22, 1.2, -.345); s.scale.set(.28, .18, .01); group.add(s); a.mats.screen = scr;
   const head = new THREE.Group(); head.position.set(.2, 1.15, -.22); const tip = new THREE.Mesh(discGeo, m.steel); tip.scale.set(.02, .1, .02); head.add(tip); group.add(head); a.parts.head = head;
- }
- if (kind === 'dome') {
-  const vault = new THREE.Mesh(VAULT(), m.glass); vault.renderOrder = 2; group.add(vault);
-  const door = new THREE.Mesh(BOX, m.panel); door.scale.set(1.18, 2.36, .05); door.position.set(0, 1.3, 2.68); door.castShadow = true; group.add(door); a.parts.door = door;
-  const win = new THREE.Mesh(BOX, m.glass); win.scale.set(.5, .5, .06); win.position.set(0, 1.75, 2.69); door.add(win); win.scale.set(.42, .21, 1.4); win.position.set(0, .2, 0);
-  const lampMat = new THREE.MeshStandardMaterial({ color: '#e8f6f4', emissive: '#bff4ee', emissiveIntensity: 0, roughness: .4 }); own.push(lampMat);
-  const bar = new THREE.Mesh(BOX, lampMat); bar.scale.set(1.3, .02, .08); bar.position.set(0, 2.895, 0); group.add(bar); a.mats.room = lampMat;
-  const light = new THREE.PointLight('#cdf7f0', 0, 6, 1.6); light.position.set(0, 2.6, 0); group.add(light); a.parts.light = light;
  }
  let t = Math.random() * 10, spin = 0, heat = 0;
  function update(dt: number, look: StationLook, still = false) {
@@ -275,11 +268,11 @@ export function createGhost(scene: THREE.Scene) {
    if (!reducedMotion()) pulse += dt; const a = .3 + Math.sin(pulse * 4) * .08; ok.opacity = bad.opacity = a;
    ringMat.color.set(valid ? 0x64e6bd : 0xe76d62);
    root.position.set(x, y, z); root.visible = true; g.rotation.y = rot * Math.PI / 2;
-   const size = kind === 'dome' ? 2.25 : .62; ring.scale.setScalar(size * 1.414); ring.position.y = .03;
+   const size = .62; ring.scale.setScalar(size * 1.414); ring.position.y = .03;
    arrow.position.set(Math.sin(rot * Math.PI / 2) * (size + .35), .05, Math.cos(rot * Math.PI / 2) * (size + .35)); arrow.rotation.set(Math.PI / 2, 0, -rot * Math.PI / 2 + Math.PI);
   },
   hide() { root.visible = false; },
  };
 }
 /** Local port height used for cable/pipe attachment (top of the body). */
-export const PORT_HEIGHT: Record<BuildingKind, number> = { workbench: 1.0, kiln: 1.0, biogenerator: .9, electrolyzer: 1.05, refill: 1.1, distributor: .85, dome: .5 };
+export const PORT_HEIGHT: Record<BuildingKind, number> = { workbench: 1.0, kiln: 1.0, biogenerator: .9, electrolyzer: 1.05, refill: 1.1, distributor: .85 };

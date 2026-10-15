@@ -6,7 +6,8 @@ import {newGame,cloneState,sanitizeState} from '../src/game/state.ts';
 import {addItems,countItem} from '../src/game/inventory.ts';
 import {mineTick,ticksFor,type Mining} from '../src/game/mining.ts';
 import {NODES} from '../src/game/resources.ts';
-import {RECIPES,RECIPE_BY_ID,makeBuilding,startJob,cancelJob,productionTick,collectOutput,queueJob,clearQueue,loadFuel,connect,sealCheck,domeFaces,habitable,beginPassage,releaseHandOnDeath,upgradeBuilding,ELECTROLYZER_O2,GEN_BUFFER,FIBER_EU,PORT_O2,O2_PER_WU} from '../src/game/production.ts';
+import {RECIPES,RECIPE_BY_ID,makeBuilding,startJob,cancelJob,productionTick,collectOutput,queueJob,clearQueue,loadFuel,connect,releaseHandOnDeath,upgradeBuilding,ELECTROLYZER_O2,GEN_BUFFER,FIBER_EU,PORT_O2,O2_PER_WU} from '../src/game/production.ts';
+import {allRooms,habitableRoom,beginPassage,bumpRooms,cellKey,boxCells,shellOf,editRooms,leakAt,placeGlass,placeDoor,landingPoint,type Door} from '../src/game/rooms.ts';
 import {survivalTick,refillFromCapsule,loseCargo,accessibleOxygen} from '../src/game/survival.ts';
 import {stationStatus} from '../src/game/stationStatus.ts';
 import {place,placementProblem} from '../src/buildings.ts';
@@ -16,10 +17,15 @@ import {buildExport,exportText,parseImport} from '../src/persist/file.ts';
 const fresh=()=>newGame('w-production',99,1,heightAt(40,42));
 const advance=(g:ReturnType<typeof fresh>,ms:number,port:string|null=null)=>{for(let n=0;n<ms;n+=50){productionTick(g,50,port);g.meta.activeTicks++;}};
 const near=(g:ReturnType<typeof fresh>,b:{x:number;y:number;z:number})=>Object.assign(g.player,{x:b.x+1,y:b.y,z:b.z});
+/** The S4 shelter on the flat base pad: interior x 56…59 × z 42…45, three levels from the ground (k 0…2), 64 glass blocks;
+ *  optionally an airlock in the middle of the +z wall (cell 57, 0, 46). */
+const INTERIOR=boxCells(56,0,42,4,3,4),SHELL=shellOf(INTERIOR),DOOR:Door={id:'door-1',x:57,y:0,z:46,rot:0};
+function shelter(g:ReturnType<typeof fresh>,door=false){const keys=door?SHELL.filter(k=>k!==cellKey(57,0,46)&&k!==cellKey(57,1,46)):SHELL;g.world.base.glass=[...keys];if(door){g.world.base.doors=[{...DOOR}];g.world.base.nextId=Math.max(g.world.base.nextId,2);}bumpRooms(g);return allRooms(g)[0];}
 
 test('S2 production uses canonical recipes; grass regrows and sand has two valley deposits',()=>{
  const design=JSON.parse(readFileSync(new URL('../docs/data/catalog.json',import.meta.url),'utf8'));for(const r of RECIPES)assert.deepEqual(r,design.recipes.find((v:any)=>v.id===r.id));
- assert.equal(RECIPES.length,20);assert.deepEqual(RECIPE_BY_ID.get('craft_dome')!.inputs,{iron:8,glass:12,fiber:8});
+ assert.equal(RECIPES.length,22);assert.equal(RECIPE_BY_ID.get('craft_dome'),undefined);
+ for(const [id,inputs,outputs,seconds] of [['craft_window',{glass:1,iron:1},{window:4},4],['craft_airlock',{iron:4,glass:2,fiber:4},{airlock:1},8],['dismantle_dome',{dome:1},{window:64,airlock:1},2]] as const){const r=RECIPE_BY_ID.get(id)!;assert.deepEqual([r.inputs,r.outputs,r.seconds],[inputs,outputs,seconds],id);}
  for(const [id,n] of [['grass',300],['sand',200]] as const)assert.equal(NODES.filter(a=>a.itemId===id).reduce((s,a)=>s+a.amount,0),n);
  assert.deepEqual(RECIPE_BY_ID.get('smelt_iron_raw')!.inputs,{iron_raw:1,fiber:1});
  const g=fresh(),m:Mining={nodeId:null,ticks:0},tool=g.player.inventory[0]!.durability;
@@ -50,17 +56,22 @@ test('Gas links and two-tank refill conserve gas and require a powered paid port
  const g=fresh(),gen=makeBuilding(g,'biogenerator',44,0,40),e=makeBuilding(g,'electrolyzer',46,0,40),r=makeBuilding(g,'refill',44,0,42);near(g,r);g.player.bottles=[{itemId:'bottle_1',count:1,milliGU:599500},{itemId:'bottle_1',count:1,milliGU:590000}];e.oxygen=100000;addItems(g.player.inventory,'gas_pipe',1);connect(g,'gas_pipe',e.id,r.id);advance(g,1000,r.id);assert.equal(g.player.bottles[0]!.milliGU,599500);
  gen.energy=100000;addItems(g.player.inventory,'cable',1);connect(g,'cable',gen.id,r.id);const gas=e.oxygen+r.oxygen+1189500;advance(g,1000,r.id);assert.equal(e.oxygen+r.oxygen+g.player.bottles.reduce((n,b)=>n+b!.milliGU!,0),gas);assert.equal(g.player.bottles[0]!.milliGU,600000);assert.equal(g.player.bottles[1]!.milliGU,600000);
 });
-test('Flood fill proves 48 m³ and gives an escape path when a face breaks',()=>{
- const shell=Array(domeFaces().length).fill(180);assert.equal(shell.length,80);assert.deepEqual(sealCheck(shell),{sealed:true,volume:48,path:[]});shell[7]=0;const result=sealCheck(shell);assert.equal(result.sealed,false);assert.ok(result.path.length>=2);shell[7]=180;assert.equal(sealCheck(shell).volume,48);
+test('Flood fill proves 48 m³ for the 64-block shelter and gives an escape path when a block is missing',()=>{
+ const g=fresh();assert.equal(SHELL.length,64);assert.equal(shelter(g).volume,48);
+ g.world.base.glass=SHELL.filter(k=>k!==SHELL[7]);bumpRooms(g);assert.equal(allRooms(g).length,0);const leak=leakAt(g,SHELL[8])!;assert.equal(leak.kind,'open');assert.ok(leak.path.length>=1);
+ g.world.base.glass=[...SHELL];bumpRooms(g);assert.equal(allRooms(g)[0].volume,48);
 });
-test('A powered distributor fills a sealed dome; outage preserves air, breach leaks it',()=>{
- const g=fresh(),d=makeBuilding(g,'dome',48,0,40),r=makeBuilding(g,'distributor',47,0,40),gen=makeBuilding(g,'biogenerator',44,0,38);gen.energy=400000;r.oxygen=480000;addItems(g.player.inventory,'cable',1);connect(g,'cable',gen.id,r.id);advance(g,20000);assert.ok(d.zone.q>=384000);assert.ok(habitable(d));
- Object.assign(g.player,{x:48,y:.2,z:40});g.player.suit.helmet=null;const bottle=g.player.bottles[0]!.milliGU!;assert.equal(survivalTick(g,.05,false),'none');assert.equal(g.player.bottles[0]!.milliGU,bottle);assert.equal(accessibleOxygen(g,false).amount,d.zone.q/1000);
- gen.enabled=false;gen.energy=0;const q=d.zone.q;advance(g,1000);assert.equal(d.zone.q,q-96);assert.ok(habitable(d));d.zone.shell[0]=0;advance(g,1000);assert.ok(d.zone.q<q);assert.equal(habitable(d),false);
+test('A powered distributor fills a sealed room; outage preserves air, a breach vents it at once (D32)',()=>{
+ const g=fresh();shelter(g);const r=makeBuilding(g,'distributor',57,.62,43),gen=makeBuilding(g,'biogenerator',54,.62,42);gen.energy=400000;r.oxygen=480000;addItems(g.player.inventory,'cable',1);assert.equal(connect(g,'cable',gen.id,r.id),'');advance(g,20000);
+ const room=()=>allRooms(g)[0];assert.ok(room().zone.q>=384000,String(room().zone.q));assert.ok(habitableRoom(room()));
+ Object.assign(g.player,{x:58,y:.5,z:44});g.player.suit.helmet=null;const bottle=g.player.bottles[0]!.milliGU!;assert.equal(survivalTick(g,.05,false),'none');assert.equal(g.player.bottles[0]!.milliGU,bottle);assert.equal(accessibleOxygen(g,false).amount,room().zone.q/1000);assert.equal(accessibleOxygen(g,false).capacity,960);
+ gen.enabled=false;gen.energy=0;const q=room().zone.q;advance(g,1000);assert.equal(room().zone.q,q-96);assert.ok(habitableRoom(room()));
+ const breach=editRooms(g,{remove:[cellKey(55,1,43)]});assert.equal(breach.breached,true);assert.equal(breach.vented,(q-96)/1000);assert.equal(allRooms(g).length,0);assert.equal(accessibleOxygen(g,false).capacity,0);
 });
 test('Manual airlock charges finite air and survives a saved mid-cycle',()=>{
- const g=fresh(),d=makeBuilding(g,'dome',48,0,40);d.zone.q=500000;d.zone.purity=1;Object.assign(g.player,{x:48,y:0,z:43});assert.equal(beginPassage(g,d.id),'');assert.equal(d.zone.q,496000);advance(g,3000);const copy=sanitizeState(g);advance(copy,2950);assert.ok(copy.world.base.passage);const done=productionTick(copy,50);assert.deepEqual(done.passage,{x:48,y:.12,z:41});assert.equal(copy.world.base.passage,null);// The sealed shell keeps its technical loss (0.096 GU/s) through the 6 s cycle, distributor or not.
- assert.equal(copy.world.base.buildings[0].zone.q,496000-Math.round(.096*6000));
+ const g=fresh(),room=shelter(g,true);room.zone.q=500000;room.zone.purity=1;Object.assign(g.player,{x:57.5,y:heightAt(57.5,48),z:48});assert.equal(beginPassage(g,'door-1'),'');assert.equal(allRooms(g)[0].zone.q,496000);advance(g,3000);const copy=sanitizeState(g);advance(copy,2950);assert.ok(copy.world.base.passage);const done=productionTick(copy,50);assert.deepEqual(done.passage,landingPoint(copy,DOOR,'back'));assert.deepEqual([done.passage!.x,done.passage!.z],[57.5,45.5]);assert.equal(copy.world.base.passage,null);
+ // The sealed shell keeps its technical loss (0.002 GU/s per m³: 0.096 GU/s) through the 6 s cycle, distributor or not.
+ assert.equal(allRooms(copy)[0].zone.q,496000-Math.round(.096*6000));
 });
 test('Old saves migrate only missing S2 fields; invalid network or WIP is rejected',()=>{
  const g=fresh(),old:any=cloneState(g);old.meta.stateVersion=2;delete old.world.base;delete old.world.nodes['grass-a'];delete old.world.nodes['grass-b'];delete old.world.nodes['sand-a'];old.world.capsuleMilliGU=123;assert.equal(sanitizeState(old).world.capsuleMilliGU,123);assert.equal(sanitizeState(old).world.nodes['grass-a'],50);
@@ -71,22 +82,27 @@ test('Saved production WIP, buffers and the next output round-trip through Index
  const g=fresh(),b=makeBuilding(g,'kiln',41,0,42);near(g,b);addItems(g.player.inventory,'iron_raw',5);addItems(g.player.inventory,'fiber',10);queueJob(g,'smelt_iron_raw',b.id);advance(g,3500);
  const store=await SaveStore.open(new IDBFactory(),'s2-production',()=>1000);await store.createSlot(g,'token');const loaded=(await store.load(g.meta.worldId)).state;assert.deepEqual(loaded,g);const imported=parseImport(exportText(buildExport(g,1,5))).state;assert.deepEqual(imported,g);advance(loaded,2500);advance(imported,2500);assert.deepEqual(loaded,imported);assert.equal(countItem(loaded.world.base.buildings[0].output,'iron'),1);store.close();
 });
-test('Natural resources alone pay the complete early path from harvest to breathable dome',()=>{
+test('Natural resources alone pay the complete early path from harvest to a breathable glass room',()=>{
  makeColliders();const g=fresh();let time=0;
  const tick=(ms:number,inside=true)=>{for(let i=0;i<ms;i+=50){productionTick(g,50);survivalTick(g,.05,inside);g.meta.activeTicks++;time+=50;}assert.ok(g.player.vitals.health>0);};
  const topUp=()=>{Object.assign(g.player,{x:40,y:heightAt(40,42),z:42});while(g.player.bottles[0]!.milliGU!<240000){refillFromCapsule(g,.05);tick(50);}};
  const harvest=(item:string,count:number)=>{for(const node of NODES.filter(n=>n.itemId===item)){const m:Mining={nodeId:null,ticks:0};while(count>0&&g.world.nodes[node.id]>0){if(g.player.bottles[0]!.milliGU!<10000)topUp();Object.assign(g.player,{x:node.x,y:heightAt(node.x,node.z),z:node.z});for(let i=0;i<ticksFor(node.material,1);i++){mineTick(g,m,node.id,true);tick(50,false);}count--;}}assert.equal(count,0);};
- for(const [id,n] of [['grass',98],['stone',24],['iron_raw',41],['copper_raw',19],['sand',32],['ice',6]] as const)harvest(id,n);
+ // S4: the 64-block shelter and its airlock replace the dome: +12 iron ore and +12 sand (6 more glass) over S3.
+ for(const [id,n] of [['grass',98],['stone',24],['iron_raw',53],['copper_raw',19],['sand',44],['ice',6]] as const)harvest(id,n);
  topUp();const craft=(id:string,b?:ReturnType<typeof makeBuilding>)=>{if(b)near(g,b);assert.equal(startJob(g,id,b?.id), '',id);if(b?.kind!=='workbench')Object.assign(g.player,{x:40,y:heightAt(40,42),z:42});tick(RECIPE_BY_ID.get(id)!.seconds*1000,b?.kind!=='workbench');if(b){near(g,b);collectOutput(g,b.id);}};
  for(let i=0;i<98;i++)craft('grass_parts');craft('craft_workbench');craft('craft_kiln');Object.assign(g.player,{x:47,y:heightAt(47,46),z:46});assert.equal(place(g,'workbench',46,45),'');assert.equal(place(g,'kiln',48,45),'');const w=g.world.base.buildings[0],k=g.world.base.buildings[1];
- for(const [r,n] of [['smelt_iron_raw',41],['smelt_copper_raw',19],['glass',16]] as const)for(let i=0;i<n;i++)craft(r,k);
- for(const r of ['craft_biogenerator','craft_electrolyzer','craft_refill','craft_bottle_1','craft_circuit','craft_distributor','craft_dome','craft_wire','craft_cable','craft_gas_pipe'])craft(r,w);
- Object.assign(g.player,{x:47,y:heightAt(47,46),z:46});for(const [kind,x,z] of [['dome',48,40],['biogenerator',44,43],['electrolyzer',44,40],['refill',44,36],['distributor',47,40]] as const)assert.equal(place(g,kind,x,z),'',kind);
- const gen=g.world.base.buildings.find(b=>b.kind==='biogenerator')!,e=g.world.base.buildings.find(b=>b.kind==='electrolyzer')!,r=g.world.base.buildings.find(b=>b.kind==='refill')!,d=g.world.base.buildings.find(b=>b.kind==='distributor')!,dome=g.world.base.buildings.find(b=>b.kind==='dome')!;
+ for(const [r,n] of [['smelt_iron_raw',53],['smelt_copper_raw',19],['glass',22]] as const)for(let i=0;i<n;i++)craft(r,k);
+ for(const r of ['craft_biogenerator','craft_electrolyzer','craft_refill','craft_bottle_1','craft_circuit','craft_distributor','craft_airlock','craft_wire','craft_cable','craft_gas_pipe',...Array(16).fill('craft_window')])craft(r,w);
+ // Build the shelter from inside, set the airlock into the front wall and leave through it (leaving is always possible).
+ assert.equal(countItem(g.player.inventory,'window'),64);Object.assign(g.player,{x:58,y:heightAt(58,44),z:44});for(const key of SHELL)assert.equal(placeGlass(g,key).error,'');
+ assert.equal(placeDoor(g,cellKey(57,0,46),0).error,'');assert.equal(countItem(g.player.inventory,'window'),2);assert.equal(allRooms(g)[0].volume,48);
+ Object.assign(g.player,{x:57.5,z:44.5});assert.equal(beginPassage(g,g.world.base.doors[0].id),'');tick(6000,false);assert.equal(g.world.base.passage,null);Object.assign(g.player,landingPoint(g,g.world.base.doors[0],'front'));
+ Object.assign(g.player,{x:52,y:heightAt(52,46),z:46});for(const [kind,x,z] of [['biogenerator',52,44],['electrolyzer',52,41],['refill',52,38],['distributor',57,43]] as const)assert.equal(place(g,kind,x,z),'',kind);
+ const gen=g.world.base.buildings.find(b=>b.kind==='biogenerator')!,e=g.world.base.buildings.find(b=>b.kind==='electrolyzer')!,r=g.world.base.buildings.find(b=>b.kind==='refill')!,d=g.world.base.buildings.find(b=>b.kind==='distributor')!;
  for(const [from,to] of [[gen,e],[e,r],[e,d]])assert.equal(connect(g,'cable',from.id,to.id),'');assert.equal(connect(g,'gas_pipe',e.id,d.id),'');for(let i=0;i<15;i++)assert.equal(loadFuel(g,gen.id),'');
  // Fill the room before opening the paid branch to personal refilling.
- for(let i=0;i<6;i++){craft('melt_in_generator',k);craft('electrolysis',e);}tick(15000);assert.ok(habitable(dome));assert.equal(connect(g,'gas_pipe',e.id,r.id),'');assert.equal(sealCheck(dome.zone.shell).volume,48);assert.ok(g.world.nodes['grass-a']+g.world.nodes['grass-b']===2);assert.ok(g.player.inventory[0]!.durability!>0);assert.ok(time<35*60000);assert.deepEqual(sanitizeState(g),g);assert.ok(g.world.capsuleMilliGU<2400000,'survival consumed actual initial gas');
- for(const id of ['craft_wrench','craft_wire','craft_circuit'])craft(id,w);collectOutput(g,w.id);const key=g.player.inventory.findIndex(s=>s?.itemId==='wrench');if(key>=6){const old=g.player.inventory[0];g.player.inventory[0]=g.player.inventory[key];g.player.inventory[key]=old;g.player.hotbar=0;}else g.player.hotbar=key;near(g,w);assert.equal(upgradeBuilding(g,w.id),'');assert.equal(connect(g,'cable',gen.id,w.id),'');assert.equal(queueJob(g,'craft_wire',w.id,1),'');Object.assign(g.player,{x:40,y:heightAt(40,42),z:42});tick(8050);assert.equal(countItem(w.output,'wire'),4);assert.equal(w.level,2);assert.deepEqual(sanitizeState(g),g);
+ for(let i=0;i<6;i++){craft('melt_in_generator',k);craft('electrolysis',e);}tick(15000);assert.ok(habitableRoom(allRooms(g)[0]));assert.equal(connect(g,'gas_pipe',e.id,r.id),'');assert.equal(allRooms(g)[0].volume,48);assert.ok(g.world.nodes['grass-a']+g.world.nodes['grass-b']===2);assert.ok(g.player.inventory[0]!.durability!>0);assert.ok(time<35*60000);assert.deepEqual(sanitizeState(g),g);assert.ok(g.world.capsuleMilliGU<2400000,'survival consumed actual initial gas');
+ for(const id of ['craft_wrench','craft_wire','craft_circuit','craft_cable'])craft(id,w);collectOutput(g,w.id);const key=g.player.inventory.findIndex(s=>s?.itemId==='wrench');if(key>=6){const old=g.player.inventory[0];g.player.inventory[0]=g.player.inventory[key];g.player.inventory[key]=old;g.player.hotbar=0;}else g.player.hotbar=key;near(g,w);assert.equal(upgradeBuilding(g,w.id),'');assert.equal(connect(g,'cable',gen.id,w.id),'');assert.equal(queueJob(g,'craft_wire',w.id,1),'');Object.assign(g.player,{x:40,y:heightAt(40,42),z:42});tick(8050);assert.equal(countItem(w.output,'wire'),4);assert.equal(w.level,2);assert.deepEqual(sanitizeState(g),g);
 });
 
 test('Capsule manual supply fills both installed tanks with one conserved 20 GU/s budget',()=>{
@@ -95,10 +111,10 @@ test('Capsule manual supply fills both installed tanks with one conserved 20 GU/
 });
 
 test('A saturated electrical network respects 40 EU/s per source and oxygen priority hysteresis',()=>{
- const g=fresh(),gen=makeBuilding(g,'biogenerator',44,0,38),dome=makeBuilding(g,'dome',48,0,40),dist=makeBuilding(g,'distributor',47,0,40);gen.energy=400000;
- addItems(g.player.inventory,'cable',5);assert.equal(connect(g,'cable',gen.id,dist.id),'');
- for(const [x,z] of [[44,40],[46,38],[42,38],[44,36]]){const e=makeBuilding(g,'electrolyzer',x,0,z);near(g,e);e.water=1000;startJob(g,'electrolysis',e.id);e.oxygen=ELECTROLYZER_O2*.85;assert.equal(connect(g,'cable',gen.id,e.id),'');}
- advance(g,1000);assert.equal(gen.energy,360000);assert.ok(Math.abs(dome.zone.purity-1/30)<1e-9,'life support receives its full priority budget');
+ const g=fresh(),gen=makeBuilding(g,'biogenerator',52,.62,44),dist=makeBuilding(g,'distributor',57,.62,43);shelter(g);gen.energy=400000;
+ addItems(g.player.inventory,'cable',10);assert.equal(connect(g,'cable',gen.id,dist.id),'');
+ for(const [x,z] of [[52,40],[50,42],[48,42],[52,38]]){const e=makeBuilding(g,'electrolyzer',x,.62,z);near(g,e);e.water=1000;startJob(g,'electrolysis',e.id);e.oxygen=ELECTROLYZER_O2*.85;assert.equal(connect(g,'cable',gen.id,e.id),'');}
+ advance(g,1000);assert.equal(gen.energy,360000);assert.ok(Math.abs(allRooms(g)[0].zone.purity-1/30)<1e-9,'life support receives its full priority budget');
  const es=g.world.base.buildings.filter(b=>b.kind==='electrolyzer');assert.ok(es.every(b=>b.lowPriority));es[0].oxygen=ELECTROLYZER_O2*.65;advance(g,50);assert.equal(es[0].lowPriority,true,'50–80% keeps the previous class');es[0].oxygen=ELECTROLYZER_O2*.25;advance(g,50);assert.equal(es[0].lowPriority,false,'the band is relative to the 2000 GU electrolyzer buffer');
 });
 
@@ -112,8 +128,8 @@ test('Lines are paid per started 4 m segment up to 12 m including height; a reje
 
 
 test('Production has its own state version: old saves migrate, corrupt current saves cannot gain gas',()=>{
- const g=fresh();assert.equal(g.meta.stateVersion,7);const old:any=cloneState(g);old.meta.stateVersion=2;delete old.world.base;delete old.world.nodes['grass-a'];delete old.world.nodes['grass-b'];delete old.world.nodes['sand-a'];old.world.capsuleMilliGU=12345;old.player.survival.emergencyMs=1234;
- const migrated=sanitizeState(old);assert.equal(migrated.meta.stateVersion,7);assert.equal(migrated.world.capsuleMilliGU,12345);assert.equal(migrated.player.survival.emergencyMs,1234);assert.equal(migrated.world.base.buildings.length,0);
+ const g=fresh();assert.equal(g.meta.stateVersion,8);const old:any=cloneState(g);old.meta.stateVersion=2;delete old.world.base;delete old.world.nodes['grass-a'];delete old.world.nodes['grass-b'];delete old.world.nodes['sand-a'];old.world.capsuleMilliGU=12345;old.player.survival.emergencyMs=1234;
+ const migrated=sanitizeState(old);assert.equal(migrated.meta.stateVersion,8);assert.equal(migrated.world.capsuleMilliGU,12345);assert.equal(migrated.player.survival.emergencyMs,1234);assert.equal(migrated.world.base.buildings.length,0);
  const corrupt:any=cloneState(g);delete corrupt.world.capsuleMilliGU;assert.throws(()=>sanitizeState(corrupt),/capsuleMilliGU/);delete corrupt.world.base;assert.throws(()=>sanitizeState(corrupt),/world.base/);
 });
 test('D30 buffers: a full 2000 EU generator, a lit 300 EU fiber and a full 2000 GU electrolyzer survive saving; ports stay 480 GU',()=>{

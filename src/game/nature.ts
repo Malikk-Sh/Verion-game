@@ -1,6 +1,7 @@
 import { NODES, nodeCovered, bodyHalf, PATCH_NODES, SHARED_PATCH_SPLIT, type ResourceNode } from './resources';
 import type { GameState } from './state';
 import { GRASS } from '../world';
+import { cellKey, lowestAir, roomsView } from './rooms';
 /** Rendered tufts of each grass deposit: centre and horizontal reach (leaves 0.48 m × instance scale, plus wind sway). */
 const TUFTS = new Map<string, { x: number; z: number; r: number }[]>();
 for (const t of GRASS) if (t.patch >= 0) {
@@ -20,7 +21,16 @@ export function covers(n: ResourceNode, x: number, z: number, h: number): boolea
  * produces a burst. A patch under a body does not grow (WORLD §2: only while not built over).
  * Returns the ids of deposits whose stock changed.
  */
-const builtOver = (g: GameState, n: ResourceNode) => g.world.base.buildings.some(b => covers(n, b.x, b.z, bodyHalf(b.kind)));
+/** A glass block resting on the ground over a tuft (its column's lowest air cell) covers it too; cached per glass layout. */
+const UNDER_GLASS = new WeakMap<object, Map<string, boolean>>();
+function underGlass(g: GameState, n: ResourceNode) {
+ const v = roomsView(g.world.base); if (!v.glass.size) return false;
+ let known = UNDER_GLASS.get(v); if (!known) UNDER_GLASS.set(v, known = new Map());
+ let hit = known.get(n.id);
+ if (hit === undefined) { hit = (TUFTS.get(n.id) ?? [{ x: n.x, z: n.z }]).some(t => { const i = Math.floor(t.x), j = Math.floor(t.z); return v.glass.has(cellKey(i, lowestAir(i, j), j)); }); known.set(n.id, hit); }
+ return hit;
+}
+const builtOver = (g: GameState, n: ResourceNode) => g.world.base.buildings.some(b => covers(n, b.x, b.z, bodyHalf(b.kind))) || underGlass(g, n);
 export function natureTick(g: GameState, ms: number): string[] {
  const changed: string[] = [];
  for (const n of NODES) {

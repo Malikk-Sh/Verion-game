@@ -9,7 +9,7 @@ import { isDragging } from './dragDrop';
 import './station.css';
 type Host = { game(): GameState | null; show(): void; close(): void; changed(): void; refill(id: string | null): void; tone(ok: boolean): void; measure?(name: string, ms: number): void; navigate?(t: GuideTarget): void; insideCapsule?(): boolean };
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-const KICKER: Record<string, string> = { workbench: 'Сборка деталей и станций', kiln: 'Плавка · топливо — волокно', biogenerator: 'Энергия для станций', electrolyzer: 'Вода → кислород', refill: 'Заправка баллонов', distributor: 'Климат и воздух купола', dome: 'Герметичное убежище' };
+const KICKER: Record<string, string> = { workbench: 'Сборка деталей и станций', kiln: 'Плавка · топливо — волокно', biogenerator: 'Энергия для станций', electrolyzer: 'Вода → кислород', refill: 'Заправка баллонов', distributor: 'Климат и воздух помещения' };
 /**
  * Station window host (S3): one header with the station icon and purpose, a station switcher for
  * crafting, a floating feedback chip and either the workshop or a machine view.

@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { BUILDABLE, ITEMS, type BuildingKind } from './game/defs';
-import { electricPort, endpoint, connect, machine, insideDome, nearby, gasDirection, linkSegments, LINK_RANGE } from './game/production';
+import { electricPort, endpoint, connect, machine, nearby, gasDirection, linkSegments, LINK_RANGE } from './game/production';
 import { countItem } from './game/inventory';
-import { placementProblem, place } from './buildings';
+import { placementProblem, place, stationY } from './buildings';
 import { heightAt, boxes } from './world';
 import type { GameState } from './game/state';
 import { createGhost } from './stationModels';
@@ -11,8 +11,8 @@ const OPEN_REACH = 3.7, LINK_REACH = LINK_RANGE + 2;
 const CAPSULE_BOX = (h: number) => new THREE.Box3(new THREE.Vector3(37.4, h, 36.9), new THREE.Vector3(42.6, h + 4.4, 43.2));
 const portName = (g: GameState, id: string) => id === 'capsule' ? 'Капсула' : ITEMS[machine(g, id)?.kind ?? '']?.name ?? 'Порт';
 /**
- * World actions under the reticle: aim at stations (the glass dome never hides the machines
- * inside it), place a selected body on the 1 m grid with a rotatable model preview, and draw
+ * World actions under the reticle: aim at stations (glass never hides the machines behind it),
+ * place a selected body on the 1 m grid with a rotatable model preview, and draw
  * cables/pipes between two ports with a live length/cost preview.
  */
 export function createWorldInteraction(scene: THREE.Scene, camera: THREE.Camera) {
@@ -24,30 +24,21 @@ export function createWorldInteraction(scene: THREE.Scene, camera: THREE.Camera)
  const isBody = (id: string) => (BUILDABLE as readonly string[]).includes(id);
  function aim(g: GameState, reach: number) {
   camera.getWorldDirection(direction); ray.set(camera.position, direction);
-  let best = reach, dome: string | null = null, domeDist = reach, around: string | null = null; target = null;
+  let best = reach; target = null;
   const p = g.player;
   for (const b of g.world.base.buildings) {
-   const isDome = b.kind === 'dome';
-   // Inside a dome its glass never blocks the machines; the dome itself stays the fallback target (to exit).
-   if (isDome && insideDome(b, p.x, p.y + .1, p.z)) { around = b.id; continue; }
    // A window opens only where its actions work (nearby(): 3.2 m to the centre); line ends may be farther.
-   if (!isDome && reach <= OPEN_REACH && !nearby(g, b)) continue;
-   const r = isDome ? 2.5 : .6, h = isDome ? 3.1 : b.kind === 'workbench' && b.level === 2 ? 1.6 : 1.5;
+   if (reach <= OPEN_REACH && !nearby(g, b)) continue;
+   const r = .6, h = b.kind === 'workbench' && b.level === 2 ? 1.6 : 1.5;
    box.set(lo.set(b.x - r, b.y, b.z - r), hi.set(b.x + r, b.y + h, b.z + r));
-   // Standing in the airlock vestibule (inside the dome's aim box, outside its cells) faces the dome directly.
-   const near = isDome && box.containsPoint(camera.position);
-   const hit = near ? camera.position : ray.ray.intersectBox(box, hitPoint); if (!hit) continue;
-   const d = near ? 0 : hit.distanceTo(camera.position);
-   if (isDome) { if (d < domeDist) { domeDist = d; dome = b.id; } }
-   else if (d < best) { best = d; target = b.id; }
+   const hit = ray.ray.intersectBox(box, hitPoint); if (!hit) continue;
+   const d = hit.distanceTo(camera.position);
+   if (d < best) { best = d; target = b.id; }
   }
   for (const b of boxes) if (b.id.startsWith('crate-')) {
    box.set(lo.set(b.minX, b.minY, b.minZ), hi.set(b.maxX, b.maxY, b.maxZ));
    const hit = ray.ray.intersectBox(box, hitPoint); if (hit && hit.distanceTo(camera.position) < Math.min(best, OPEN_REACH)) { best = hit.distanceTo(camera.position); target = b.id; }
   }
-  // Glass: the dome is a target only when no machine is seen through or in front of it.
-  if (!target && dome) target = dome;
-  if (!target && around) target = around;
   if (!target) {
    const inside = p.x > 37.5 && p.x < 42.5 && p.z > 37 && p.z < 43.1;
    const hit = ray.ray.intersectBox(CAPSULE_BOX(heightAt(40, 40)), hitPoint);
@@ -80,8 +71,7 @@ export function createWorldInteraction(scene: THREE.Scene, camera: THREE.Camera)
    for (let d = .5; d <= 12; d += .1) { const q = ray.ray.at(d, new THREE.Vector3()); if (q.y <= heightAt(q.x, q.z) + .12) { hit = q; break; } }
    if (hit) {
     x = Math.round(hit.x); z = Math.round(hit.z); problem = placementProblem(g, id as BuildingKind, x, z, rot);
-    const inDome = g.world.base.buildings.find(b => b.kind === 'dome' && id !== 'dome' && insideDome(b, x, b.y + .1, z));
-    ghost.show(id as BuildingKind, x, inDome ? inDome.y : heightAt(x, z) + .12, z, rot, !problem, dt);
+    ghost.show(id as BuildingKind, x, stationY(x, z), z, rot, !problem, dt);
    } else problem = 'Наведите на землю в пределах 12 м';
   } else if (source && linking) {
    const a = endpoint(g, source); if (!a) { source = null; return; }

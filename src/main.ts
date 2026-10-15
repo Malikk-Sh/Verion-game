@@ -15,7 +15,8 @@ import { currentStep, guideStep, stepTarget, progressCount, type GuideTarget } f
 import { itemArt } from './ui/art';
 import { createProductionPanel } from './ui/production';
 import { createBuildings } from './buildings';
-import { productionTick, manualWork, releaseHandOnDeath, breathingDome, machine } from './game/production';
+import { productionTick, manualWork, releaseHandOnDeath, machine } from './game/production';
+import { breathingRoom } from './game/rooms';
 import * as THREE from 'three';
 import './style.css';
 import './ui/hud.css';
@@ -161,7 +162,7 @@ function boot(){
  el('import-button').onclick=()=>el<HTMLInputElement>('import-file').click();
  el<HTMLInputElement>('import-file').addEventListener('change',e=>{const input=e.target as HTMLInputElement,file=input.files?.[0];input.value='';if(file)void importFile(file);});
  // ---------- Inventory / suit screens (live: game time keeps running) ----------
- const panels=createPanels({game:()=>game,hazard:()=>!insideCapsule()&&!(game&&breathingDome(game)),tone:k=>audio.tone(k),recipe:id=>production.openRecipe(id),
+ const panels=createPanels({game:()=>game,hazard:()=>!insideCapsule()&&!(game&&breathingRoom(game)),tone:k=>audio.tone(k),recipe:id=>production.openRecipe(id),
   changed:what=>{if(what==='drop')syncDrops();hudKey='';updateHotbar();updateVisor();},
   show:which=>{if(started&&(running||liveDialogs.has(dialog)))setDialog(which);},close:()=>{void saver?.save();resume();}});
  const openPanel=(which:'inventory-panel'|'suit-panel')=>{audio.tone('ui');if(dialog===which){void saver?.save();resume();return;}if(running||liveDialogs.has(dialog)){if(which==='inventory-panel'&&dialog!=='suit-panel')panels.reset();setDialog(which);}};
@@ -613,7 +614,7 @@ function boot(){
   const alert=el('survival-alert');
   const critical=started&&g.player.vitals.health>0&&(ratio<=.2||g.player.vitals.health<=20||g.player.vitals.satiety===0);
   alert.setAttribute('aria-hidden',String(!critical));document.body.dataset.hazard=critical?'critical':'safe';
-  const text=!critical?'':ratio<=.2?(source.emergency?'АВАРИЙНЫЙ РЕЗЕРВ ЗАКАНЧИВАЕТСЯ':!inCapsule&&!breathingDome(g)&&wornParts(g)<4?'КОСТЮМ НЕГЕРМЕТИЧЕН':'КИСЛОРОД КРИТИЧЕСКИ НИЗКИЙ'):g.player.vitals.health<=20?'ЗДОРОВЬЕ КРИТИЧЕСКИ НИЗКО':'СЫТОСТЬ ИСЧЕРПАНА';
+  const text=!critical?'':ratio<=.2?(source.emergency?'АВАРИЙНЫЙ РЕЗЕРВ ЗАКАНЧИВАЕТСЯ':!inCapsule&&!breathingRoom(g)&&wornParts(g)<4?'КОСТЮМ НЕГЕРМЕТИЧЕН':'КИСЛОРОД КРИТИЧЕСКИ НИЗКИЙ'):g.player.vitals.health<=20?'ЗДОРОВЬЕ КРИТИЧЕСКИ НИЗКО':'СЫТОСТЬ ИСЧЕРПАНА';
   const textNode=el('survival-alert-text');if(textNode.textContent!==text)textNode.textContent=text;
  }
  function updateVisor(){el('visor').hidden=!game?.player.suit.helmet;}

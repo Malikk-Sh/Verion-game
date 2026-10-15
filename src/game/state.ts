@@ -1,6 +1,6 @@
 import { electricPort } from './production';
 import { heightAt } from '../world';
-import { freshBase, RECIPE_BY_ID, domeFaces, domeFront, LINK_RANGE, MAX_REPEAT, GEN_BUFFER, FIBER_EU, ELECTROLYZER_O2, PORT_O2, CAPSULE_CAPACITY, type BaseState, type Job, type Building, type Link } from './production';
+import { freshBase, RECIPE_BY_ID, LINK_RANGE, MAX_REPEAT, GEN_BUFFER, FIBER_EU, ELECTROLYZER_O2, PORT_O2, CAPSULE_CAPACITY, type BaseState, type Job, type Building, type Link } from './production';
 import { BASIC_SUIT, BUILDABLE, CONTENT_VERSION, GENERATOR_VERSION, ITEMS, LEGACY_CONTENT_VERSIONS, SUIT_PARTS, TANKS, TOOLS, type SuitPart } from './defs';
 import { emptyInventory, INVENTORY_SIZE, type Slot } from './inventory';
 import { NODES, NODE_BY_ID, LATER_NODES, S3_NODES, nodeCovered, bodyHalf } from './resources';
@@ -8,11 +8,13 @@ import { covers } from './nature';
 import { CYCLE_TICKS, START_OFFSET_TICKS } from './daycycle';
 import { freshQuestProgress, QUEST_FACTS, type QuestProgress } from './questFacts';
 import { QUEST_IDS, type QuestId } from './questCatalog';
+import { cellKey, cellOf, capacityOf, deriveRooms, doorFront, doorKeys, groundRoom, landingAt, lowestAir, placeable, shellOf, CELL_MAX, CELL_MIN, DOOR_LIMIT, GLASS_LIMIT, LEVEL_MAX, LEVEL_MIN, PASSAGE_MS, ROOM_LIMIT, ROOM_MAX, type Door, type Zone } from './rooms';
 /**
  * Complete persistent game state. Plain JSON only: no class instances, GPU objects or
  * functions (TECHNICAL §2). Revision numbers live in save manifests.
  *
- * State version 7 (S3) adds regrowing grass, new deposits, building rotation, repeated crafting
+ * State version 8 (S4) replaces the prefab dome with player-built glass rooms: `base.glass`, `base.doors`, `base.zones`
+ * and a passage through a door; buildings lose their per-body zone/shell. Version 7 (S3) adds regrowing grass, new deposits, building rotation, repeated crafting
  * and longer multi-segment links. Version 6 adds crates, packed bodies and portable water; paid legacy jobs survive.
  * State version 5 adds bounded quest facts and milestones. Version 4 adds workstation levels.
  * State version 3 adds persistent production and construction. Version 2 introduced four suit
@@ -20,9 +22,9 @@ import { QUEST_IDS, type QuestId } from './questCatalog';
  * the first inventory row — not a separate container), display-only vitals and the day-phase
  * offset. Version 1/2 saves (including content 1.0.0) are migrated by sanitizeState() without loss.
  */
-export const STATE_VERSION = 7;
-/** Last version produced by the pre-S3 migration chain. */
-const V6 = 6;
+export const STATE_VERSION = 8;
+/** Last version produced by the pre-S3 migration chain, and the S3 version. */
+const V6 = 6, V7 = 7;
 export const HOTBAR_SIZE = 6;
 export type ItemStack = NonNullable<Slot>;
 export type Drop = { id: string; x: number; z: number; items: ItemStack[] };
@@ -78,7 +80,7 @@ function entry(v: unknown, p: string, maxCount?: number,allowPacked=true): ItemS
  if (o.milliGU !== undefined) { if (!tank) throw new InvalidState(p, 'газ у не-баллона'); s.milliGU = int(o.milliGU, p + '.milliGU', 0, tank.capacity); }
  if (tool && s.durability === undefined) throw new InvalidState(p, 'нет прочности инструмента');
  if (tank && s.milliGU === undefined) throw new InvalidState(p, 'нет остатка газа');
- if(o.packed!==undefined){if(!allowPacked||!(BUILDABLE as readonly string[]).includes(itemId)||s.count!==1)throw new InvalidState(p,'неверный упакованный корпус');const body=obj(o.packed,p+'.packed');if(body.kind!==itemId)throw new InvalidState(p,'корпус не совпадает с предметом');const parsed=validateBase({buildings:[{...body,id:'build-1',x:0,y:0,z:0}],links:[],nextId:2,hand:null,handQueue:[],passage:null}).buildings[0];const {id,x,y,z,...packed}=parsed;s.packed=packed;}
+ if(o.packed!==undefined){if(!allowPacked||!(BUILDABLE as readonly string[]).includes(itemId)||s.count!==1)throw new InvalidState(p,'неверный упакованный корпус');const body=obj(o.packed,p+'.packed');if(body.kind!==itemId)throw new InvalidState(p,'корпус не совпадает с предметом');const parsed=validateBase({buildings:[{...body,id:'build-1',x:0,y:0,z:0}],links:[],nextId:2,hand:null,handQueue:[],glass:[],doors:[],zones:[],passage:null}).buildings[0];const {id,x,y,z,...packed}=parsed;s.packed=packed;}
  return s;
 }
 const slot = (v: unknown, p: string,allowPacked=true): Slot => v === null ? null : entry(v, p,undefined,allowPacked);
@@ -137,8 +139,9 @@ function migratePrevious(raw: unknown): unknown {
 export function migrateRaw(raw:unknown):unknown{
  const r=migratePrevious(raw);if(!isObj(r)||!isObj(r.meta))return r;
  const rawVersion=isObj(raw)&&isObj(raw.meta)?Number(raw.meta.stateVersion):NaN;
- const v6=rawVersion===V6||rawVersion===STATE_VERSION||![5,6].includes(Number(r.meta.stateVersion))?r:toV6(r);
- return isObj(v6)&&isObj(v6.meta)&&v6.meta.stateVersion===V6?toV7(v6):v6;
+ const v6=rawVersion===V6||rawVersion===V7||rawVersion===STATE_VERSION||![5,6].includes(Number(r.meta.stateVersion))?r:toV6(r);
+ const v7=isObj(v6)&&isObj(v6.meta)&&v6.meta.stateVersion===V6?toV7(v6):v6;
+ return isObj(v7)&&isObj(v7.meta)&&v7.meta.stateVersion===V7?toV8(v7):v7;
 }
 /** S3 halves kiln fuel: a paid batch keeps one fiber, the other returns to the fuel slot (or a spare slot / a pile). */
 function kilnFuelFix(b:Obj,world:Obj,at?:{x:number;z:number}){
@@ -158,7 +161,7 @@ function toV7(r:Obj):Obj{
  // The old world never saw these deposits. One that would appear under a body arrives empty (no collider, no stock);
  // a solid one also stays clear of the player and of each airlock's exit cells, where a collider would trap them.
  const blocks=(n:typeof NODES[number])=>bodies.some(b=>covers(n,Number(b.x),Number(b.z),bodyHalf(String(b.kind))))||!!n.box&&(nodeCovered(n,Number(pl.x),Number(pl.z),.4)||
-  bodies.some(b=>{if(b.kind!=='dome')return false;const f=domeFront({rot:Number(b.rot??0)}),x=Number(b.x),z=Number(b.z);return nodeCovered(n,x+f.x,z+f.z,.45)||nodeCovered(n,x+f.x*3.5,z+f.z*3.5,.45);}));
+  bodies.some(b=>{if(b.kind!=='dome')return false;const f=doorFront(Number(b.rot??0)),x=Number(b.x),z=Number(b.z);return nodeCovered(n,x+f.x,z+f.z,.45)||nodeCovered(n,x+f.x*3.5,z+f.z*3.5,.45);}));
  // Only deposits new in S3 arrive full; a missing older one stays missing and fails validation (no refill by deletion).
  for(const n of NODES)if(S3_NODES.has(n.id)&&!(n.id in nodes))nodes[n.id]=blocks(n)?0:n.amount;
  world.regrow={};
@@ -173,7 +176,46 @@ function toV7(r:Obj):Obj{
  packed(pl.inventory);
  if(isObj(world.crates))for(const c of Object.values(world.crates))packed(c);
  for(const d of [...drops])if(isObj(d))packed(d.items);
+ obj(next.meta,'meta').stateVersion=V7;return next;
+}
+/** v7 → v8 (S4): domes become glass rooms (domesToGlass); per-body zones retire; a packed dome is a plain dome item. */
+function toV8(r:Obj):Obj{
+ const next=structuredClone(r),world=obj(next.world,'world'),base=obj(world.base,'world.base'),pl=obj(next.player,'player');
+ for(const k of ['glass','doors','zones'])if(!(k in base))base[k]=[];
+ domesToGlass(base,pl);
+ for(const b of arr(base.buildings,'buildings',64))if(isObj(b))delete b.zone;
+ // The air never travels in a backpack: a packed dome becomes the legacy item, taken apart by the dismantle_dome recipe.
+ const unpack=(slots:unknown)=>{if(Array.isArray(slots))for(const s of slots)if(isObj(s)&&isObj(s.packed)){if(s.itemId==='dome')delete s.packed;else delete s.packed.zone;}};
+ unpack(pl.inventory);if(isObj(world.crates))for(const c of Object.values(world.crates))unpack(c);
+ if(Array.isArray(world.drops))for(const d of world.drops)if(isObj(d))unpack(d.items);
  obj(next.meta,'meta').stateVersion=STATE_VERSION;return next;
+}
+/**
+ * S4 (D31): each placed dome becomes a glass shell with a built-in airlock and keeps its air. Interior: cells x−2…x+1 ×
+ * z−2…z+1, three air levels above each column's lowest air level, one common top. Shell: every non-ground face neighbour
+ * of the interior plus four corner columns for the look. The airlock takes the two lowest wall cells in the middle of the
+ * old front wall (same `rot`). Stations stay where they stand (overlaps are allowed here; only new placement checks them).
+ * A passage through a dome ends at once: the player is set down at that side's landing point.
+ */
+export function domesToGlass(base:Obj,player:Obj){
+ const bodies=arr(base.buildings,'buildings',64),domes=bodies.filter((b):b is Obj=>isObj(b)&&b.kind==='dome');
+ base.buildings=bodies.filter(b=>!(isObj(b)&&b.kind==='dome'));
+ const glass=new Set((Array.isArray(base.glass)?base.glass:[]) as number[]),doors=(Array.isArray(base.doors)?base.doors:[]) as Door[];
+ let nextId=Number(base.nextId);const made:{id:string;door:Door;inner:number;zone:Obj}[]=[];
+ for(const d of domes){
+  const x=Number(d.x),z=Number(d.z),rot=((Number(d.rot??0)%4)+4)%4,f=doorFront(rot),interior=groundRoom(x-2,z-2,4,4,3),top=Math.max(...interior.map(c=>cellOf(c).k));
+  for(const c of shellOf(interior))glass.add(c);
+  for(const [i,j] of [[x-3,z-3],[x-3,z+2],[x+2,z-3],[x+2,z+2]])for(let k=lowestAir(i,j);k<=top;k++)glass.add(cellKey(i,k,j));
+  const di=Math.floor(x+f.x*2.5),dj=Math.floor(z+f.z*2.5),door:Door={id:'door-'+nextId++,x:di,y:Math.max(lowestAir(di,dj),lowestAir(di-f.x,dj-f.z)),z:dj,rot};
+  doors.push(door);made.push({id:String(d.id),door,inner:Math.min(...interior),zone:isObj(d.zone)?d.zone:{}});
+ }
+ for(const door of doors)for(const k of doorKeys(door))glass.delete(k);
+ const sorted=[...glass].sort((a,b)=>a-b),view=deriveRooms(sorted,doors),zones=(Array.isArray(base.zones)?base.zones:[]) as unknown[];
+ for(const m of made){const t=view.tag.get(m.inner);if(t===undefined||t<0)continue;const room=view.rooms[t],z=m.zone;
+  zones.push({cell:room.cell,q:Math.min(Number(z.q??0),capacityOf(room.volume)),temperature:Number(z.temperature??10),purity:Number(z.purity??0),lossRemainder:Number(z.lossRemainder??0)});}
+ Object.assign(base,{glass:sorted,doors,zones,nextId});
+ const pass=base.passage;
+ if(isObj(pass)&&'domeId' in pass){const m=made.find(v=>v.id===pass.domeId);if(m)Object.assign(player,landingAt(view,m.door,pass.direction==='in'?'back':'front'));base.passage=null;}
 }
 function toV6(r:Obj):Obj{
  const next=structuredClone(r),world=obj(next.world,'world');
@@ -245,7 +287,8 @@ export function sanitizeState(input: unknown): GameState {
  };
 }
 
-/** Production imports are validated as strictly as the player containers. */
+/** Production imports are validated as strictly as the player containers. `legacy` (v2/v3 mid-migration) still accepts
+ *  domes with their air and a passage through a dome: toV8 converts them. */
 function validateBase(value: unknown, legacy = false): BaseState {
  const raw=obj(value,'world.base'), seen=new Set<string>(), generationIds:number[]=[];
  const register=(v:unknown,p:string,prefix:string)=>{const id=str(v,p,32,ID);if(!new RegExp('^'+prefix+'-[1-9][0-9]*$').test(id)||seen.has(id))throw new InvalidState(p,'неверный или повторный ID');seen.add(id);generationIds.push(Number(id.split('-')[1]));return id;};
@@ -259,17 +302,17 @@ function validateBase(value: unknown, legacy = false): BaseState {
   return {recipeId:id,workMs:num(o.workMs,'job.workMs',0,r.seconds*1000),reserved,water,repeat:legacy&&o.repeat===undefined?0:int(o.repeat,'job.repeat',0,MAX_REPEAT)};
  };
  const queue=(v:unknown,station:string)=>arr(v,'queue',5).map(v=>{const id=str(v,'queue.recipe',40,ID);if(RECIPE_BY_ID.get(id)?.station!==station)throw new InvalidState('queue.recipe','неподходящий рецепт');return id;});
- const buildings=arr(raw.buildings,'base.buildings',64).map((v):Building=>{const o=obj(v,'building'),kind=str(o.kind,'building.kind',32,ID);if(!(BUILDABLE as readonly string[]).includes(kind))throw new InvalidState('building.kind','неизвестный корпус');const z=obj(o.zone,'building.zone');
+ const buildings=arr(raw.buildings,'base.buildings',64).map((v):Building=>{const o=obj(v,'building'),kind=str(o.kind,'building.kind',32,ID),dome=legacy&&kind==='dome';if(!dome&&!(BUILDABLE as readonly string[]).includes(kind))throw new InvalidState('building.kind','неизвестный корпус');
   if(typeof o.lowPriority!=='boolean')throw new InvalidState('building.lowPriority','ожидался boolean');
   if(typeof o.enabled!=='boolean')throw new InvalidState('building.enabled','ожидался boolean');
-  const shell=arr(z.shell,'zone.shell',domeFaces().length);if(shell.length!==domeFaces().length)throw new InvalidState('zone.shell','неполная оболочка');
   const input=container(o.input,'building.input'),output=container(o.output,'building.output');
   if(kind==='biogenerator'&&input.some(s=>s&&s.itemId!=='fiber'))throw new InvalidState('building.input','генератор принимает только волокна');
   const level=legacy?1:int(o.level,'building.level',1,2) as 1|2;
   if(level===2&&kind!=='workbench')throw new InvalidState('building.level','нет такого улучшения');
-  const b:Building={level,rot:legacy&&o.rot===undefined?0:int(o.rot,'building.rot',0,3),id:register(o.id,'building.id','build'),kind:kind as Building['kind'],x:int(o.x,'building.x',-195,355),y:num(o.y,'building.y',-100,200),z:int(o.z,'building.z',-195,355),input,output,job:job(o.job,kind),queue:queue(o.queue,kind),enabled:o.enabled,lowPriority:o.lowPriority,energy:int(o.energy,'building.energy',0,GEN_BUFFER),fuel:int(o.fuel,'building.fuel',0,FIBER_EU),water:int(o.water,'building.water',0,20000),oxygen:int(o.oxygen,'building.oxygen',0,kind==='electrolyzer'?ELECTROLYZER_O2:PORT_O2),zone:{q:int(z.q,'zone.q',0,960000),temperature:num(z.temperature,'zone.temperature',-150,150),purity:num(z.purity,'zone.purity',0,1),lossRemainder:int(z.lossRemainder,'zone.lossRemainder',0,999),breachMs:int(z.breachMs,'zone.breachMs',0,1000),shell:shell.map(v=>int(v,'zone.shell.HP',0,180))}};
+  const b:Building={level,rot:legacy&&o.rot===undefined?0:int(o.rot,'building.rot',0,3),id:register(o.id,'building.id','build'),kind:kind as Building['kind'],x:int(o.x,'building.x',-195,355),y:num(o.y,'building.y',-100,200),z:int(o.z,'building.z',-195,355),input,output,job:job(o.job,kind),queue:queue(o.queue,kind),enabled:o.enabled,lowPriority:o.lowPriority,energy:int(o.energy,'building.energy',0,GEN_BUFFER),fuel:int(o.fuel,'building.fuel',0,FIBER_EU),water:int(o.water,'building.water',0,20000),oxygen:int(o.oxygen,'building.oxygen',0,kind==='electrolyzer'?ELECTROLYZER_O2:PORT_O2)};
+  if(dome){const z=obj(o.zone,'building.zone');(b as Building&{zone:Obj}).zone={q:int(z.q,'zone.q',0,960000),temperature:num(z.temperature,'zone.temperature',-150,150),purity:num(z.purity,'zone.purity',0,1),lossRemainder:int(z.lossRemainder,'zone.lossRemainder',0,999)};}
   if(!legacy&&(kind==='workbench'&&level===1?b.queue.length>0:b.queue.length+(b.job?1:0)>5))throw new InvalidState('building.queue','очередь недоступна/переполнена');
-  if(kind!=='biogenerator'&&(b.energy||b.fuel))throw new InvalidState('building','энергия/топливо не у генератора');if(kind!=='electrolyzer'&&b.water)throw new InvalidState('building.water','вода не у электролиза');if(!['electrolyzer','refill','distributor'].includes(kind)&&b.oxygen)throw new InvalidState('building.oxygen','нет газового буфера');if(kind!=='dome'&&b.zone.q)throw new InvalidState('zone.q','газ не у купола');return b;
+  if(kind!=='biogenerator'&&(b.energy||b.fuel))throw new InvalidState('building','энергия/топливо не у генератора');if(kind!=='electrolyzer'&&b.water)throw new InvalidState('building.water','вода не у электролиза');if(!['electrolyzer','refill','distributor'].includes(kind)&&b.oxygen)throw new InvalidState('building.oxygen','нет газового буфера');return b;
  });
  const links=arr(raw.links,'base.links',128).map(v=>{const o=obj(v,'link'),kind=o.kind;if(kind!=='cable'&&kind!=='gas_pipe')throw new InvalidState('link.kind','неизвестная сеть');const from=str(o.from,'link.from',32,ID),to=str(o.to,'link.to',32,ID),a=buildings.find(b=>b.id===from),b=to==='capsule'?{x:40,y:heightAt(40,40)+.14,z:40,kind:'capsule'}:buildings.find(b=>b.id===to);
   if(!a||!b||from===to||Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z)>LINK_RANGE+.001)throw new InvalidState('link','неверные порты/длина');
@@ -278,8 +321,23 @@ function validateBase(value: unknown, legacy = false): BaseState {
   return {id:register(o.id,'link.id','link'),kind:kind as Link['kind'],from,to};
  });
  const pairs=new Set<string>();for(const l of links){const k=l.kind+':'+(l.kind==='cable'?[l.from,l.to].sort():[l.from,l.to]).join(':');if(pairs.has(k))throw new InvalidState('links','повтор сегмента');pairs.add(k);}
+ // S4 glass rooms: sorted unique cells in the building area, doors clear of glass and of each other.
+ const list=(k:string,max:number)=>legacy&&raw[k]===undefined?[]:arr(raw[k],'base.'+k,max);
+ const glass=list('glass',GLASS_LIMIT).map(v=>{const k=int(v,'base.glass',0,2**27-1),c=cellOf(k);if(!placeable(c.i,c.k,c.j))throw new InvalidState('base.glass','клетка вне участка');return k;});
+ for(let i=1;i<glass.length;i++)if(glass[i]<=glass[i-1])throw new InvalidState('base.glass','ключи не упорядочены или повторяются');
+ const solid=new Set(glass),doors=list('doors',DOOR_LIMIT).map((v):Door=>{const o=obj(v,'door'),d={id:register(o.id,'door.id','door'),x:int(o.x,'door.x',CELL_MIN,CELL_MAX),y:int(o.y,'door.y',LEVEL_MIN,LEVEL_MAX-1),z:int(o.z,'door.z',CELL_MIN,CELL_MAX),rot:int(o.rot,'door.rot',0,3)};
+  for(const k of doorKeys(d)){if(solid.has(k))throw new InvalidState('base.doors','шлюз пересекает стекло или другой шлюз');solid.add(k);}return d;});
  const nextId=int(raw.nextId,'base.nextId',1,Number.MAX_SAFE_INTEGER);if(generationIds.some(n=>n>=nextId))throw new InvalidState('base.nextId','счётчик не больше существующих ID');
- let passage:BaseState['passage']=null;if(raw.passage!==null){const o=obj(raw.passage,'base.passage'),domeId=str(o.domeId,'passage.domeId',32,ID);if(!buildings.some(b=>b.id===domeId&&b.kind==='dome')||(o.direction!=='in'&&o.direction!=='out'))throw new InvalidState('passage','неверный шлюз');passage={domeId,direction:o.direction,remainingMs:int(o.remainingMs,'passage.remainingMs',0,6000)};}
+ const view=deriveRooms(glass,doors);if(view.rooms.length>ROOM_LIMIT)throw new InvalidState('base.zones','больше '+ROOM_LIMIT+' помещений');
+ // A zone whose room no longer exists drops its gas (not an error); a room without a zone starts empty.
+ const zoneCells=new Set<number>(),zones:Zone[]=[];
+ for(const v of list('zones',ROOM_LIMIT)){const o=obj(v,'zone'),cell=int(o.cell,'zone.cell',0,2**27-1);if(zoneCells.has(cell))throw new InvalidState('base.zones','повтор помещения');zoneCells.add(cell);
+  const z:Zone={cell,q:int(o.q,'zone.q',0,capacityOf(ROOM_MAX)),temperature:num(o.temperature,'zone.temperature',-150,150),purity:num(o.purity,'zone.purity',0,1),lossRemainder:int(o.lossRemainder,'zone.lossRemainder',0,999)};
+  const room=view.rooms.find(r=>r.cell===cell);if(!room)continue;if(z.q>capacityOf(room.volume))throw new InvalidState('zone.q','воздуха больше вместимости помещения');zones.push(z);}
+ for(const r of view.rooms)if(!zoneCells.has(r.cell))zones.push({cell:r.cell,q:0,temperature:10,purity:0,lossRemainder:0});
+ let passage:BaseState['passage']=null;if(raw.passage!==null&&!(legacy&&raw.passage===undefined)){const o=obj(raw.passage,'base.passage');
+  if(legacy&&'domeId' in o){const domeId=str(o.domeId,'passage.domeId',32,ID);if(!buildings.some(b=>b.id===domeId&&(b.kind as string)==='dome')||(o.direction!=='in'&&o.direction!=='out'))throw new InvalidState('passage','неверный шлюз');passage={domeId,direction:o.direction,remainingMs:int(o.remainingMs,'passage.remainingMs',0,PASSAGE_MS)} as unknown as BaseState['passage'];}
+  else{const doorId=str(o.doorId,'passage.doorId',32,ID);if(!doors.some(d=>d.id===doorId)||(o.direction!=='in'&&o.direction!=='out')||typeof o.paid!=='boolean')throw new InvalidState('passage','неверный шлюз');passage={doorId,direction:o.direction,remainingMs:int(o.remainingMs,'passage.remainingMs',0,PASSAGE_MS),paid:o.paid};}}
  const handQueue=queue(raw.handQueue,'hand');if(!legacy&&handQueue.length)throw new InvalidState('handQueue','ручная очередь недоступна');
- return {buildings,links,nextId,hand:job(raw.hand,'hand'),handQueue,passage};
+ return {buildings,links,nextId,hand:job(raw.hand,'hand'),handQueue,glass,doors,zones,passage};
 }
