@@ -12,7 +12,8 @@ import { QUEST_IDS, type QuestId } from './questCatalog';
  * Complete persistent game state. Plain JSON only: no class instances, GPU objects or
  * functions (TECHNICAL §2). Revision numbers live in save manifests.
  *
- * State version 8 (S4, D33) adds new veins: `world.veins`, the `world.respawn` queue and `world.nextVeinId` (toV8).
+ * State version 8 (S4, D33) adds new veins: `world.veins`, the `world.respawn` queue and `world.nextVeinId` (toV8). The step
+ * runs for any version ≥7 that lacks these fields, so a save of another S4 lane with the same number still loads.
  * State version 7 (S3) adds regrowing grass, new deposits, building rotation, repeated crafting
  * and longer multi-segment links. Version 6 adds crates, packed bodies and portable water; paid legacy jobs survive.
  * State version 5 adds bounded quest facts and milestones. Version 4 adds workstation levels.
@@ -143,10 +144,13 @@ export function migrateRaw(raw:unknown):unknown{
  const rawVersion=isObj(raw)&&isObj(raw.meta)?Number(raw.meta.stateVersion):NaN;
  const v6=rawVersion===V6||rawVersion===STATE_VERSION||![5,6].includes(Number(r.meta.stateVersion))?r:toV6(r);
  const v7=isObj(v6)&&isObj(v6.meta)&&v6.meta.stateVersion===V6?toV7(v6):v6;
- return isObj(v7)&&isObj(v7.meta)&&v7.meta.stateVersion===V7?toV8(v7):v7;
+ return isObj(v7)&&isObj(v7.meta)&&(v7.meta.stateVersion===V7||lacksVeins(v7))?toV8(v7):v7;
 }
-/** v7 → v8 (S4). */
-function toV8(r:Obj):Obj{const next=structuredClone(r),m=obj(next.meta,'meta');addVeinState(obj(next.world,'world'),Number(m.seed)>>>0);m.stateVersion=STATE_VERSION;return next;}
+/** The vein step keys on the fields, not on the number: a v7 save, or a save of version ≥7 from a parallel S4 lane
+ *  (glass rooms, D31) that has no vein fields, gains them before strict validation. A full set is left untouched. */
+const lacksVeins=(r:Obj)=>isObj(r.meta)&&Number(r.meta.stateVersion)>=V7&&isObj(r.world)&&!['veins','respawn','nextVeinId'].every(k=>k in (r.world as Obj));
+/** v7 → v8 (S4); idempotent, never lowers a newer version. */
+function toV8(r:Obj):Obj{const next=structuredClone(r),m=obj(next.meta,'meta');addVeinState(obj(next.world,'world'),Number(m.seed)>>>0);if(!(Number(m.stateVersion)>STATE_VERSION))m.stateVersion=STATE_VERSION;return next;}
 /** S4 vein fields (D33): no veins yet; every non-grass deposit an older world already exhausted queues one, so it recovers too. */
 function addVeinState(world:Obj,seed:number){
  if(!('veins' in world))world.veins=[];if(!('nextVeinId' in world))world.nextVeinId=1;if('respawn' in world)return;

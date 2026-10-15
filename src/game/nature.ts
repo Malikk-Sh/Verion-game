@@ -62,8 +62,14 @@ export function queueRespawn(g: GameState, material: string) {
  const m = material as VeinMaterial; if (!VEIN_MATERIALS.includes(m) || g.world.respawn.length >= RESPAWN_MAX) return;
  g.world.respawn.push({ material: m, ms: veinDelay(g.meta.seed, g.world.nextVeinId * 32 + g.world.respawn.length, m) });
 }
-/** Why a fixed spot cannot take a new vein right now ('' when free): a body or an airlock landing on it, the player
- *  close by, another vein or a stocked deposit within 8 m. The static checks (slope, colliders, zones) are done in the data. */
+/** Axis-aligned footprint (centre, half-sizes) that a new vein must not touch. */
+export type VeinBlocker = { x: number; z: number; hx: number; hz: number; why: string };
+/** Player structures kept outside `base.buildings` add their footprints here (glass panels, doors and room zones of
+ *  D31 at merge time), like `mapFootprintSources` for the map; `veinSpotBlocked` checks them with the bodies. */
+export const veinBlockers: ((g: GameState) => VeinBlocker[])[] = [];
+/** Why a fixed spot cannot take a new vein right now ('' when free): a body, a registered structure footprint or an
+ *  airlock landing on it, the player close by, another vein or a stocked deposit within 8 m. The static checks (slope,
+ *  colliders, zones) are done in the data. */
 export function veinSpotBlocked(g: GameState, s: VeinSpot): string {
  const [w, , d] = VEIN_LOOK[s.material].box, hx = w / 2 * 1.08 + .5, hz = d / 2 * 1.08 + .5;
  const over = (x: number, z: number, h: number) => Math.abs(x - s.x) < hx + h && Math.abs(z - s.z) < hz + h;
@@ -71,6 +77,7 @@ export function veinSpotBlocked(g: GameState, s: VeinSpot): string {
   if (over(b.x, b.z, bodyHalf(b.kind))) return 'постройка';
   if (b.kind === 'dome') { const f = domeFront(b); if (over(b.x + f.x, b.z + f.z, .45) || over(b.x + f.x * 3.5, b.z + f.z * 3.5, .45)) return 'выход шлюза'; }
  }
+ for (const src of veinBlockers) for (const f of src(g)) if (Math.abs(f.x - s.x) < hx + f.hx && Math.abs(f.z - s.z) < hz + f.hz) return f.why;
  if (Math.hypot(g.player.x - s.x, g.player.z - s.z) < VEIN_PLAYER_CLEAR) return 'игрок рядом';
  for (const v of g.world.veins) { const o = VEIN_SPOT_BY_ID.get(v.spot); if (o && Math.hypot(o.x - s.x, o.z - s.z) < VEIN_GAP) return 'другая жила'; }
  for (const n of NODES) if ((g.world.nodes[n.id] ?? 0) > 0 && Math.hypot(n.x - s.x, n.z - s.z) < VEIN_GAP) return 'залежь рядом';

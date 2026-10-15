@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { newGame, cloneState, sanitizeState, type GameState } from '../src/game/state.ts';
 import { NODE_BY_ID, VEIN_SPOTS, VEIN_SPOT_BY_ID, VEIN_MATERIALS, VEIN_LOOK, veinSizeRange, depositById, depositLeft, type VeinMaterial } from '../src/game/resources.ts';
-import { natureTick, veinSpotBlocked, spawnVein, queueRespawn, nextVeinSeconds, VEIN_DELAY_RANGE, VEIN_RETRY_MS, VEIN_CAP, VEIN_PLAYER_CLEAR } from '../src/game/nature.ts';
+import { natureTick, veinSpotBlocked, veinBlockers, spawnVein, queueRespawn, nextVeinSeconds, VEIN_DELAY_RANGE, VEIN_RETRY_MS, VEIN_CAP, VEIN_PLAYER_CLEAR } from '../src/game/nature.ts';
 import { mineTick, type Mining } from '../src/game/mining.ts';
 import { makeBuilding, domeFront } from '../src/game/production.ts';
 import { nearestNode } from '../src/game/guide.ts';
@@ -83,6 +83,18 @@ test('D33: spawn rules — bodies, airlock landings, the player within 24 m, ano
  g.world.nodes['iron-a'] = 0; assert.equal(veinSpotBlocked(g, { id: 'x', material: 'iron', x: 67, z: 72 }), '');
 });
 
+test('D33: footprints registered by other structures (glass rooms, D31) keep new veins out as well', () => {
+ const g = fresh(), s = VEIN_SPOTS.find(s => s.id === 'stone-s5')!, src = (h: GameState) => h === g ? [{ x: s.x + 3, z: s.z, hx: 2, hz: 2, why: 'стеклянное помещение' }] : [];
+ assert.equal(veinSpotBlocked(g, s), '');
+ veinBlockers.push(src);
+ try {
+  assert.equal(veinSpotBlocked(g, s), 'стеклянное помещение');
+  assert.equal(veinSpotBlocked(g, VEIN_SPOTS.find(o => o.id === 'stone-s1')!), '', 'a far spot stays free');
+  g.world.respawn.push({ material: 'stone', ms: 50 }); const ids = tick(g, 50);
+  assert.equal(ids.length, 1); assert.notEqual(g.world.veins[0].spot, 'stone-s5', 'the spawn never picks the covered spot');
+ } finally { veinBlockers.splice(veinBlockers.indexOf(src), 1); }
+});
+
 test('D33: when every spot is blocked the queue retries every 10 s; capped materials wait for a free place', () => {
  const g = fresh(); g.world.respawn.push({ material: 'sand', ms: 50 });
  const blockers = VEIN_SPOTS.filter(s => s.material === 'sand');
@@ -120,7 +132,7 @@ test('D33: veins survive a save round trip; forged veins and queue entries are r
  bad(o => { o.world.respawn[0].material = 'gold'; }, /материал/);
  bad(o => { o.world.respawn = Array(18).fill({ material: 'iron', ms: 1 }); }, /массив/);
  bad(o => { const spots = VEIN_SPOTS.filter(s => s.material === 'ice').slice(0, 4); o.world.veins = spots.map((s, i) => ({ id: 'vein-' + (i + 1), spot: s.id, material: 'ice', amount: 20, size: 20, spawnedAt: 0 })); o.world.nextVeinId = 5; }, /одного материала/);
- bad(o => { delete o.world.veins; }, /массив/);
+ bad(o => { o.world.veins = null; }, /массив/);
 });
 
 test('D33: a v7 save gains empty vein fields; deposits it already exhausted are queued deterministically', () => {
@@ -133,6 +145,10 @@ test('D33: a v7 save gains empty vein fields; deposits it already exhausted are 
  for (const e of m.world.respawn) assert.ok(e.ms >= VEIN_DELAY_RANGE[0] && e.ms <= VEIN_DELAY_RANGE[1]);
  assert.equal(m.world.nodes['iron-a'], 0, 'the static deposit itself is not refilled');
  assert.equal(old.world.veins, undefined, 'the source object is untouched');
+ // A save of the same number from the parallel rooms lane (v8 without vein fields) gains them before validation.
+ const rooms: any = cloneState(g); delete rooms.world.veins; delete rooms.world.respawn; delete rooms.world.nextVeinId; rooms.world.nodes['sand-a'] = 0;
+ const r = sanitizeState(rooms); assert.equal(r.meta.stateVersion, 8); assert.deepEqual(r.world.veins, []); assert.equal(r.world.nextVeinId, 1); assert.deepEqual(r.world.respawn.map(e => e.material), ['sand']);
+ const full = sanitizeState(JSON.parse(JSON.stringify(m))); assert.deepEqual(full.world.respawn, m.world.respawn, 'a full v8 save is not migrated again');
  const none: any = cloneState(g); none.meta.stateVersion = 7; delete none.world.veins; delete none.world.respawn; delete none.world.nextVeinId;
  assert.deepEqual(sanitizeState(none).world.respawn, []);
  const mats: VeinMaterial[] = [...VEIN_MATERIALS]; assert.equal(mats.length, 5); assert.ok(NODE_BY_ID.get('iron-a'));
