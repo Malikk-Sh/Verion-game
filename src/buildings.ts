@@ -89,7 +89,7 @@ export function createBuildings(scene: THREE.Scene, fx?: Fx) {
   if (next === key) return; key = next;
   for (let i = boxes.length - 1; i >= 0; i--) if (boxes[i].id.startsWith('build-')) boxes.splice(i, 1);
   const alive = new Set(g.world.base.buildings.map(b => b.id));
-  for (const [id, s] of stations) if (!alive.has(id) || s.b.kind !== g.world.base.buildings.find(b => b.id === id)?.kind || s.b.level !== g.world.base.buildings.find(b => b.id === id)?.level || s.b.rot !== g.world.base.buildings.find(b => b.id === id)?.rot) { root.remove(s.group); s.v.dispose(); stations.delete(id); }
+  for (const [id, s] of stations) if (!alive.has(id) || s.b.kind !== g.world.base.buildings.find(b => b.id === id)?.kind || s.b.level !== g.world.base.buildings.find(b => b.id === id)?.level || s.b.rot !== g.world.base.buildings.find(b => b.id === id)?.rot) { root.remove(s.group); s.v.dispose(); stations.delete(id); born.delete(id); }
   for (const b of g.world.base.buildings) {
    let s = stations.get(b.id);
    if (!s) {
@@ -172,5 +172,5 @@ export function createBuildings(scene: THREE.Scene, fx?: Fx) {
  }
  /** Newly placed station drops in with a short settle animation. */
  function celebrate(id: string) { born.set(id, 0); }
- return { sync, reset, update, celebrate, root, glass, /** A station is dropping in: its shadow must follow. */ get animating() { return born.size > 0; }, tankFull: (t: { itemId: string; milliGU?: number }) => (t.milliGU ?? 0) >= TANKS[t.itemId].capacity };
+ return { sync, reset, update, celebrate, root, glass, /** A station is dropping in: its shadow must follow. */ get animating() { for (const id of born.keys()) if (stations.has(id)) return true; return false; }, tankFull: (t: { itemId: string; milliGU?: number }) => (t.milliGU ?? 0) >= TANKS[t.itemId].capacity };
 }

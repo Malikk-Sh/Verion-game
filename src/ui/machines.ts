@@ -5,7 +5,7 @@ import { addItems, countItem, transferSlot, type Slot } from '../game/inventory'
 import { machine, RECIPES, RECIPE_BY_ID, cancelJob, connect, disconnect, linkOptions, linkLength, endpoint, gasRate, powerRate, supplyRate, telemetry, ELECTROLYZER_O2, FIBER_EU, GEN_BUFFER, O2_PER_WU, PORT_O2, type Building } from '../game/production';
 import { stationStatus, structureStatus, type StationStatus } from '../game/stationStatus';
 import { beginPassage, capacityOf, doorById, doorKeys, doorRooms, habitableQ, removeDoor, removeGlass, type RoomEdit } from '../game/rooms';
-import { CAPSULE_CAPACITY } from '../game/survival';
+import { CAPSULE_CAPACITY, lastAirText } from '../game/survival';
 import type { GameState } from '../game/state';
 import type { GuideTarget } from '../game/guide';
 import { ghostArt, itemArt } from './art';
@@ -70,7 +70,6 @@ function slotCell(ctx: Ctx, b: Building, label: string, index: number, placehold
 }
 // ---------- S4: worn tanks and the charging slot of the oxygen generator ----------
 const isTank = (s: Slot): s is NonNullable<Slot> => !!s && Object.hasOwn(TANKS, s.itemId);
-const LAST_AIR = 'Это последний воздух: без баллона удушье через 5 с. Повторите, чтобы снять.';
 const code = (p: TankPlace) => p.kind === 'worn' ? 'worn:' + p.b : p.kind === 'pack' ? 'pack:' + p.i : 'station';
 const place = (ctx: Ctx, v = ''): TankPlace | null => { const [k, n] = v.split(':'); return k === 'worn' && (n === '0' || n === '1') ? { kind: 'worn', b: Number(n) as 0 | 1 } : k === 'pack' && n ? { kind: 'pack', i: Number(n) } : k === 'station' ? { kind: 'station', id: ctx.id } : null; };
 /** The last breathable gas leaves the suit only after the same action is repeated within 4 s. */
@@ -78,7 +77,7 @@ let pendingGap: { key: string; at: number } | null = null;
 function tankMove(ctx: Ctx, from: TankPlace, to: TankPlace, dragged = false) {
  if (code(from) === code(to)) return;
  const key = ctx.id + '|' + code(from) + '>' + code(to), now = performance.now();
- if (moveTankGap(ctx.g, ctx.inside(), from, to) && (pendingGap?.key !== key || now - pendingGap.at > 4000)) { pendingGap = { key, at: now }; ctx.caution(LAST_AIR); return; }
+ if (moveTankGap(ctx.g, ctx.inside(), from, to) && (pendingGap?.key !== key || now - pendingGap.at > 4000)) { pendingGap = { key, at: now }; ctx.caution(lastAirText(ctx.g)); return; }
  pendingGap = null;
  const src = document.querySelector(`[data-drop="${code(from)}"]`), tokens = dragged || !src ? [] : captureTokens([src]);
  const e = moveTank(ctx.g, from, to); ctx.say(e, to.kind === 'worn' ? 'Баллон на костюме' : to.kind === 'station' ? 'Баллон заправляется' : 'Баллон в рюкзаке');
@@ -97,7 +96,7 @@ function tankFace(cell: HTMLElement, t: Slot, key: string) {
 }
 function tankLive(key: string, t: Slot) {
  const gu = document.getElementById(key + '-gu'), bar = document.getElementById(key + '-bar'), text = t ? String(Math.round((t.milliGU ?? 0) / 1000)) : '';
- if (gu && gu.textContent !== text) gu.textContent = text; if (bar) bar.style.transform = `scaleX(${isTank(t) ? Math.min(1, (t.milliGU ?? 0) / TANKS[t.itemId].capacity) : 0})`;
+ if (gu && gu.textContent !== text) { gu.textContent = text; const cell = document.getElementById(key), label = cell?.getAttribute('aria-label'); if (label && text) cell!.setAttribute('aria-label', label.replace(/\d+( из \d+ GU)/, text + '$1')); } if (bar) bar.style.transform = `scaleX(${isTank(t) ? Math.min(1, (t.milliGU ?? 0) / TANKS[t.itemId].capacity) : 0})`;
 }
 /** The charging slot: tap wears the tank (first empty connector, otherwise instead of the emptier worn tank). */
 function chargeCell(ctx: Ctx, b: Building) {
