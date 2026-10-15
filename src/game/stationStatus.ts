@@ -97,6 +97,8 @@ export function roomStatus(g: GameState, room: RoomInfo): StationStatus {
   { ok: z.temperature >= -5 && z.temperature <= 40, label: `Температура −5…+40 °C (${Math.round(z.temperature)} °C)`, fix: 'Климат-блок распределителя греет воздух при питании.' },
  ];
  if (habitableRoom(room)) return { tone: 'ok', title: 'Воздух пригоден', hint: `Объём ${room.volume} м³ · можно дышать без баллонов · ${Math.floor(z.q / 1000)} / ${capacityOf(room.volume) / 1000} GU`, checks };
+ // Too few distributors for the volume: none of them fills the room (roomsTick), so this is the one thing to fix.
+ if (inside.length && working < need) return { tone: 'warn', title: 'Нужен ещё распределитель', hint: `Помещение ${room.volume} м³: нужно ${need}, работает ${working}. Поставьте ещё один или разделите помещение стеной.`, checks };
  return { tone: 'warn', title: 'Воздух непригоден', hint: checks.find(c => !c.ok)!.fix, checks };
 }
 /** Status of the structure a glass block or airlock belongs to: the room beside it, else why it is not closed. */

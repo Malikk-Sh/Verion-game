@@ -8,6 +8,7 @@ import { placementProblem } from '../src/buildings.ts';
 import { survivalTick } from '../src/game/survival.ts';
 import { stationStatus, roomStatus, structureStatus } from '../src/game/stationStatus.ts';
 import { refreshQuestProgress } from '../src/game/quests.ts';
+import { guideStep, nearestShelter, roomy, stepTarget } from '../src/game/guide.ts';
 import {
  cellKey, cellOf, columnFloor, isGround, lowestAir, deriveRooms, roomsView, bumpRooms, allRooms, roomAt, roomAtCell, editRooms, predictRemove, leakAt,
  placeGlass, removeGlass, placeDoor, removeDoor, beginPassage, landingPoint, doorById, stationRoom, habitableRoom, breathingRoom, cyclingRoom,
@@ -177,7 +178,7 @@ test('Rooms: a distributor fills only a room it stands in; one serves 256 m³; a
  const gen = makeBuilding(g, 'biogenerator', 52, .62, 44), d1 = makeBuilding(g, 'distributor', 60, .62, 42); gen.energy = 1000000; d1.oxygen = 480000;
  stock(g, { cable: 6 }); assert.equal(connect(g, 'cable', gen.id, d1.id), '');
  assert.equal(stationRoom(g, d1)?.volume, 270); tick(g, 2000); assert.equal(allRooms(g)[0].zone.q, 0, 'one distributor for 270 m³ does not fill');
- assert.equal(stationStatus(g, d1).title, 'Нужен ещё распределитель'); assert.match(roomStatus(g, allRooms(g)[0]).checks![1].label, /1 из 2/);
+ assert.equal(stationStatus(g, d1).title, 'Нужен ещё распределитель'); const short = roomStatus(g, allRooms(g)[0]); assert.match(short.checks![1].label, /1 из 2/); assert.equal(short.title, 'Нужен ещё распределитель', 'the room window names the missing distributor');
  const d2 = makeBuilding(g, 'distributor', 62, .62, 43); d2.oxygen = 480000; assert.equal(connect(g, 'cable', gen.id, d2.id), '');
  tick(g, 1000); const q = allRooms(g)[0].zone.q; assert.ok(q > 30000, String(q)); assert.ok(allRooms(g)[0].zone.purity > 0);
  // Outside a room a distributor asks for no power and fills nothing.
@@ -280,4 +281,19 @@ test('Rooms: a block that faces only the outside belongs to the box it is joined
  lay(g, [cellKey(70, 0, 70)]); assert.equal(structureStatus(g, cellKey(70, 0, 70)).title, 'Утечка');
  const open = shell(62, 0, 50, 2, 2, 2).filter(k => k !== cellKey(64, 0, 50)); lay(g, open);
  assert.equal(structureStatus(g, cellKey(62, 2, 50)).title, 'Утечка', 'the roof of a box with a hole faces its sheltered, open air');
+});
+
+test('Guide: «Стеклянное убежище» — blocks made (placed count too), a 3×3×3 box on the ground, an airlock in the wall; the compass finds the shelter', () => {
+ const g = fresh(); near(g, 50, 47); stock(g, { window: 20 });
+ let step = guideStep(g, 'dome'); assert.equal(step.title, 'Стеклянное убежище'); assert.equal(step.tasks.length, 3);
+ assert.equal(step.tasks[0].label, 'Наделайте стеклоблоков (1 стекло + 1 железо → 4)'); assert.equal(step.tasks[0].have, 20); assert.equal(step.tasks[0].done, false);
+ assert.match(step.tasks[1].label, /3×3 внутри и высотой 3/); assert.equal(nearestShelter(g), null);
+ // A 2-high box is a room but not yet the journal's box.
+ lay(g, shell(56, 0, 42, 3, 2, 3)); assert.equal(allRooms(g).length, 1); assert.equal(roomy(allRooms(g)[0]), false);
+ step = guideStep(g, 'dome'); assert.equal(step.tasks[1].done, false); assert.equal(step.tasks[0].have, Math.min(48, 20 + g.world.base.glass.length));
+ g.world.base.glass = []; lay(g, CUBE()); assert.ok(roomy(allRooms(g)[0])); step = guideStep(g, 'dome');
+ assert.deepEqual(step.tasks.map(t => t.done), [true, true, false]); const t = stepTarget(g, step)!; assert.equal(t.name, 'Помещение'); assert.ok(Math.abs(t.x - 57.5) < .01 && Math.abs(t.z - 43.5) < .01, 'the compass leads to the room');
+ // The airlock goes into the front wall (two blocks return); the shelter milestone completes.
+ near(g, 57.5, 47.2); stock(g, { airlock: 1 }); assert.equal(placeDoor(g, cellKey(57, 0, 45), 0).error, ''); assert.equal(nearestShelter(g)!.name, 'Шлюз');
+ refreshQuestProgress(g); assert.ok(g.progress.quests.completed.includes('dome')); assert.ok(guideStep(g, 'dome').tasks.every(t => t.done));
 });

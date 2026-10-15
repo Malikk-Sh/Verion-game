@@ -279,7 +279,7 @@ export const QUESTS: readonly QuestDefinition[] = [
  {
   "id": "air",
   "label": "Дышащее\nубежище",
-  "item": "dome",
+  "item": "airlock",
   "x": 850,
   "y": 550,
   "parents": [
@@ -296,7 +296,7 @@ export const QUESTS: readonly QuestDefinition[] = [
  {
   "id": "base",
   "label": "База\nработает",
-  "item": "dome",
+  "item": "window",
   "x": 966,
   "y": 265,
   "parents": [

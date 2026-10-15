@@ -634,7 +634,7 @@ function boot(){
   lastCompleted=done.length;
   const id=currentStep(game);
   if(id!==lastStep){lastStep=id;guideOverride=null;guideCache.at=-1;}
-  if(!id){el('objective-kicker').textContent='Глава завершена';el('objective-task').textContent='Исследуйте Вердану';el('objective-icon').replaceChildren(itemArt('dome'));return 'База работает';}
+  if(!id){el('objective-kicker').textContent='Глава завершена';el('objective-task').textContent='Исследуйте Вердану';el('objective-icon').replaceChildren(itemArt('window'));return 'База работает';}
   const step=guideStep(game,id),task=step.tasks.find(t=>!t.done),{done:n,total}=progressCount(game);
   // The optional chapter has no place in the main count (18 steps): it is labelled instead of showing 19 / 18.
   el('objective-kicker').textContent=(game.progress.quests.tracked===id?'Выбрано · ':step.optional?'':'Цель ')+(step.optional?'Дополнительно':Math.min(n+1,total)+' / '+total);

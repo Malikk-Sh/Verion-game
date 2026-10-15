@@ -1,7 +1,7 @@
 import { countItem } from './inventory';
 import { NODES } from './resources';
 import { RECIPE_BY_ID, WORKBENCH_UPGRADE, type Building } from './production';
-import { allRooms, habitableQ, habitableRoom, roomCenter, roomDoors, stationRoom, type RoomInfo } from './rooms';
+import { allRooms, cellOf, habitableQ, habitableRoom, roomCenter, roomDoors, stationRoom, type Room, type RoomInfo } from './rooms';
 import { ITEMS } from './defs';
 import { questStatus } from './quests';
 import type { QuestId } from './questCatalog';
@@ -37,6 +37,8 @@ export function nearestShelter(g: GameState, rooms: RoomInfo[] = allRooms(g)): G
  const spots: GuideTarget[] = [...g.world.base.doors.map(d => ({ name: ITEMS.airlock.name, x: d.x + .5, z: d.z + .5, kind: 'station' as const })), ...rooms.map(r => { const c = roomCenter(r); return { name: 'Помещение', x: c.x, z: c.z, kind: 'area' as const }; })];
  return spots.sort((a, b) => dist(g, a.x, a.z) - dist(g, b.x, b.z))[0] ?? null;
 }
+/** A room at least 3 × 3 inside and 3 high (the journal's box; any closed room still counts for the milestone). */
+export function roomy(r: Room) { const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]; for (const key of r.cells) { const c = cellOf(key), v = [c.i, c.k, c.j]; for (let n = 0; n < 3; n++) { lo[n] = Math.min(lo[n], v[n]); hi[n] = Math.max(hi[n], v[n]); } } return hi.every((h, n) => h - lo[n] >= 2); }
 const fact = (g: GameState, f: string) => g.progress.quests.facts.includes(f);
 const inv = (g: GameState, id: string) => countItem(g.player.inventory, id);
 const done = (g: GameState, id: QuestId) => g.progress.quests.completed.includes(id);
@@ -108,11 +110,12 @@ export function guideStep(g: GameState, id: QuestId): GuideStep {
    tasks: [...inputs(g, 'craft_circuit', D || inv(g, 'circuit') > 0), flag('Создать электронику', fact(g, 'item:circuit'), nearestStation(g, 'workbench'), 'craft_circuit')] }),
   dome: () => {
    // S4: the shelter is built, not placed — a closed glass box on the ground with an airlock in its wall.
-   const closed = rooms.length > 0, door = D || rooms.some(r => roomDoors(g, r).length > 0);
+   // Blocks already in the walls count as made.
+   const made = inv(g, 'window') + g.world.base.glass.length, closed = rooms.some(roomy), door = D || rooms.some(r => roomDoors(g, r).length > 0);
    return { chapter: 3, title: 'Стеклянное убежище', item: 'window', recipes: ['craft_window', 'craft_airlock'],
     why: 'Убежище строят сами: замкнутая коробка из стеклоблоков со шлюзом — дом, где можно дышать без баллонов. Убрали блок — воздух ушёл.',
-    how: ['На верстаке: 1 стекло + 1 железо → 4 стеклоблока; шлюз — 4 железа, 2 стекла и 4 волокна.', 'Выберите стеклоблок, наведите на грунт или на блок и нажмите F. Стены и крыша — стекло, пол — грунт.', 'Шлюз ставится прямо на два нижних блока стены: они вернутся в рюкзак, а вход — «Пройти шлюз» в его окне.'],
-    tasks: [{ ...material(g, 'window', 48, D || closed), label: 'Наделайте стеклоблоков (1 стекло + 1 железо → 4)' }, flag('Постройте замкнутую стеклянную коробку на земле, хотя бы 3×3 внутри и высотой 3', closed || D, BASE_AREA), flag('Встройте шлюз в стену', door, shelter ?? BASE_AREA, 'craft_airlock')] };
+    how: ['На верстаке: 1 стекло + 1 железо → 4 стеклоблока; шлюз — 4 железа, 2 стекла и 4 волокна.', 'Выберите стеклоблок, наведите на грунт или на блок и нажмите F (удержание ставит ряд). Стены и крыша — стекло, пол — грунт.', 'До крыши прицел достаёт сверху: сложите у стены ступеньку из блоков, встаньте на неё и ставьте блоки на верх стены, затем крышу от края.', 'Шлюз ставится прямо на два нижних блока стены: они вернутся в рюкзак, а вход — «Пройти шлюз» в его окне.'],
+    tasks: [{ ...material(g, 'window', 48, D || closed || made >= 48), have: Math.min(48, made), label: 'Наделайте стеклоблоков (1 стекло + 1 железо → 4)' }, flag('Постройте замкнутую стеклянную коробку на земле, хотя бы 3×3 внутри и высотой 3', closed || D, shelter ?? BASE_AREA), flag('Встройте шлюз в стену', door, shelter ?? BASE_AREA, 'craft_airlock')] };
   },
   distributor: () => ({ chapter: 3, title: 'Распределитель', item: 'distributor', recipes: ['craft_distributor'],
    why: 'Распределитель наполняет помещение кислородом, очищает и греет воздух. Один обслуживает до 256 м³.',
@@ -126,7 +129,7 @@ export function guideStep(g: GameState, id: QuestId): GuideStep {
    const pipe = !!dist && piped(dist), cable = !!dist && wired(dist);
    // The air target is 8 GU per m³ of that room (a 3×3×3 box: 216 GU).
    const room = (dist && stationRoom(g, dist)) ?? rooms[0], need = room ? habitableQ(room.volume) / 1000 : 216, have = room ? Math.floor(room.zone.q / 1000) : 0;
-   return { chapter: 3, title: 'Дышащее убежище', item: 'dome', recipes: ['craft_gas_pipe'],
+   return { chapter: 3, title: 'Дышащее убежище', item: 'airlock', recipes: ['craft_gas_pipe'],
     why: 'Нужно не меньше 8 GU кислорода на каждый м³ объёма, чистота воздуха ≥50% и температура −5…+40 °C. Тогда в помещении дышат без баллонов.',
     how: ['Трубой O₂ соедините генератор кислорода с распределителем (до 12 м).', 'Кабелем подайте питание на распределитель.', 'Следите за шкалой воздуха в окне помещения: наведите на стеклоблок или шлюз и нажмите F.'],
     tasks: [flag('Труба: генератор кислорода → распределитель', pipe || D, nearestStation(g, 'electrolyzer'), 'craft_gas_pipe'), flag('Кабель к распределителю', cable || D, nearestStation(g, 'biogenerator')), { label: 'Воздух в помещении', have: Math.min(need, have), need, unit: 'GU', done: D || rooms.some(habitableRoom), target: D ? null : shelter }] };
@@ -143,7 +146,7 @@ export function guideStep(g: GameState, id: QuestId): GuideStep {
    why: 'Верстак II работает без вас: поставьте партии в очередь и займитесь делами.',
    how: ['Протяните кабель от генератора к верстаку II.', 'Поставьте партию в очередь и отойдите дальше 3 м — работа продолжится.'],
    tasks: [flag('Кабель к верстаку II', D || g.world.base.links.some(l => l.kind === 'cable' && [l.from, l.to].some(id => g.world.base.buildings.some(b => b.id === id && b.kind === 'workbench' && b.level === 2))), nearestStation(g, 'workbench', 2)), flag('Партия собрана без вас', fact(g, 'system:auto'), nearestStation(g, 'workbench', 2))] }),
-  base: () => ({ chapter: 4, title: 'База работает', item: 'dome', recipes: [],
+  base: () => ({ chapter: 4, title: 'База работает', item: 'window', recipes: [],
    why: 'Финал первой главы: убежище дышит, а мастерская работает сама.',
    how: ['Пока в помещении пригодный воздух, завершите любую автосборку вдали от верстака.'],
    tasks: [flag('Пригодный воздух в помещении', rooms.some(habitableRoom) || D, shelter), flag('Автосборка при живом убежище', fact(g, 'system:base'), nearestStation(g, 'workbench', 2))] }),
