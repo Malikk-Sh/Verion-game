@@ -18,9 +18,9 @@ export async function render(kind: 'window' | 'airlock', size = 512): Promise<st
   g.setAttribute('position', new THREE.BufferAttribute(f.position, 3)); g.setAttribute('normal', new THREE.BufferAttribute(f.normal, 3)); g.setAttribute('uv', new THREE.BufferAttribute(f.uv, 2)); g.setIndex(new THREE.BufferAttribute(f.index, 1));
   const tex = frameTexture(); await new Promise(r => setTimeout(r, 0)); const mesh = new THREE.Mesh(g, glassMaterial(tex)); mesh.position.set(-.5, -.5, -.5); root.add(mesh);
  } else { const d = buildDoor(); d.update(0, { status: 'work', outer: 0, inner: 0 }, true); d.group.position.y = -1; root.add(d.group); }
- const h = kind === 'window' ? 1 : 2, camera = new THREE.PerspectiveCamera(24, 1, .1, 50), dir = new THREE.Vector3(1.05, .78, 1.35).normalize();
+ const camera = new THREE.PerspectiveCamera(24, 1, .1, 50), dir = new THREE.Vector3(1.05, .78, 1.35).normalize();
  // Three-quarter view from the front right, framed so the model fills about 80% of the square.
- camera.position.copy(dir.multiplyScalar(kind === 'window' ? 4.6 : 6.4)); camera.lookAt(0, kind === 'window' ? 0 : -.05, 0); void h;
+ camera.position.copy(dir.multiplyScalar(kind === 'window' ? 4.6 : 6.4)); camera.lookAt(0, kind === 'window' ? 0 : -.05, 0);
  renderer.render(scene, camera); const url = canvas.toDataURL('image/webp', .9);
  renderer.dispose(); pmrem.dispose(); return url;
 }

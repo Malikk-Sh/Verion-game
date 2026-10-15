@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { reducedMotion } from './motion';
 import { heightAt, type Box } from './world';
-import { allRooms, around, cellCenter, roomCenter, cellKey, cellOf, columnFloor, doorFront, doorKeys, habitableRoom, isGround, roomAtCell, roomsRevision, roomsView, type Door } from './game/rooms';
+import { allRooms, around, cellCenter, roomCenter, cellKey, cellOf, columnFloor, doorFront, habitableRoom, isGround, roomAtCell, roomsRevision, roomsView, type Door } from './game/rooms';
 import type { GameState } from './game/state';
 import { buildDoor, type DoorVisual } from './stationModels';
 import type { Fx } from './fx';
