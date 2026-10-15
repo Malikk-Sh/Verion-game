@@ -40,6 +40,9 @@ export const NODES: ResourceNode[] = [
  { id: 'ice-crater', name: 'Ледяное дно кратера', material: 'ice', itemId: 'ice', x: 266, z: 262, amount: 160, radius: 2, height: 1.4, outcrop: 'ice', box: [3.4, 1.4, 3.4], far: true },
 ];
 export const NODE_BY_ID = new Map(NODES.map(n => [n.id, n]));
+/** Shape of a partly mined deposit (S4), shared by its model, collider and aim: it squats — height falls
+ *  faster than width — instead of shrinking uniformly. Full: 1 × 1; last block: .5 wide, .34 high. */
+export function depositScale(left: number, amount: number) { const f = Math.max(0, Math.min(1, left / amount)); return { xz: .5 + .5 * f, y: .34 + .66 * f }; }
 /** Rendered grass patches (ellipses of tufts, `world.ts`). Patch 0 is shared: tufts with x < 44 belong to grass-a. */
 export const GRASS_PATCHES = [
  {x:44,z:57,rx:4.5,rz:3.4}, {x:16,z:66,rx:4.5,rz:2.6},

@@ -11,9 +11,9 @@ import { TICK_MS } from './clock';
 export type Mining = { nodeId: string | null; ticks: number };
 export type MineEvent =
  | { kind: 'idle' }
- | { kind: 'progress'; nodeId: string; ratio: number }
+ | { kind: 'progress'; nodeId: string; ratio: number; tick: number; need: number }
  | { kind: 'blocked'; nodeId: string; reason: string }
- | { kind: 'block'; nodeId: string; itemId: string; toInventory: number; toGround: number; left: number; toolBroke: boolean };
+ | { kind: 'block'; nodeId: string; itemId: string; toInventory: number; toGround: number; left: number; toolBroke: boolean; need: number };
 export const REACH = 3.2;
 /** The active tool is the one in the selected hotbar cell (S1 UI): −1 when that cell holds no usable tool. */
 export function toolSlot(state: GameState): number {
@@ -41,14 +41,14 @@ export function mineTick(state: GameState, mining: Mining, aimNodeId: string | n
  if (def.tier < MATERIALS[node.material].tier) { mining.ticks = 0; return { kind: 'blocked', nodeId: node.id, reason: 'Нужен инструмент выше уровнем' }; }
  const need = ticksFor(node.material, def.timeMul);
  mining.ticks++;
- if (mining.ticks < need) return { kind: 'progress', nodeId: node.id, ratio: mining.ticks / need };
+ if (mining.ticks < need) return { kind: 'progress', nodeId: node.id, ratio: mining.ticks / need, tick: mining.ticks, need };
  // Complete: one logical transaction.
  mining.ticks = 0;
  state.world.nodes[node.id]--;
  if (tool) tool.durability = (tool.durability ?? 0) - 1;
  const ground = addItems(inv, node.itemId, 1);
  if (ground) dropItems(state, state.player.x, state.player.z, [{ itemId: node.itemId, count: ground }]);
- return { kind: 'block', nodeId: node.id, itemId: node.itemId, toInventory: 1 - ground, toGround: ground, left: state.world.nodes[node.id], toolBroke: tool?.durability === 0 };
+ return { kind: 'block', nodeId: node.id, itemId: node.itemId, toInventory: 1 - ground, toGround: ground, left: state.world.nodes[node.id], toolBroke: tool?.durability === 0, need };
 }
 /** Adds items to the nearest pile within 2 m (≤64 entries) or creates a new one. Stateful items keep their state and never merge. */
 export function dropItems(state: GameState, x: number, z: number, items: ItemStack[]) {
@@ -70,3 +70,7 @@ export function pickUp(state: GameState, dropId: string): number {
  return moved;
 }
 export const itemName = (id: string) => ITEMS[id]?.name ?? id;
+/** Aim label under the reticle (S4): what is left in the deposit and how many the player carries. */
+export const stockText = (left: number, amount: number, carried: number) => `Запас ${left}/${amount} · в рюкзаке ${carried}`;
+/** Durability warning for a tool at or below 10% of its maximum (a broken tool has its own message); '' otherwise. */
+export const wearText = (durability: number | undefined, max: number | undefined) => durability !== undefined && !!max && durability > 0 && durability <= max * .1 ? `Прочность ${durability}/${max}` : '';
