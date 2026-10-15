@@ -93,7 +93,7 @@ function tankFace(cell: HTMLElement, t: Slot, key: string) {
 }
 function tankLive(key: string, t: Slot) {
  const gu = document.getElementById(key + '-gu'), bar = document.getElementById(key + '-bar'), text = t ? String(Math.round((t.milliGU ?? 0) / 1000)) : '';
- if (gu && gu.textContent !== text) gu.textContent = text; if (bar) bar.style.transform = `scaleX(${isTank(t) ? Math.min(1, (t.milliGU ?? 0) / TANKS[t.itemId].capacity) : 0})`;
+ if (gu && gu.textContent !== text) { gu.textContent = text; const cell = document.getElementById(key), label = cell?.getAttribute('aria-label'); if (label && text) cell!.setAttribute('aria-label', label.replace(/\d+( из \d+ GU)/, text + '$1')); } if (bar) bar.style.transform = `scaleX(${isTank(t) ? Math.min(1, (t.milliGU ?? 0) / TANKS[t.itemId].capacity) : 0})`;
 }
 /** The charging slot: tap wears the tank (first empty connector, otherwise instead of the emptier worn tank). */
 function chargeCell(ctx: Ctx, b: Building) {

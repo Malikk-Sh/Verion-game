@@ -102,7 +102,7 @@ export function createPanels(host: PanelHost) {
    c.addEventListener('pointerdown', e => { if (host.game()?.player.inventory[i] && moveFrom === null) dragFrom(e, c, target => drop(i, Number(target.dataset.drop))); });
    return c;
   }));
-  el('pack-hint').textContent = moveFrom !== null ? `Выберите ячейку назначения для «${ITEMS[inv[moveFrom]!.itemId].short}». Пустая — перенос, занятая — обмен.` : message || 'Первая строка — быстрый доступ. Двойное нажатие — перенос между строкой и рюкзаком. Время идёт.';
+  el('pack-hint').textContent = moveFrom !== null && !(pendingGap && performance.now() - pendingGap.at <= 4000) ? `Выберите ячейку назначения для «${ITEMS[inv[moveFrom]!.itemId].short}». Пустая — перенос, занятая — обмен.` : message || 'Первая строка — быстрый доступ. Двойное нажатие — перенос между строкой и рюкзаком. Время идёт.';
   drawDetail(g);
  }
  function drawDetail(g: GameState) {
