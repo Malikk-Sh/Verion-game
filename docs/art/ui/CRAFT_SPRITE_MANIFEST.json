@@ -535,5 +535,33 @@
       ]
     }
   ],
-  "total_game_bytes": 690294
+  "total_game_bytes": 690294,
+  "rendered": [
+    {
+      "id": "window",
+      "generation_mode": "rendered from in-game model",
+      "source": "tools/render_room_sprites.mjs → tools/sprite-render.ts (glass.ts chunkFaces + glassMaterial)",
+      "game_path": "src/assets/items/window.webp",
+      "game_dimensions": [
+        512,
+        512
+      ],
+      "game_bytes": 32352,
+      "game_sha256": "d412ffa7f73e685592909f37598cb5286d9046de7bac5d35a773401bb2cc3ff6",
+      "transparent_background": true
+    },
+    {
+      "id": "airlock",
+      "generation_mode": "rendered from in-game model",
+      "source": "tools/render_room_sprites.mjs → tools/sprite-render.ts (stationModels.ts buildDoor)",
+      "game_path": "src/assets/items/airlock.webp",
+      "game_dimensions": [
+        512,
+        512
+      ],
+      "game_bytes": 9912,
+      "game_sha256": "a3b57ddd77c3e965c7ee16448238a76d9372039167e72e53f00b318fb8c001a0",
+      "transparent_background": true
+    }
+  ]
 }

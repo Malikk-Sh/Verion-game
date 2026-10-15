@@ -187,12 +187,14 @@ function structureView(g: GameState, id: string, host: MachineHost): HTMLElement
  const { say, caution } = host, root = h('div', '', 'st-layout'), left = h('div', '', 'st-main'); root.append(left);
  const key = structureKey(g, id); if (key === null) return root;
  root.dataset.kind = 'room'; const door = doorById(g, id), st = structureStatus(g, key);
+ // Left: status and the habitability checklist; right: air, the airlock and taking the block back.
+ const side = h('aside', '', 'st-bag st-room'); root.append(side);
  left.append(statusBlock(st));
- if (st.room) { const r = st.room; left.append(meter('room-air', 'Воздух', r.zone.q / 1000, capacityOf(r.volume) / 1000, 'GU', 'o2', habitableQ(r.volume) / 1000), meter('room-purity', 'Чистота', r.zone.purity * 100, 100, '%', 'clean', 50), h('p', `Объём ${r.volume} м³ · вместимость ${capacityOf(r.volume) / 1000} GU · дышать можно от ${habitableQ(r.volume) / 1000} GU.`, 'st-note')); }
- else if (st.leak.length) left.append(h('p', 'Путь утечки подсвечен красным в мире на 6 с.', 'st-note'));
+ if (st.room) { const r = st.room; side.append(h('h4', `Помещение · ${r.volume} м³`), meter('room-air', 'Воздух', r.zone.q / 1000, capacityOf(r.volume) / 1000, 'GU', 'o2', habitableQ(r.volume) / 1000), meter('room-purity', 'Чистота', r.zone.purity * 100, 100, '%', 'clean', 50), h('p', `Дышать можно от ${habitableQ(r.volume) / 1000} GU (8 GU на м³).`, 'st-note')); }
+ else { side.append(h('h4', 'Конструкция')); if (st.leak.length) side.append(h('p', 'Путь утечки подсвечен красным в мире на 6 с.', 'st-note')); }
  if (door) {
   const sides = doorRooms(g, door), quick = h('div', '', 'st-actions'), pass = button('Пройти шлюз', () => say(beginPassage(g, door.id), 'Шлюз: 6 с'), 'st-btn accent'); pass.id = 'airlock-pass'; quick.append(pass);
-  left.append(quick, h('p', sides.front && sides.back ? 'Внутренняя дверь: переход стоит 4 GU из помещения назначения.' : sides.front || sides.back ? 'Цикл 6 с. Вход тратит 4 GU воздуха помещения, выход — остаток до 4 GU. В пригодном помещении баллоны не расходуются.' : 'Шлюз не граничит с помещением: это просто проход, без цикла.', 'st-note'));
+  side.append(h('h4', 'Шлюз'), quick, h('p', sides.front && sides.back ? 'Внутренняя дверь: переход стоит 4 GU из помещения назначения.' : sides.front || sides.back ? 'Цикл 6 с. Вход тратит 4 GU воздуха помещения, выход — остаток до 4 GU. В пригодном помещении баллоны не расходуются.' : 'Шлюз не граничит с помещением: это просто проход, без цикла.', 'st-note'));
  }
  const footer = h('div', '', 'st-actions st-foot');
  footer.append(button(door ? 'Забрать шлюз' : 'Забрать стеклоблок', () => {
@@ -200,7 +202,7 @@ function structureView(g: GameState, id: string, host: MachineHost): HTMLElement
   if (r.needConfirm) { confirmKey = key; confirmUntil = performance.now() + 3000; host.room?.tint(key); caution(r.error); return; }
   confirmKey = -1; if (!r.error) host.room?.edited(r); say(r.error, 'Возвращено в рюкзак');
  }, 'st-btn small ghost'));
- left.append(footer);
+ side.append(footer);
  return root;
 }
 export function machineView(g: GameState, id: string, host: MachineHost): HTMLElement {

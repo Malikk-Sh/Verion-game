@@ -165,6 +165,20 @@ export const doorById = (g: GameState, id: string) => g.world.base.doors.find(d 
 export function doorRooms(g: GameState, d: Door): Record<Side, RoomInfo | null> { return { front: roomAtCell(g, landingCells(d, 'front')[0]), back: roomAtCell(g, landingCells(d, 'back')[0]) }; }
 /** A door on a room's boundary (quests: the shelter has a way in). */
 export const roomDoors = (g: GameState, r: Room) => g.world.base.doors.filter(d => { const s = doorRooms(g, d); return s.front?.index === r.index || s.back?.index === r.index; });
+/** The room a glass block or airlock belongs to: a room beside it, else — for a block that faces only the open outside —
+ *  one beside the blocks joined to it by faces (a corner column or a parapet is part of the box it stands on).
+ *  Breadth-first over at most `limit` blocks. */
+export function structureRoom(g: GameState, key: number, limit = 256): RoomInfo | null {
+ const v = roomsView(g.world.base), solid = (k: number) => v.glass.has(k) || v.doorAt.has(k); if (!solid(key)) return null;
+ // A block facing sheltered air (under a roof, inside the box) that is no room belongs to a leaking volume, not to its neighbour.
+ if (around(key).some(n => !solidIn(v, n) && !outsideIn(v, n) && !((v.tag.get(n) ?? -1) >= 0))) return null;
+ const seen = [key], mark = new Set(seen);
+ for (let h = 0; h < seen.length; h++) for (const n of around(seen[h])) {
+  const t = v.tag.get(n); if (t !== undefined && t >= 0) return info(g, v.rooms[t]);
+  if (!mark.has(n) && solid(n) && seen.length < limit) { mark.add(n); seen.push(n); }
+ }
+ return null;
+}
 /** Where a body stands in a cell column: on the first glass/door below, else on the terrain. */
 function standY(view: RoomsView, i: number, k: number, j: number, x: number, z: number) {
  for (let kk = k - 1; kk >= LEVEL_MIN - 1; kk--) { const key = cellKey(i, kk, j); if (view.glass.has(key) || view.doorAt.has(key)) return Math.max(kk + 1, heightAt(x, z)); if (isGround(i, kk, j)) break; }

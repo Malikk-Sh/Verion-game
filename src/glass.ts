@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { reducedMotion } from './motion';
 import { heightAt, type Box } from './world';
-import { allRooms, around, cellCenter, cellKey, cellOf, columnFloor, doorFront, doorKeys, habitableRoom, isGround, roomAtCell, roomsRevision, roomsView, type Door } from './game/rooms';
+import { allRooms, around, cellCenter, roomCenter, cellKey, cellOf, columnFloor, doorFront, doorKeys, habitableRoom, isGround, roomAtCell, roomsRevision, roomsView, type Door } from './game/rooms';
 import type { GameState } from './game/state';
 import { buildDoor, type DoorVisual } from './stationModels';
 import type { Fx } from './fx';
@@ -89,7 +89,7 @@ export function chunkFaces(cells: Iterable<number>, closed: (key: number) => boo
 }
 // ---------- Renderer ----------
 /** 6 cm dark frame round each block face over clear blue-tinted glass (alpha in the texture, mipmapped). */
-function frameTexture() {
+export function frameTexture() {
  const n = 128, b = Math.round(n * .06), c = document.createElement('canvas'); c.width = c.height = n; const x = c.getContext('2d')!;
  x.fillStyle = 'rgba(30,38,42,.88)'; x.fillRect(0, 0, n, n); x.clearRect(b, b, n - 2 * b, n - 2 * b);
  x.fillStyle = 'rgba(196,232,240,.13)'; x.fillRect(b, b, n - 2 * b, n - 2 * b);
@@ -125,11 +125,11 @@ export function createGlassView(root: THREE.Group, fx?: Fx) {
  // ---------- Room lamps: one emissive ceiling plate per room (one draw call) and one pooled point light each ----------
  const lampMat = new THREE.MeshBasicMaterial({ color: '#ffffff' }), lampOn = new THREE.Color('#d6fff8'), lampOff = new THREE.Color('#2c3638'), lampColor = new THREE.Color();
  const lampGeo = new THREE.BoxGeometry(.5, .03, .5);
- let lamps: THREE.InstancedMesh | null = null; const lights: THREE.PointLight[] = []; let roomCells: number[] = [], glow: number[] = [], lampClock = 0;
+ let lamps: THREE.InstancedMesh | null = null; const lights: THREE.PointLight[] = []; let roomCells: number[] = [], glow: number[] = [], lampClock = 0, centers: { x: number; y: number; z: number }[] = [];
  function syncLamps(g: GameState) {
   const rooms = allRooms(g); if (lamps) { group.remove(lamps); lamps.dispose(); lamps = null; }
   while (lights.length > rooms.length) group.remove(lights.pop()!);
-  roomCells = rooms.map(r => r.cell); glow = rooms.map((_, i) => glow[i] ?? 0);
+  roomCells = rooms.map(r => r.cell); glow = rooms.map((_, i) => glow[i] ?? 0); centers = rooms.map(roomCenter);
   if (!rooms.length) return;
   lamps = new THREE.InstancedMesh(lampGeo, lampMat, rooms.length); lamps.name = 'room-lamps'; const m = new THREE.Matrix4(); for (let i = 0; i < rooms.length; i++) lamps.setColorAt(i, lampOff);
   rooms.forEach((r, n) => {
@@ -165,9 +165,11 @@ export function createGlassView(root: THREE.Group, fx?: Fx) {
  }
  // ---------- Breach: 2 s of hiss and steam/dust out of the opening ----------
  let vent: { x: number; y: number; z: number; n: { x: number; y: number; z: number }; left: number; next: number } | null = null;
- function breach(at: { x: number; y: number; z: number }, from?: { x: number; y: number; z: number }) {
-  const dx = from ? at.x - from.x : 0, dz = from ? at.z - from.z : 0, l = Math.hypot(dx, dz) || 1;
-  vent = { ...at, n: { x: dx / l, y: .15, z: dz / l }, left: 2, next: 0 };
+ /** Call before the edit is synced: the jet points away from the centre of the room that was there (the air leaves outwards). */
+ function breach(at: { x: number; y: number; z: number }) {
+  const c = centers.reduce<{ x: number; y: number; z: number } | null>((b, v) => !b || Math.hypot(v.x - at.x, v.y - at.y, v.z - at.z) < Math.hypot(b.x - at.x, b.y - at.y, b.z - at.z) ? v : b, null);
+  const dx = c ? at.x - c.x : 0, dy = c ? at.y - c.y : 1, dz = c ? at.z - c.z : 0, l = Math.hypot(dx, dy, dz) || 1;
+  vent = { ...at, n: { x: dx / l, y: dy / l + .1, z: dz / l }, left: 2, next: 0 };
  }
  function sync(g: GameState) {
   const r = roomsRevision(g); if (r === rev) return false; rev = r;

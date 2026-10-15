@@ -2,7 +2,7 @@ import { countItem } from './inventory';
 import { ITEMS, TANKS } from './defs';
 import { RECIPES, RECIPE_BY_ID, poweredComponent, telemetry, powerRate, supplyRate, gasRate, roomRate, ELECTROLYZER_O2, FIBER_EU, GEN_BUFFER, O2_PER_WU, PORT_O2, nearby, type Building } from './production';
 import type { GameState } from './state';
-import { around, capacityOf, distributorsNeeded, habitableQ, habitableRoom, leakAt, roomAtCell, roomDistributors, stationRoom, DISTRIBUTOR_M3, type RoomInfo } from './rooms';
+import { around, capacityOf, structureRoom, distributorsNeeded, habitableQ, habitableRoom, leakAt, roomAtCell, roomDistributors, stationRoom, DISTRIBUTOR_M3, type RoomInfo } from './rooms';
 /**
  * Plain-language state of a station for its window, the aim label and the status lamp.
  * `tone`: ok (working), idle (fine, waiting), warn (needs the player), off (switched off).
@@ -101,7 +101,9 @@ export function roomStatus(g: GameState, room: RoomInfo): StationStatus {
 }
 /** Status of the structure a glass block or airlock belongs to: the room beside it, else why it is not closed. */
 export function structureStatus(g: GameState, key: number): StationStatus & { room: RoomInfo | null; leak: number[] } {
+ // A block beside a room, or joined by faces to blocks that are (corner columns, a parapet on the roof).
  for (const n of around(key)) { const room = roomAtCell(g, n); if (room) return { ...roomStatus(g, room), room, leak: [] }; }
+ const near = structureRoom(g, key); if (near) return { ...roomStatus(g, near), room: near, leak: [] };
  const leak = leakAt(g, key);
  if (leak?.kind === 'big') return { tone: 'warn', title: 'Слишком большой объём', hint: 'Больше 1024 м³ — нужны перегородки.', room: null, leak: [] };
  return { tone: 'warn', title: 'Утечка', hint: 'Конструкция не замкнута: воздух уходит наружу. Закройте путь утечки стеклоблоками.', room: null, leak: leak?.path ?? [] };

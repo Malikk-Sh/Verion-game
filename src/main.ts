@@ -16,7 +16,7 @@ import { itemArt } from './ui/art';
 import { createProductionPanel } from './ui/production';
 import { createBuildings } from './buildings';
 import { productionTick, manualWork, releaseHandOnDeath, machine } from './game/production';
-import { allRooms, around, breathingRoom, doorById, doorKeys, habitableRoom, removeDoor, removeGlass, roomAtCell, roomDoors, type RoomEdit } from './game/rooms';
+import { allRooms, around, breathingRoom, doorById, doorKeys, habitableRoom, removeDoor, removeGlass, roomAtCell, roomDoors, structureRoom, type RoomEdit } from './game/rooms';
 import { structureStatus } from './game/stationStatus';
 import * as THREE from 'three';
 import './style.css';
@@ -193,8 +193,9 @@ function boot(){
  let holdPlace=false,lastPlace=0,pendingRemove:{key:number;until:number;text:string}|null=null;const placedInHold=new Set<number>();
  /** Rebuild, effects and save after a glass/door edit. */
  function afterEdit(r:RoomEdit,save=true){
-  if(!game)return;built.sync(game);world.invalidateShadows();hudKey='';updateHotbar();
-  if(r.breached&&r.at){const p=game.player;built.glass.breach(r.at,{x:p.x,y:p.y,z:p.z});audio.hiss();toast('Разгерметизация',`Воздух ушёл: ${Math.ceil(r.ventGU)} GU`);}
+  if(!game)return;
+  if(r.breached&&r.at){built.glass.breach(r.at);audio.hiss();toast('Разгерметизация',`Воздух ушёл: ${Math.ceil(r.ventGU)} GU`);}
+  built.sync(game);world.invalidateShadows();hudKey='';updateHotbar();
   if(save)void saver?.save();
  }
  /** One placement from the cell tool; quiet on success (a held F places a row), the reason otherwise. */
@@ -522,8 +523,8 @@ function boot(){
   if(game&&interaction.cellTool){const id=selected?.itemId;kind='cell';label=id==='airlock'?'Встроить шлюз':'Поставить';iconId='i-pack';el('aim-name').textContent=(selected?ITEMS[selected.itemId].name:'')+(id==='airlock'?' · Q — поворот':'');el('aim-meta').textContent=interaction.problem||(id==='window'?'Поставить · F, удерживать — ряд':'Встроить · F');blocked=interaction.problem;box.classList.toggle('blocked',!!blocked);}
   else if(game&&!nearMachine&&(interaction.target?.startsWith('glass:')||interaction.target?.startsWith('door-'))){
    const door=interaction.target.startsWith('door-')?doorById(game,interaction.target):undefined,key=door?doorKeys(door)[0]:Number(interaction.target.slice(6));
-   // Cheap caption (no leak search every frame): the room beside the block, if any.
-   const room=around(key).map(n=>roomAtCell(game!,n)).find(Boolean);kind='room';label=door?'Открыть шлюз':'Открыть помещение';iconId='i-plug';
+   // Cheap caption (no leak search every frame): the room beside the block or the box it belongs to (≤ 64 blocks).
+   const room=around(key).map(n=>roomAtCell(game!,n)).find(Boolean)??structureRoom(game,key,64);kind='room';label=door?'Открыть шлюз':'Открыть помещение';iconId='i-plug';
    el('aim-name').textContent=door?'Шлюз':room?`Помещение · ${room.volume} м³`:'Стеклоблок';el('aim-meta').textContent=(room?(habitableRoom(room)?'Воздух пригоден':`Воздух ${Math.floor(room.zone.q/1000)} GU · непригоден`):'Не замкнуто')+' · F · R — забрать';box.classList.toggle('blocked',!room||!habitableRoom(room));(el('aim-bar').firstElementChild as HTMLElement).style.transform='scaleX(0)';}
   else if(game&&interaction.building){kind='place';label='Установить';iconId='i-pack';el('aim-name').textContent=selected?ITEMS[selected.itemId].name:'';el('aim-meta').textContent=interaction.problem||'Установить · F';blocked=interaction.problem;}
   else if(game&&interaction.linking){kind='link';label='Соединить';iconId='i-plug';el('aim-name').textContent=selected?ITEMS[selected.itemId].name:'';el('aim-meta').textContent=interaction.hint;box.classList.toggle('blocked',!interaction.linkOk);}

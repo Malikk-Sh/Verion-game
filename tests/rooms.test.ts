@@ -269,3 +269,15 @@ test('Save v7 → v8: a passage through a dome ends at once at its landing point
  const g = fresh(); stock(g, { dome: 1 }); assert.equal(startJob(g, 'dismantle_dome'), ''); tick(g, 2000); assert.equal(countItem(g.player.inventory, 'window'), 64); assert.equal(countItem(g.player.inventory, 'airlock'), 1); assert.equal(countItem(g.player.inventory, 'dome'), 0);
  void cloneState; void roomAtCell;
 });
+
+test('Rooms: a block that faces only the outside belongs to the box it is joined to; a leaking box still reports its leak', () => {
+ const g = fresh(); lay(g, CUBE());
+ // Corner columns and a parapet block on the roof: no room beside them, yet they are part of the closed cube.
+ const corner = [0, 1, 2].map(k => cellKey(55, k, 41)), parapet = cellKey(57, 4, 43); lay(g, [...corner, parapet]);
+ assert.equal(allRooms(g).length, 1);
+ for (const k of [...corner, parapet]) { const s = structureStatus(g, k); assert.equal(s.room?.volume, 27, JSON.stringify(cellOf(k))); assert.notEqual(s.title, 'Утечка'); }
+ // A lone block away from any room, and a wall block of an open box, are not part of a room.
+ lay(g, [cellKey(70, 0, 70)]); assert.equal(structureStatus(g, cellKey(70, 0, 70)).title, 'Утечка');
+ const open = shell(62, 0, 50, 2, 2, 2).filter(k => k !== cellKey(64, 0, 50)); lay(g, open);
+ assert.equal(structureStatus(g, cellKey(62, 2, 50)).title, 'Утечка', 'the roof of a box with a hole faces its sheltered, open air');
+});

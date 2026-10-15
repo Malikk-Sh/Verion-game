@@ -32,6 +32,9 @@ import sprite_workbench_2 from '../assets/items/workbench_2.webp';
 import sprite_water from '../assets/items/water.webp';
 import sprite_oxygen from '../assets/items/oxygen.webp';
 import sprite_hydrogen from '../assets/items/hydrogen.webp';
+// S4: rendered from the in-game models (tools/render_room_sprites.mjs).
+import sprite_window from '../assets/items/window.webp';
+import sprite_airlock from '../assets/items/airlock.webp';
 import figureBoots from '../assets/figure/suit_boots.webp';
 /**
  * Shared local raster sprites: one asset for hotbar, inventory, equipment and inspection.
@@ -46,7 +49,7 @@ export const ITEM_ART: Partial<Record<string, string>> = {
  cable: sprite_cable, gas_pipe: sprite_gas_pipe, workbench: sprite_workbench, kiln: sprite_kiln,
  biogenerator: sprite_biogenerator, electrolyzer: sprite_electrolyzer, refill: sprite_refill,
  distributor: sprite_distributor, dome: sprite_dome, workbench_2: sprite_workbench_2,
- water: sprite_water, oxygen: sprite_oxygen, hydrogen: sprite_hydrogen,
+ water: sprite_water, oxygen: sprite_oxygen, hydrogen: sprite_hydrogen, window: sprite_window, airlock: sprite_airlock,
 };
 /** Boots use a stance-specific sprite; removed parts become faint placement guides. */
 export const FIGURE_ART: { parts: Record<SuitPart, string> } = { parts: { helmet, chest, legs, boots: figureBoots } };
