@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {Diagnostics,Ring} from '../src/diagnostics';
-import {Terrain,createShadeBaker} from '../src/terrain';
+import {Terrain,createShadeBaker,FINE_R} from '../src/terrain';
 import {heightAt} from '../src/world';
 import {StaticBatch} from '../src/geometry';
 import {sceneInterval} from '../src/renderPolicy';
@@ -44,4 +44,30 @@ test('Spatial scenery batches exclude distant rocks without moving or dropping a
  assert.equal(meshes.reduce((n,m)=>n+m.geometry.attributes.position.count,0),72);const xs=meshes.map(m=>m.geometry.boundingSphere!.center.x).sort((a,b)=>a-b);assert.deepEqual(xs,[5,105]);
  const camera=new THREE.PerspectiveCamera(60,1,.15,25);camera.position.set(5,2,12);camera.lookAt(5,1,5);camera.updateMatrixWorld();scene.updateMatrixWorld();
  const f=new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));assert.equal(meshes.filter(m=>f.intersectsObject(m)).length,1);
+});
+
+test('Middle terrain level: 2 m chunks beyond 55 m lie on the collision grid and give way to fine chunks up close',()=>{
+ const t=new Terrain(new THREE.MeshBasicMaterial(),(_x,_z,_h,_s,c)=>c.setRGB(.3,.2,.1));t.setQuality('standard');assert.equal(FINE_R,55);
+ // Centre of the block 40…120: four edge neighbours are 40 m away (fine), the four diagonal ones 56.6 m (middle).
+ const p=new THREE.Vector3(80,2,80);for(let i=0;i<60;i++)t.update(p,1000);assert.equal(t.fineBlocks,5);assert.equal(t.midBlocks,4);
+ // A middle chunk: 40 m wide with 21 × 21 vertices (a coarse block has as many over 80 m).
+ const isMid=(m:THREE.Object3D)=>{const g=(m as THREE.Mesh).geometry;return g.attributes.position.count===21*21+21*4&&g.boundingBox!.max.x-g.boundingBox!.min.x===40;};
+ const visible=t.group.children.filter(m=>m.visible) as THREE.Mesh[],mid=visible.filter(isMid);assert.equal(mid.length,16);
+ for(const m of mid){const pos=m.geometry.attributes.position;for(let i=0;i<21*21;i+=7){assert.ok(pos.getX(i)%2===0);assert.ok(Math.abs(pos.getY(i)-heightAt(pos.getX(i),pos.getZ(i)))<.00002);}}
+ // Walking into a diagonal block: its middle level stays until the fine one is complete, then hides.
+ const q=new THREE.Vector3(150,2,150);t.update(q,0);assert.ok(t.group.children.filter(m=>m.visible&&isMid(m)).length>=4);
+ for(let i=0;i<80;i++)t.update(q,1000);const near=t.group.children.filter(m=>m.visible&&(m as THREE.Mesh).geometry.boundingBox!.min.x>=120&&(m as THREE.Mesh).geometry.boundingBox!.max.x<=200&&(m as THREE.Mesh).geometry.boundingBox!.min.z>=120&&(m as THREE.Mesh).geometry.boundingBox!.max.z<=200) as THREE.Mesh[];
+ assert.equal(near.length,4);assert.ok(near.every(m=>m.geometry.attributes.position.count>1000));
+ // Its middle level stays cached (hidden): at shared even grid points both levels have the same normal and colour, so the swap does not flash.
+ const fineAt=new Map<string,number[]>();for(const m of near){const a=m.geometry.attributes;for(let i=0;i<41*41;i++)fineAt.set(a.position.getX(i)+','+a.position.getZ(i),[a.normal.getX(i),a.normal.getY(i),a.normal.getZ(i)]);}
+ const hidden=t.group.children.filter(m=>!m.visible&&isMid(m)&&(m as THREE.Mesh).geometry.boundingBox!.min.x>=120&&(m as THREE.Mesh).geometry.boundingBox!.max.x<=200&&(m as THREE.Mesh).geometry.boundingBox!.min.z>=120&&(m as THREE.Mesh).geometry.boundingBox!.max.z<=200) as THREE.Mesh[];
+ assert.equal(hidden.length,4);let shared=0;
+ for(const m of hidden){const a=m.geometry.attributes;for(let i=0;i<21*21;i++){const f=fineAt.get(a.position.getX(i)+','+a.position.getZ(i))!;assert.ok(f);for(let k=0;k<3;k++)assert.ok(Math.abs(a.normal.getComponent(i,k)-f[k])<1e-6);shared++;}}
+ assert.equal(shared,4*441);
+});
+test('High keeps 1 m terrain to 80 m; Low ends the middle level at 70 m',()=>{
+ const count=(q:'low'|'high')=>{const t=new Terrain(new THREE.MeshBasicMaterial(),(_x,_z,_h,_s,c)=>c.setRGB(.3,.2,.1));t.setQuality(q);const p=new THREE.Vector3(80,2,80);for(let i=0;i<120;i++)t.update(p,1000);return [t.fineBlocks,t.midBlocks];};
+ // From the centre of a block, the diagonal neighbours lie 56.6 m away: fine on High, middle on Low; the next ring
+ // (12 blocks at 120–127 m) is middle on High and coarse on Low.
+ assert.deepEqual(count('high'),[9,12]);assert.deepEqual(count('low'),[5,4]);
 });

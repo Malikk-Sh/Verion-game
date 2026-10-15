@@ -188,5 +188,5 @@ export function createBuildings(scene: THREE.Scene, fx?: Fx) {
  }
  /** Newly placed station drops in with a short settle animation. */
  function celebrate(id: string) { born.set(id, 0); }
- return { sync, reset, update, celebrate, root, tankFull: (t: { itemId: string; milliGU?: number }) => (t.milliGU ?? 0) >= TANKS[t.itemId].capacity };
+ return { sync, reset, update, celebrate, root, /** A station is dropping in: its shadow must follow. */ get animating() { return born.size > 0; }, tankFull: (t: { itemId: string; milliGU?: number }) => (t.milliGU ?? 0) >= TANKS[t.itemId].capacity };
 }

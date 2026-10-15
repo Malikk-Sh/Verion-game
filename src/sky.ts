@@ -3,11 +3,11 @@ import * as THREE from 'three';
 export function createSky(){
  const uniforms={
   sunDir:{value:new THREE.Vector3(.93,.22,.3).normalize()},
-  night:{value:0},time:{value:0},
+  night:{value:0},time:{value:0},cloud:{value:new THREE.Vector2()},
  };
  const material=new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,fog:false,uniforms,
   vertexShader:`varying vec3 vDir;void main(){vDir=normalize(position);vec4 p=projectionMatrix*modelViewMatrix*vec4(position,1.);gl_Position=p.xyww;}`,
-  fragmentShader:`uniform vec3 sunDir;uniform float night;uniform float time;varying vec3 vDir;
+  fragmentShader:`uniform vec3 sunDir;uniform float night;uniform float time;uniform vec2 cloud;varying vec3 vDir;
   float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
   float n(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}
   float fbm(vec2 p){float s=0.,a=.5;for(int i=0;i<4;i++){s+=n(p)*a;p=p*2.03+vec2(1.7,9.2);a*=.5;}return s;}
@@ -37,8 +37,8 @@ export function createSky(){
      float vis=mix(.62,1.,night)*smoothstep(-.02,.06,y);
      col=mix(col,pc,disc*vis);
      float rim=smoothstep(1.3,1.,rr)*smoothstep(.95,1.05,rr);col+=vec3(.55,.75,1.)*rim*.35*vis*(.35+lit);}}
-   // Thin high clouds, lit by the sun during the day, faintly blue at night.
-   vec2 cp=d.xz/(y+.12)*1.6+vec2(time*.004,time*.0015);
+   // Thin high clouds, lit by the sun during the day, faintly blue at night; they drift with the shared wind (S4).
+   vec2 cp=d.xz/(y+.12)*1.6-cloud;
    float c=smoothstep(.55,.9,fbm(cp))*smoothstep(0.,.25,y);
    vec3 cc=mix(vec3(1.,.9,.78)+vec3(.35,.2,.05)*pow(sd,4.),vec3(.16,.2,.28),night);
    col=mix(col,cc,c*.42);
@@ -49,18 +49,45 @@ export function createSky(){
  const mesh=new THREE.Mesh(new THREE.SphereGeometry(900,48,24),material);mesh.renderOrder=-10;mesh.frustumCulled=false;
  return {mesh,uniforms};
 }
-/** Drifting dust motes near the camera: sells scale and wind. */
-export function createDust(count=420){
- const g=new THREE.BufferGeometry(),p=new Float32Array(count*3),seed=new Float32Array(count);
- for(let i=0;i<count;i++){p[i*3]=(Math.random()-.5)*50;p[i*3+1]=Math.random()*4.5;p[i*3+2]=(Math.random()-.5)*50;seed[i]=Math.random();}
- g.setAttribute('position',new THREE.BufferAttribute(p,3));g.setAttribute('seed',new THREE.BufferAttribute(seed,1));
- const uniforms={time:{value:0},origin:{value:new THREE.Vector3()},tint:{value:new THREE.Color('#fff1d6')},opacity:{value:.55}};
- const m=new THREE.ShaderMaterial({transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,uniforms,
-  vertexShader:`attribute float seed;uniform float time;uniform vec3 origin;varying float vA;
-  void main(){vec3 p=position;p.x+=time*(.9+seed*.8);p.z+=sin(time*.3+seed*20.)*1.5;p.y+=sin(time*.7+seed*40.)*.4;
-   p.xz=mod(p.xz-origin.xz+25.,50.)-25.+origin.xz;p.y+=origin.y-2.;
-   vec4 mv=modelViewMatrix*vec4(p,1.);gl_Position=projectionMatrix*mv;float dist=-mv.z;
-   gl_PointSize=clamp(26./dist,1.,3.5);vA=smoothstep(22.,3.,dist)*smoothstep(.3,1.5,dist)*(.35+seed*.65);}`,
-  fragmentShader:`uniform vec3 tint;uniform float opacity;varying float vA;void main(){float r=length(gl_PointCoord-.5);gl_FragColor=vec4(tint,(1.-smoothstep(.2,.5,r))*vA*opacity);}`});
- const points=new THREE.Points(g,m);points.frustumCulled=false;return {points,uniforms};
+/**
+ * Wind-blown dust motes (S4): one instanced draw call of soft streaks stretched along the shared wind,
+ * brighter towards the sun by day (forward scattering), faint and cool at night, denser in gusts. Seeds are
+ * static; only uniforms change, and they advance on the frozen scene step, so paused frames do not move.
+ */
+export const MOTES={low:{count:96,box:32},standard:{count:320,box:40},high:{count:640,box:50}} as const;
+export function createMotes(max=640){
+ const g=new THREE.InstancedBufferGeometry();
+ g.setAttribute('position',new THREE.Float32BufferAttribute([-1,-1,0,1,-1,0,1,1,0,-1,1,0],3));g.setIndex([0,1,2,0,2,3]);
+ // Deterministic seeds: the same motes in every session and every test.
+ const seed=new Float32Array(max*4);let r=91813;const rnd=()=>{r=(Math.imul(r,1664525)+1013904223)>>>0;return r/4294967296;};for(let i=0;i<seed.length;i++)seed[i]=rnd();
+ g.setAttribute('aSeed',new THREE.InstancedBufferAttribute(seed,4));g.instanceCount=MOTES.standard.count;
+ const uniforms={uOffset:{value:new THREE.Vector2()},uBox:{value:40},uTime:{value:0},uWind:{value:new THREE.Vector3(1.5,0,0)},uGust:{value:.55},uOrigin:{value:new THREE.Vector3()},
+  uSun:{value:new THREE.Vector3(0,1,0)},uNight:{value:0},uTint:{value:new THREE.Color('#fff1d6')},uOpacity:{value:.5},uPx:{value:200}};
+ const m=new THREE.ShaderMaterial({transparent:true,depthWrite:false,uniforms,
+  vertexShader:`attribute vec4 aSeed;uniform vec2 uOffset;uniform float uBox,uTime,uGust,uPx;uniform vec3 uWind,uOrigin;varying vec3 vView;varying vec2 vQ;varying float vLen,vA;
+  void main(){
+   vec3 p;p.xz=aSeed.xz*uBox+uOffset+vec2(sin(uTime*.6+aSeed.w*31.),cos(uTime*.45+aSeed.w*17.))*1.1;
+   p.xz=mod(p.xz-uOrigin.xz+uBox*.5,uBox)-uBox*.5+uOrigin.xz;p.y=uOrigin.y-1.8+aSeed.y*4.5+sin(uTime*.7+aSeed.w*40.)*.3;
+   vec4 hv=viewMatrix*vec4(p,1.),tv=viewMatrix*vec4(p-uWind*(.07+.09*uGust),1.);float dist=-hv.z;
+   vView=p-cameraPosition;
+   // Screen-space streak from the tail to the head, at least 1.5 px wide (alpha compensates for the widening).
+   vec2 hs=hv.xy/max(dist,.05),ts=tv.xy/max(-tv.z,.05),d=(hs-ts)*uPx;float len=length(d);vec2 dir=len>.3?d/len:vec2(1.,0.);if(len>48.){ts=hs-dir*48./uPx;len=48.;}
+   float rw=(.014+.02*aSeed.w)/max(dist,.05)*uPx,rp=max(rw,1.5);
+   vec2 s=(position.x<0.?ts:hs)*uPx+(dir*position.x+vec2(-dir.y,dir.x)*position.y)*rp;
+   gl_Position=dist>.05?projectionMatrix*vec4(s/uPx*dist,-dist,1.):vec4(0.,0.,2.,1.);
+   vQ=vec2((position.x+1.)*.5*(len+2.*rp)-rp,position.y*rp);vLen=len;
+   vA=min(1.,rw/1.5)*smoothstep(.8,2.4,dist)*(1.-smoothstep(13.,uBox*.5,dist))*(.45+.55*aSeed.w)*(.5+.5*uGust)/(1.+len/(24.*rp));
+   vQ/=rp;vLen/=rp;}`,
+  fragmentShader:`uniform vec3 uSun,uTint;uniform float uNight,uOpacity;varying vec3 vView;varying vec2 vQ;varying float vLen,vA;
+  void main(){float dx=max(-vQ.x,0.)+max(vQ.x-vLen,0.);float r=length(vec2(dx,vQ.y));float a=(1.-smoothstep(.3,1.,r))*mix(.55,1.,clamp(vQ.x/max(vLen,.01),0.,1.));
+   float scatter=pow(max(dot(normalize(vView),uSun),0.),8.)*(1.-uNight);
+   gl_FragColor=vec4(uTint*(1.05+2.6*scatter),min(1.,a*vA*uOpacity*(1.+scatter*1.5)));
+   #include <tonemapping_fragment>
+   #include <colorspace_fragment>
+  }`});
+ const mesh=new THREE.Mesh(g,m);mesh.frustumCulled=false;mesh.renderOrder=5;mesh.name='dust-motes';
+ let quality:keyof typeof MOTES='standard';
+ return {mesh,uniforms,
+  setQuality(q:keyof typeof MOTES){quality=q;g.instanceCount=Math.min(max,MOTES[q].count);uniforms.uBox.value=MOTES[q].box;},
+  get count(){return mesh.visible?g.instanceCount:0;},get quality(){return quality;}};
 }
