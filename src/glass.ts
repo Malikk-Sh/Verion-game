@@ -106,9 +106,10 @@ const ROOM_LIGHT = '#cdf7f0';
 export function createGlassView(root: THREE.Group, fx?: Fx) {
  const group = new THREE.Group(); group.name = 'glass'; root.add(group);
  const mat = glassMaterial(frameTexture());
- // An empty mesh keeps the glass program in the boot-time compile (it is never drawn: no faces).
+ // An empty mesh puts the glass program into the boot-time compile, then hides itself after the first frame (a draw of
+ // zero vertices still counts as a call).
  const warm = new THREE.Mesh(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([0, -999, 0, 0, -999, 0, 0, -999, 0], 3)).setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0], 3)).setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 0, 0, 0, 0], 2)), mat);
- warm.geometry.setDrawRange(0, 0); warm.frustumCulled = false; group.add(warm);
+ warm.geometry.setDrawRange(0, 0); warm.frustumCulled = false; warm.onAfterRender = () => { warm.visible = false; }; group.add(warm);
  const chunks = new Map<number, { cells: Set<number>; mesh: THREE.Mesh | null }>();
  const hash = new SpatialHash(), solids = new Map<number, Box>(), doors = new Map<string, { d: Door; v: DoorVisual; box: Box }>();
  const skirt: Skirt = { ground: isGround, height: heightAt };
