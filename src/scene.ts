@@ -12,6 +12,7 @@ import { Terrain, createShadeBaker, useBakedShade } from './terrain';
 import { CYCLE_S, nightAmount, sunDirection } from './game/daycycle';
 import { PATCH_NODES, SHARED_PATCH_SPLIT } from './game/resources';
 import { createLightPool, LIGHT_PRIORITY } from './lights';
+import { createDepositFeel } from './depositFeel';
 
 export type Quality = 'low'|'standard'|'high';
 // S4: sun shadows fade out over the outer 10% of the shadow frustum instead of ending at a hard line (no extra taps).
@@ -370,8 +371,10 @@ export function createWorld(scene:THREE.Scene,wind=new Wind()){
    batch.add(boulders[i%6],ice,x,heightAt(x,z)-s*.3,z,s,s*.6,s,0,rng()*6,0,'#e8f4f8');}
  }
  // ---------- Mineable deposits (S1): each node is its own group so it shrinks as it is mined ----------
+ // S4: the batch keeps piece ranges, so loose blocks can disappear one by one (depositFeel.ts).
  const nodeGroups=new Map<string,THREE.Group>();
- const deposit=(id:string,x:number,z:number,build:(b:StaticBatch)=>void)=>{const b=new StaticBatch();build(b);const g=new THREE.Group();g.name='node-'+id;g.position.set(x,heightAt(x,z),z);b.finish(g);scene.add(g);nodeGroups.set(id,g);};
+ const deposit=(id:string,x:number,z:number,build:(b:StaticBatch)=>void)=>{const b=new StaticBatch(0,undefined,true);build(b);const g=new THREE.Group();g.name='node-'+id;g.position.set(x,heightAt(x,z),z);g.userData.y0=g.position.y;b.finish(g);scene.add(g);nodeGroups.set(id,g);};
+ const deposits=createDepositFeel(nodeGroups,()=>{if(!sun.shadow.needsUpdate)shadowRedraws++;sun.shadow.needsUpdate=true;});
  {
   const I=oreOutcrop(610,{strata:3,base:'#4a4038',dust:'#8a6a50',dark:'#2a2320'},{freq:2.2,width:.05,blobs:.74,lift:.018,crystals:.12,stain:'#7a3f22'});
   deposit('iron-a',67,65,b=>{b.add(I.host,rock,0,-.1,0,1.8,1.7,1.5,0,.3,0);b.add(I.veins,iron,0,-.1,0,1.8,1.7,1.5,0,.3,0);});
@@ -408,7 +411,7 @@ export function createWorld(scene:THREE.Scene,wind=new Wind()){
  }
  const grassHarvest=new Map<string,()=>void>();
  const grassRemaining=new Map<string,number>();
- const setNodeAmount=(id:string,left:number,amount:number)=>{grassRemaining.set(id,left/amount);grassHarvest.get(id)?.();const g=nodeGroups.get(id);if(g){g.visible=left>0;g.scale.setScalar(.42+.58*Math.max(0,left)/amount);}};
+ const setNodeAmount=(id:string,left:number,amount:number)=>{grassRemaining.set(id,left/amount);grassHarvest.get(id)?.();deposits.setAmount(id,left,amount);};
  {
  // Loose weathered pieces resting on the ground (sunk slightly, never hovering).
   for(const [ox,oz,m] of [[67,65,iron],[83,55,copper]] as const)for(let i=0;i<7;i++){const a=rng()*6.28,d=1.6+rng()*1.8,px=ox+Math.cos(a)*d,pz=oz+Math.sin(a)*d,s=.1+rng()*.14;
@@ -505,6 +508,7 @@ export function createWorld(scene:THREE.Scene,wind=new Wind()){
  const shadowL=new THREE.Vector3(),shadowAt=new THREE.Vector3(Infinity,0,0);let shadowRedraws=0;
  /** Capture stable day/night reflections during loading, never during active play. */
  function prepare(renderer:THREE.WebGLRenderer){
+  deposits.prewarm();
   if(environments.low.length)return;
   const gen=new THREE.PMREMGenerator(renderer);
   for(const [targets,size] of [[environments.low,64],[environments.full,128]] as const)for(const night of [0,1]){
@@ -545,9 +549,9 @@ export function createWorld(scene:THREE.Scene,wind=new Wind()){
   measure?.('terrain',performance.now()-at);at=performance.now();
   const blink=(Math.sin(time*3)>.6?1:0);redLight.emissiveIntensity=.3+blink*3.5;beacon.emissiveIntensity=1.2+Math.sin(time*2.2)*.8;holo.opacity=.55+Math.sin(time*1.7)*.2;
   screenClock-=dt;if(screenClock<=0&&camera.position.distanceTo(interior.position)<14){screenClock=.25;screen.draw(time,k>.5);}
-  lights.update(camera,dt,lightRoots);
+  lights.update(camera,dt,lightRoots);deposits.update(dt);
   measure?.('animation',performance.now()-at);
  }
  setQuality('standard');
- return{setTime,setQuality,prepare,invalidateShadows:()=>{if(!sun.shadow.needsUpdate)shadowRedraws++;sun.shadow.needsUpdate=true;},get shadowRedraws(){return shadowRedraws;},lights,lightRoots,wind,motes,groundColorAt,sunLight:sun,hemiLight:hemi,get sunDirection(){return sunTrue;},update,setNodeAmount,nodeGroups,followSky:(_p:THREE.Vector3)=>{},landmarks:LANDMARKS,grassCount:GRASS.length,meshes,terrain,get quality(){return quality;},get nightValue(){return k;}};
+ return{setTime,setQuality,prepare,invalidateShadows:()=>{if(!sun.shadow.needsUpdate)shadowRedraws++;sun.shadow.needsUpdate=true;},get shadowRedraws(){return shadowRedraws;},lights,lightRoots,wind,motes,groundColorAt,sunLight:sun,hemiLight:hemi,get sunDirection(){return sunTrue;},update,setNodeAmount,nodeGroups,deposits,followSky:(_p:THREE.Vector3)=>{},landmarks:LANDMARKS,grassCount:GRASS.length,meshes,terrain,get quality(){return quality;},get nightValue(){return k;}};
 }

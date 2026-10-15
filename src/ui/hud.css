@@ -67,6 +67,7 @@
 .hex svg{width:calc(20px * var(--hud-movement));height:calc(20px * var(--hud-movement))}
 #aim{left:var(--hud-aim-left);top:var(--hud-aim-top);max-width:var(--hud-aim-width);height:calc(32px * var(--hud-info));padding:calc(4px * var(--hud-info)) calc(10px * var(--hud-info));gap:calc(6px * var(--hud-info));font-size:max(12px,calc(12px * var(--hud-info)))}
 #aim-name{min-width:0;overflow:hidden;text-overflow:ellipsis}#aim-meta{font-size:max(11px,calc(11px * var(--hud-info)));min-width:0;overflow:hidden;text-overflow:ellipsis;flex-shrink:1}
+#aim-wear{font-size:max(11px,calc(11px * var(--hud-info)));flex-shrink:0}
 #toast{top:var(--hud-toast-top);left:auto;right:var(--sr);transform:none;max-width:var(--hud-toast-width);padding:calc(6px * var(--hud-info)) calc(14px * var(--hud-info));text-align:center;animation-name:hud-toast}
 #toast .tiny{font-size:max(11px,calc(11px * var(--hud-info)))}#toast strong{font-size:max(12px,calc(12px * var(--hud-info)))}
 @keyframes hud-toast{0%{opacity:0;translate:0 -6px}10%,80%{opacity:1;translate:0 0}100%{opacity:0;translate:0 -4px}}

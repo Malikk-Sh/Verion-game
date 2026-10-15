@@ -8,7 +8,7 @@ import type { WindState } from './wind';
  * buffer, so emitting never allocates. Purely visual — never read by the game.
  */
 /** Sprite cut-outs drawn by the fragment shader. */
-export const SHAPE = { round: 0, soft: 1, shard: 2, flake: 3, grain: 4, leaf: 5, spark: 6 } as const;
+export const SHAPE = { round: 0, soft: 1, shard: 2, flake: 3, grain: 4, leaf: 5, spark: 6, chunk: 7 } as const;
 export type Emit = {
  x: number; y: number; z: number; vx?: number; vy?: number; vz?: number; spread?: number; up?: number;
  /** One colour, or a palette: each particle picks one. */
@@ -110,6 +110,7 @@ void main(){vec2 p=gl_PointCoord-.5;float c=cos(vRot),s=sin(vRot);vec2 q=vec2(c*
  else if(k==3){float d=abs(q.x)/.47+abs(q.y)/.17;a=1.-smoothstep(.8,1.,d);col=mix(col*(q.y>0.?1.25:.72),vec3(1.,.97,.9),pow(abs(sin(vRot*1.5)),18.)*.85);}
  else if(k==4){a=smoothstep(.5,.3,length(p));col*=p.x+p.y<0.?1.12:.8;}
  else if(k==5){float d=length(vec2(q.x/.48,q.y/(.2-abs(q.x)*.2)));a=1.-smoothstep(.75,1.,d);col*=(q.y>0.?1.1:.82)+.25*smoothstep(.025,.0,abs(q.y));}
+ else if(k==7){float d=max(max(abs(q.x)*.87+q.y*.5,abs(q.x)*.87-q.y*.5)*(1.+.14*sin(vRot*3.)),abs(q.y)*1.06)-.38;a=1.-smoothstep(-.035,0.,d);col*=(q.y>.06?1.3:q.x>.0?.9:.6)*(1.-.4*smoothstep(-.09,0.,d));}
  else{float d=length(q);a=(exp(-abs(q.x)*22.)*exp(-abs(q.y)*5.)+exp(-abs(q.y)*22.)*exp(-abs(q.x)*5.))*smoothstep(.5,.1,d)+smoothstep(.16,.0,d);}
  if(a<.01)discard;gl_FragColor=vec4(col*uLight,min(1.,a)*vAlpha);
 #include <tonemapping_fragment>
@@ -149,6 +150,8 @@ const P = {
  copperHost: ['#3c4640', '#6f8f7c', '#4a5650'], copperFlake: ['#b8703f', '#c98450'], patina: ['#3f8f78', '#4fa088'], ice: ['#ffffff', '#e8f4f8', '#cfe6ec', '#9cc0cc'],
  sand: ['#d3bb82', '#cdb67f', '#dcc58f', '#c4a874'], grass: ['#3c4a39', '#6d7c5d', '#b8ae80', '#56664a'],
 } as const;
+/** Solid chunks: the deposit's host rock and, for ores, a share of the metal. */
+const CHUNK: Record<string, readonly string[]> = { stone: P.stone, iron: [...P.ironHost, ...P.ironHost, '#5f6e7a'], copper: [...P.copperHost, ...P.copperHost, '#c98450'], ice: ['#f4fbff', '#d8ecf2', '#b5d6e0'] };
 export const MATERIAL_FX: Record<string, string> = { stone: '#b9b0a2', iron: '#5a4c44', copper: '#b8703f', ice: '#e8f6fb', sand: '#d8c08a', grass: '#8a9a5e' };
 const DUST: Record<string, string> = { stone: '#c9b79c', iron: '#9a8270', copper: '#8f9a88', ice: '#f4fbff', sand: '#dcc79a', grass: '#a7b07a' };
 type V3 = { x: number; y: number; z: number };
@@ -172,9 +175,13 @@ export function createFx(scene: THREE.Scene, opts: { ground?: Ground } = {}) {
   /** Chips off a deposit at each tool strike, flying out of the struck face (`normal`) and settling on the ground. */
   strike(x: number, y: number, z: number, material: string, normal?: V3) {
    if (!on()) return; const n = out(normal), base = { x, y, z, ...n, hold: .75, bounce: .28, life: 1.9, gravity: 9.5, drag: .5 };
+   // S4: a few solid chunks of the material (faceted, lit top) with every strike, besides the small chips.
+   if (material !== 'grass' && material !== 'sand') scaled(solid, { ...base, color: CHUNK[material] ?? CHUNK.stone, count: 4, spread: 1.5, up: 2.6, push: .6, size: .15, shape: SHAPE.chunk, spin: 7, bounce: .22 });
    switch (material) {
     case 'iron': case 'copper': {
      const iron = material === 'iron';
+     // Metal on metal: short hot sparks off the struck face.
+     scaled(glow, { x, y, z, ...n, color: ['#ffd28a', '#ffb45a', '#fff1c8'], count: 3, spread: 2.6, up: 1.5, push: 1.2, size: .05, life: .25, gravity: 6, drag: .4, shape: SHAPE.spark, spin: 3 });
      scaled(solid, { ...base, color: iron ? P.ironHost : P.copperHost, count: 6, spread: 1.6, up: 2.8, push: .55, size: .1, shape: SHAPE.shard, spin: 9 });
      scaled(solid, { ...base, color: iron ? P.ironFlake : P.copperFlake, count: 5, spread: 1.8, up: 2.4, push: .6, size: .08, shape: SHAPE.flake, spin: 14, bounce: .2 });
      scaled(solid, { ...base, color: iron ? P.rust : P.patina, count: 3, spread: 1.4, up: 2, push: .5, size: .05, shape: SHAPE.grain });
@@ -202,7 +209,17 @@ export function createFx(scene: THREE.Scene, opts: { ground?: Ground } = {}) {
    const shape = material === 'sand' ? SHAPE.grain : material === 'grass' ? SHAPE.leaf : SHAPE.shard;
    scaled(solid, { x, y, z, ...n, color: pal, count: material === 'sand' ? 26 : 18, spread: 3, up: 3.4, push: 1.4, size: material === 'sand' ? .045 : .12, life: 2.2, gravity: material === 'grass' ? 3 : 10, drag: material === 'grass' ? 2 : .4, shape, spin: 10, bounce: material === 'ice' ? .4 : .25, hold: .75, wind: material === 'grass' ? .7 : 0, flutter: material === 'grass' ? 3 : 0 });
    scaled(soft, { x, y: y - .2, z, ...n, color: DUST[material] ?? DUST.stone, count: 8, spread: 1.4, up: .7, push: .4, size: .55, grow: 2.2, life: 1.4, gravity: -.15, drag: 1.2, alpha: .4, shape: SHAPE.soft, wind: .4 });
+   if (material !== 'grass' && material !== 'sand') scaled(solid, { x, y, z, ...n, color: CHUNK[material] ?? CHUNK.stone, count: 12, spread: 2.4, up: 3.2, push: 1.1, size: .17, life: 2.2, gravity: 10, drag: .4, shape: SHAPE.chunk, spin: 8, bounce: .25, hold: .75 });
   },
+  /** The last block: the deposit collapses (0.5 s) — heavy chunks over its footprint and a low ring of dust. */
+  crumble(x: number, y: number, z: number, radius: number, material: string) {
+   if (!on()) return; const loose = material === 'sand' || material === 'grass';
+   for (let i = 0; i < 20; i++) { const a = i / 20 * Math.PI * 2 + Math.random() * .3, r = radius * (.2 + Math.random() * .6); scaled(solid, { x: x + Math.cos(a) * r, y: y + .25 + Math.random() * .5, z: z + Math.sin(a) * r, vx: Math.cos(a) * 1.2, vz: Math.sin(a) * 1.2, color: loose ? P.sand : CHUNK[material] ?? CHUNK.stone, size: loose ? .05 : .2, up: 1.6, life: 2.4, gravity: 10, drag: .4, shape: loose ? SHAPE.grain : SHAPE.chunk, spin: 6, bounce: .2, hold: .8 }); }
+   for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; scaled(soft, { x: x + Math.cos(a) * radius * .6, y: y + .15, z: z + Math.sin(a) * radius * .6, vx: Math.cos(a) * 1.5, vz: Math.sin(a) * 1.5, color: DUST[material] ?? DUST.stone, size: .6, grow: 2.4, life: 1.8, gravity: -.1, drag: 1.4, alpha: .42, shape: SHAPE.soft, wind: .4 }); }
+   if (material === 'ice') scaled(glow, { x, y: y + .4, z, color: '#bff6ff', count: 8, spread: 2, up: 1.4, size: .07, life: .6, gravity: 3, shape: SHAPE.spark, spin: 4 });
+  },
+  /** Loading: shows the pools so compileAsync builds their programs (no first-strike shader compile). */
+  prewarm(on: boolean) { for (const p of [solid, soft, glow]) p.points.visible = on || p.points.visible && p.alive > 0; },
   /** A placed station settles: a ring of dust at its footprint. */
   land(x: number, y: number, z: number, radius: number) {
    if (!on()) return;
