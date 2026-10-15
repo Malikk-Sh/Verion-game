@@ -217,7 +217,7 @@ export function createGlassView(root: THREE.Group, fx?: Fx) {
   query: (minX: number, minZ: number, maxX: number, maxZ: number, out: Box[]) => hash.query(minX, minZ, maxX, maxZ, out),
   /** A breach jet is playing. */
   get venting() { return !!vent; },
-  stats: () => ({ chunks: [...chunks.values()].filter(c => c.mesh).length, faces: [...chunks.values()].reduce((a, c) => a + ((c.mesh?.geometry.index?.count ?? 0) / 6), 0), doors: doors.size, lamps: lamps?.count ?? 0, boxes: hash.count }),
+  stats: () => ({ chunks: [...chunks.values()].filter(c => c.mesh).length, faces: [...chunks.values()].reduce((a, c) => a + ((c.mesh?.geometry.index?.count ?? 0) / 6), 0), doors: doors.size, lamps: lamps?.count ?? 0, boxes: hash.count, leak: leak?.mesh.count ?? 0, tint: !!tint }),
   };
 }
 export type GlassView = ReturnType<typeof createGlassView>;
