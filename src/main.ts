@@ -161,7 +161,7 @@ function boot(){
  el('import-button').onclick=()=>el<HTMLInputElement>('import-file').click();
  el<HTMLInputElement>('import-file').addEventListener('change',e=>{const input=e.target as HTMLInputElement,file=input.files?.[0];input.value='';if(file)void importFile(file);});
  // ---------- Inventory / suit screens (live: game time keeps running) ----------
- const panels=createPanels({game:()=>game,hazard:()=>!insideCapsule()&&!(game&&breathingDome(game)),tone:k=>audio.tone(k),recipe:id=>production.openRecipe(id),
+ const panels=createPanels({game:()=>game,insideCapsule:()=>insideCapsule(),hazard:()=>!insideCapsule()&&!(game&&breathingDome(game)),tone:k=>audio.tone(k),recipe:id=>production.openRecipe(id),
   changed:what=>{if(what==='drop')syncDrops();hudKey='';updateHotbar();updateVisor();},
   show:which=>{if(started&&(running||liveDialogs.has(dialog)))setDialog(which);},close:()=>{void saver?.save();resume();}});
  const openPanel=(which:'inventory-panel'|'suit-panel')=>{audio.tone('ui');if(dialog===which){void saver?.save();resume();return;}if(running||liveDialogs.has(dialog)){if(which==='inventory-panel'&&dialog!=='suit-panel')panels.reset();setDialog(which);}};

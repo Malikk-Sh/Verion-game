@@ -4,7 +4,7 @@ import {newGame,sanitizeState} from '../src/game/state';
 import {addItems,transferSlot,countItem} from '../src/game/inventory';
 import {makeBuilding,productionTick,connect,startJob} from '../src/game/production';
 import {packStation,loadMachineSlot,takeSlot,moveTank,chargeWornTank,wearStationTank,moveTankGap} from '../src/game/worldActions';
-import {tankGap} from '../src/game/survival';
+import {tankGap,lastAirText} from '../src/game/survival';
 import {place} from '../src/buildings';
 import {heightAt} from '../src/world';
 import {Character} from '../src/controller';
@@ -112,4 +112,9 @@ test('tankGap: only taking the last gas off a sealed suit with no other air is a
  // A move that is refused anyway (out of reach, a dead player) never asks to confirm the last air.
  Object.assign(g.player,{x:50,z:50});assert.equal(tankGap(g,false,0,tank(0)),true);assert.equal(moveTankGap(g,false,{kind:'station',id:e.id},{kind:'worn',b:0}),false);
  Object.assign(g.player,{x:44,z:43});g.player.vitals.health=0;assert.equal(moveTankGap(g,false,{kind:'worn',b:0},{kind:'station',id:e.id}),false);
+});
+
+test('Last-air warning states the grace actually left before suffocation damage', () => {
+ const g = newGame('last-air', 1);g.player.survival.recoveryMs = 2000;g.player.survival.suffocationMs = 4000;assert.match(lastAirText(g), /через 5 с/);
+ g.player.survival.recoveryMs = 800;assert.match(lastAirText(g), /через 1 с/);g.player.survival.suffocationMs = 4500;assert.match(lastAirText(g), /удушье сразу/);
 });

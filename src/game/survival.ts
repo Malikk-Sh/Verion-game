@@ -130,6 +130,8 @@ export const tankCapacity = (slot: NonNullable<Slot>) => TANKS[slot.itemId].capa
 /** True when taking worn tank `b` off — `incoming` takes its place — would leave nothing to breathe right now (S4): the
  * suit is sealed, no emergency air, capsule gas, breathable dome or paid airlock cycle covers the player, the other worn
  * tank is empty, the incoming tank brings no gas and the removed one still had some. */
+/** Warning for a tankGap move: the real grace left (the suffocation timer resets only after 2 s of continuous breathing). */
+export function lastAirText(state: GameState) { const s = state.player.survival, left = s.recoveryMs >= 2000 ? 5000 : Math.max(0, 5000 - s.suffocationMs); return `Это последний воздух: без баллона удушье ${left >= 1000 ? `через ${Math.floor(left / 1000)} с` : 'сразу'}. Повторите, чтобы снять.`; }
 export function tankGap(state: GameState, insideCapsule: boolean, b: 0 | 1, incoming: Slot = null): boolean {
   if (wornParts(state) < 4 || state.player.survival.emergencyMs > 0) return false;
   if ((insideCapsule && state.world.capsuleMilliGU > 0) || breathingDome(state) || cyclingDome(state)) return false;

@@ -4,7 +4,7 @@ import { HOTBAR_SIZE, type GameState } from '../game/state';
 import { dropSlot, equipPart, installTank, moveSlot, readyWorldItem, removeTank, sortRest, splitSlot, unequipPart, wornParts, type Result } from '../game/backpack';
 import { figureArt, ghostArt, itemArt } from './art';
 import { RECIPES } from '../game/production';
-import { eatPulp } from '../game/survival';
+import { eatPulp, lastAirText, tankGap } from '../game/survival';
 import { dragFrom } from './dragDrop';
 /**
  * Inventory and suit screens (approved mock-ups «Инвентарь» and «Костюм»). Pure DOM over the
@@ -21,6 +21,8 @@ export type PanelHost = {
  close(): void;
  /** Opens the workshop on a recipe (S3 «Где применяется»). */
  recipe?(id: string): void;
+ /** Player stands in the capsule (its gas is breathable there): no last-air confirmation. */
+ insideCapsule?(): boolean;
 };
 type Sel = { kind: 'cell'; i: number } | { kind: 'tank'; b: 0 | 1 };
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -51,6 +53,9 @@ export const cellAria = (s: Slot, i: number) => !s ? `Ячейка ${i + 1}: п�
 
 export function createPanels(host: PanelHost) {
  let sel: Sel | null = null, moveFrom: number | null = null, part: SuitPart = 'helmet', replacing = false, message = '', suitMessage = '';
+ // S4: taking off the last breathable tank outside needs the same action twice within 4 s (as in the oxygen generator window).
+ let pendingGap: { key: string; at: number } | null = null;
+ const gapRefused = (g: GameState, b: 0 | 1, incoming: Slot, key: string) => { if (!tankGap(g, host.insideCapsule?.() ?? false, b, incoming)) { pendingGap = null; return false; } const now = performance.now(); if (pendingGap?.key === key && now - pendingGap.at <= 4000) { pendingGap = null; return false; } pendingGap = { key, at: now }; message = lastAirText(g); host.tone('warn'); return true; };
  const say = (r: Result, ok?: string) => { message = r.ok ? ok ?? '' : r.reason; if (!r.ok) host.tone('warn'); else host.tone('item'); };
 
  // ---------- Inventory ----------
@@ -79,7 +84,7 @@ export function createPanels(host: PanelHost) {
    if (s) { card.append(itemArt(s.itemId, 'art tank-art')); const bar = h('i', 'tank-bar'); bar.style.setProperty('--r', String((s.milliGU ?? 0) / TANKS[s.itemId].capacity)); card.append(bar, h('span', 'tank-value', `${gu(s.milliGU ?? 0)} / ${gu(TANKS[s.itemId].capacity)} GU`)); }
    else card.append(ghostArt('tank', 'art ghost tank-art'), h('span', 'tank-value muted', 'Пусто'));
    card.setAttribute('aria-label', `Баллон ${b + 1}: ${s ? `${ITEMS[s.itemId].name}, ${gu(s.milliGU ?? 0)} GU` : 'пусто'}`);
-   card.onclick = () => { if (moveFrom !== null) { const g2 = host.game()!, src = moveFrom; moveFrom = null; const it = g2.player.inventory[src]; if (it && TANKS[it.itemId]) { say(installTank(g2, src, b), 'Баллон установлен'); host.changed('inventory'); } else { message = 'Сюда можно поставить только баллон'; host.tone('warn'); } drawInventory(); return; } sel = { kind: 'tank', b }; message = ''; host.tone('ui'); drawInventory(); };
+   card.onclick = () => { if (moveFrom !== null) { const g2 = host.game()!, src = moveFrom; moveFrom = null; const it = g2.player.inventory[src]; if (it && TANKS[it.itemId]) { if (gapRefused(g2, b, it, `in:${src}:${b}`)) { moveFrom = src; drawInventory(); return; } say(installTank(g2, src, b), 'Баллон установлен'); host.changed('inventory'); } else { message = 'Сюда можно поставить только баллон'; host.tone('warn'); } drawInventory(); return; } sel = { kind: 'tank', b }; message = ''; host.tone('ui'); drawInventory(); };
   }
   // Grid.
   const used = inv.filter(Boolean).length;
@@ -117,7 +122,7 @@ export function createPanels(host: PanelHost) {
   }
   const acts = h('div', 'd-actions');
   if (sel?.kind === 'tank') {
-   const b = sel.b, rm = button('Снять в рюкзак', 'i-download'); rm.onclick = () => { const r = removeTank(g, b); say(r, 'Баллон перенесён в рюкзак'); if (r.ok) host.changed('inventory'); drawInventory(); }; acts.append(rm);
+   const b = sel.b, rm = button('Снять в рюкзак', 'i-download'); rm.onclick = () => { if (gapRefused(g, b, null, `rm:${b}`)) { drawInventory(); return; } const r = removeTank(g, b); say(r, 'Баллон перенесён в рюкзак'); if (r.ok) host.changed('inventory'); drawInventory(); }; acts.append(rm);
   } else if (sel?.kind === 'cell') {
    const i = sel.i;
    if(d.category==='building'||s.itemId==='cable'||s.itemId==='gas_pipe'){
@@ -131,7 +136,7 @@ export function createPanels(host: PanelHost) {
    else { const mv = button('Переместить', 'i-swap'); mv.id = 'act-move'; mv.onclick = () => { moveFrom = i; message = ''; host.tone('ui'); drawInventory(); }; acts.append(mv); }
    if (!stateful(s) && s.count > 1) { const sp = button('Разделить', 'i-split'); sp.id = 'act-split'; sp.onclick = () => { const r = splitSlot(g.player.inventory, i); say(r, 'Стак разделён'); if (r.ok) host.changed('inventory'); drawInventory(); }; acts.append(sp); }
    if (d.part) { const on = button(g.player.suit[d.part] ? 'Заменить надетое' : 'Надеть', 'i-helmet'); on.onclick = () => { const r = equipPart(g, i); say(r, 'Часть костюма надета'); if (r.ok) host.changed('suit'); drawInventory(); }; acts.append(on); }
-   if (TANKS[s.itemId]) { const on = button('Установить', 'i-plug'); on.onclick = () => { const r = installTank(g, i); say(r, 'Баллон установлен'); if (r.ok) host.changed('inventory'); drawInventory(); }; acts.append(on); }
+   if (TANKS[s.itemId]) { const on = button('Установить', 'i-plug'); on.onclick = () => { const to: 0 | 1 = g.player.bottles[0] ? g.player.bottles[1] ? 0 : 1 : 0; if (gapRefused(g, to, s, `in:${i}:${to}`)) { drawInventory(); return; } const r = installTank(g, i); say(r, 'Баллон установлен'); if (r.ok) host.changed('inventory'); drawInventory(); }; acts.append(on); }
    const drop = button(s.count > 1 ? `Выбросить ×${s.count}` : 'Выбросить', 'i-trash', 'ui-btn amber'); drop.id = 'act-drop';
    drop.onclick = () => { moveFrom = null; const r = dropSlot(g, i); say(r, `${d.short} оставлен${s.count > 1 ? 'ы' : ''} на земле`); if (r.ok) host.changed('drop'); drawInventory(); };
    acts.append(drop);
