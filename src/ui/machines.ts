@@ -67,7 +67,8 @@ function slotCell(ctx: Ctx, b: Building, label: string, index: number, placehold
 }
 // ---------- S4: worn tanks and the charging slot of the oxygen generator ----------
 const isTank = (s: Slot): s is NonNullable<Slot> => !!s && Object.hasOwn(TANKS, s.itemId);
-const LAST_AIR = 'Это последний воздух: без баллона удушье через 5 с. Повторите, чтобы снять.';
+// The real grace left: the suffocation timer only resets after 2 s of continuous breathing (survival.ts).
+const LAST_AIR = (g: GameState) => { const s = g.player.survival, left = s.recoveryMs >= 2000 ? 5000 : Math.max(0, 5000 - s.suffocationMs); return `Это последний воздух: без баллона удушье ${left >= 1000 ? `через ${Math.floor(left / 1000)} с` : 'сразу'}. Повторите, чтобы снять.`; };
 const code = (p: TankPlace) => p.kind === 'worn' ? 'worn:' + p.b : p.kind === 'pack' ? 'pack:' + p.i : 'station';
 const place = (ctx: Ctx, v = ''): TankPlace | null => { const [k, n] = v.split(':'); return k === 'worn' && (n === '0' || n === '1') ? { kind: 'worn', b: Number(n) as 0 | 1 } : k === 'pack' && n ? { kind: 'pack', i: Number(n) } : k === 'station' ? { kind: 'station', id: ctx.id } : null; };
 /** The last breathable gas leaves the suit only after the same action is repeated within 4 s. */
@@ -75,7 +76,7 @@ let pendingGap: { key: string; at: number } | null = null;
 function tankMove(ctx: Ctx, from: TankPlace, to: TankPlace, dragged = false) {
  if (code(from) === code(to)) return;
  const key = ctx.id + '|' + code(from) + '>' + code(to), now = performance.now();
- if (moveTankGap(ctx.g, ctx.inside(), from, to) && (pendingGap?.key !== key || now - pendingGap.at > 4000)) { pendingGap = { key, at: now }; ctx.caution(LAST_AIR); return; }
+ if (moveTankGap(ctx.g, ctx.inside(), from, to) && (pendingGap?.key !== key || now - pendingGap.at > 4000)) { pendingGap = { key, at: now }; ctx.caution(LAST_AIR(ctx.g)); return; }
  pendingGap = null;
  const src = document.querySelector(`[data-drop="${code(from)}"]`), tokens = dragged || !src ? [] : captureTokens([src]);
  const e = moveTank(ctx.g, from, to); ctx.say(e, to.kind === 'worn' ? 'Баллон на костюме' : to.kind === 'station' ? 'Баллон заправляется' : 'Баллон в рюкзаке');
