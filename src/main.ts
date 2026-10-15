@@ -282,7 +282,7 @@ function boot(){
  const mapUI=createMap({game:()=>game,player:()=>({x:actor.x,z:actor.z,yaw:actor.yaw}),selected:()=>selected,waypoint:()=>waypoint,target:()=>navTarget(),visited,discovered,tone:()=>audio.tone('ui'),
   guide:()=>({title:game?el('objective-text').textContent??'':'',task:el('objective-task').textContent??'',target:guideNav()}),
   vitals:()=>{const src=game?accessibleOxygen(game,insideCapsule()):{amount:0,capacity:1,unit:'GU'},hp=game?.player.vitals.health??0;return {o2:src.amount,unit:src.unit,o2Low:src.capacity>0&&src.amount/src.capacity<=.2,hp,hpLow:hp<=20};},
-  lead:id=>leadTo(id),leadGuide:()=>{guideOverride=null;leadTo('guide');},setWaypoint:p=>{waypoint=p;if(!p&&selected==='point')selected='guide';void saver?.save();}});
+  lead:id=>leadTo(id),leadGuide:()=>leadTo('guide'),setWaypoint:p=>{waypoint=p;if(!p&&selected==='point')selected='guide';void saver?.save();}});
  el('map-button').onclick=()=>{audio.tone('ui');openMap();};el('close-map').onclick=resume;
  el('close-info').onclick=resume;
  function diagnosticContext(){return {quality:settings.quality,dialog,running,visible:!document.hidden,calls:renderCalls,triangles:renderTriangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures,fineBlocks:world.terrain.fineBlocks,buildings:game?.world.base.buildings.length??0,links:game?.world.base.links.length??0,activeTicks:clock.activeTicks};}

@@ -1,7 +1,7 @@
 import { LANDMARKS, MIN, MAX, SIZE } from '../world';
 import { NODES, NODE_BY_ID, GRASS_PATCHES, bodyHalf } from '../game/resources';
 import { stationStatus, type Tone } from '../game/stationStatus';
-import { stationName, clampWaypoint, type Waypoint } from '../game/navigation';
+import { stationName, stationRadius, nodeRadius, clampWaypoint, type Waypoint } from '../game/navigation';
 import { reducedMotion } from '../motion';
 import { itemName } from '../game/mining';
 import type { GameState } from '../game/state';
@@ -63,8 +63,9 @@ export function createMap(d: Deps) {
  }
  // ---------- Layout and view ----------
  function resize() {
-  const r = host.getBoundingClientRect(); if (r.width < 2 || r.height < 2) return;
-  w = r.width; h = r.height; dpr = Math.min(2, devicePixelRatio || 1);
+  // Layout size, not the bounding box: the panel opens at scale(.98), and pointer positions are rescaled in `local`.
+  if (host.clientWidth < 2 || host.clientHeight < 2) return;
+  w = host.clientWidth; h = host.clientHeight; dpr = Math.min(2, devicePixelRatio || 1);
   canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); view = clampView(view, w, h); dirty = true;
  }
  const setView = (v: View, animate = false) => {
@@ -80,8 +81,8 @@ export function createMap(d: Deps) {
   const g = d.game(); if (!g) return null;
   if (c.kind === 'point') { const p = d.waypoint(); return p ? { name: 'Метка', x: p.x, z: p.z, radius: 3 } : null; }
   if (c.kind === 'landmark') { const l = LANDMARKS.find(v => v.id === c.id); return l ? { name: l.name, x: l.x, z: l.z, radius: l.radius } : null; }
-  if (c.kind === 'node') { const n = NODE_BY_ID.get(c.id); return n ? { name: n.name, x: n.x, z: n.z, radius: Math.max(3, n.radius + 2) } : null; }
-  if (c.kind === 'station') { const b = g.world.base.buildings.find(v => v.id === c.id); return b ? { name: stationName(b), x: b.x, z: b.z, radius: 3 } : null; }
+  if (c.kind === 'node') { const n = NODE_BY_ID.get(c.id); return n ? { name: n.name, x: n.x, z: n.z, radius: nodeRadius(n) } : null; }
+  if (c.kind === 'station') { const b = g.world.base.buildings.find(v => v.id === c.id); return b ? { name: stationName(b), x: b.x, z: b.z, radius: stationRadius(b) } : null; }
   const dr = g.world.drops.find(v => v.id === c.id); return dr ? { name: 'Груз', x: dr.x, z: dr.z, radius: 2.2 } : null;
  }
  function showCard(c: Card | null, focusMap = false) {
@@ -226,7 +227,7 @@ export function createMap(d: Deps) {
  // ---------- Pointer gestures on the map ----------
  const pts = new Map<number, { x: number; y: number }>();
  let start: { x: number; y: number; t: number } | null = null, moved = false, longFired = false, longTimer = 0, pinch: { dist: number; mid: { x: number; y: number }; view: View } | null = null, lastTap = { t: -1e9, x: 0, y: 0 }, multi = false;
- const local = (e: PointerEvent | WheelEvent) => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+ const local = (e: PointerEvent | WheelEvent) => { const r = canvas.getBoundingClientRect(); return { x: (e.clientX - r.left) * (w / (r.width || 1)), y: (e.clientY - r.top) * (h / (r.height || 1)) }; };
  const pinchState = () => { const [a, b] = [...pts.values()]; return { dist: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } }; };
  function longPress() {
   if (!start || moved || pts.size !== 1) return; longFired = true;
@@ -260,6 +261,8 @@ export function createMap(d: Deps) {
   if (double) { zoomBy(2, x, y); return; }
   const hit = hitTest(hits, x, y); if (hit) { d.tone(); showCard(hit.card); } else if (card) showCard(null);
  }
+ // A long press must not open the browser's context menu or text callout over the map.
+ canvas.addEventListener('contextmenu', e => e.preventDefault());
  canvas.addEventListener('wheel', e => { e.preventDefault(); const q = local(e); zoomBy(Math.exp(-e.deltaY * .0015), q.x, q.y); }, { passive: false });
  el('map-zoom-in').onclick = () => { d.tone(); zoomBy(1.6); };
  el('map-zoom-out').onclick = () => { d.tone(); zoomBy(1 / 1.6); };
@@ -275,7 +278,8 @@ export function createMap(d: Deps) {
   prepare,
   open() {
    open = true; card = null; card$.hidden = true; list$.hidden = false; el('map-legend').hidden = false; drawer.scrollTop = 0; resize();
-   if (rows < N) buildSlice(1000);
+   // The relief is normally ready long before; if not, it keeps filling in (no long first-open stall).
+   if (rows < N) buildSlice(24);
    const p = d.player(); view = clampView({ cx: p.x, cz: p.z, zoom: chosenZoom ?? valleyZoom(w, h) }, w, h); anim = null;
    updateList(true); updateVitals(); dirty = true; draw(performance.now());
   },
@@ -284,6 +288,7 @@ export function createMap(d: Deps) {
   /** Called every animation frame while the map is open: redraws on change, during a glide, or every 250 ms. */
   tick(now: number) {
    if (!open) return;
+   if (rows < N && heightFn) buildSlice(6);
    if (dirty || anim || now - lastDraw >= TICK_MS) { if (now - lastDraw >= TICK_MS) { updateVitals(); updateList(); if (card) updateCard(); } draw(now); }
   },
   /** Keyboard: arrows pan, + / − zoom, 0 centres on the player. Returns whether the key was used. */
