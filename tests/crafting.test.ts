@@ -2,7 +2,8 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {newGame,sanitizeState} from '../src/game/state';
 import {addItems,countItem} from '../src/game/inventory';
-import {makeBuilding,queueJob,startJob,productionTick,upgradeBuilding,loadRecipeInputs,collectInput,collectOutput,connect,cancelJob,removeQueuedJob,WORKBENCH_UPGRADE} from '../src/game/production';
+import {makeBuilding,queueJob,startJob,productionTick,upgradeBuilding,loadRecipeInputs,collectInput,collectOutput,connect,cancelJob,removeQueuedJob,craftOwner,RECIPE_BY_ID,GEN_BUFFER,WORKBENCH_UPGRADE} from '../src/game/production';
+import {refreshQuestProgress} from '../src/game/quests';
 const fresh=()=>newGame('w-crafting',123,1,0);
 const stock=(g:ReturnType<typeof fresh>,items:Record<string,number>)=>{for(const [id,n] of Object.entries(items))assert.equal(addItems(g.player.inventory,id,n),0);};
 const tick=(g:ReturnType<typeof fresh>,ms:number)=>{for(let i=0;i<ms;i+=50)productionTick(g,50);};
@@ -47,4 +48,15 @@ test('Version 3 migration retires manual queues without losing WIP, stock or out
 });
 test('Full output holds one completed batch through reload; removing power cannot add free progress',()=>{
  const {g,b}=setup();equip(g);stock(g,{...WORKBENCH_UPGRADE.inputs,copper:1,cable:1});upgradeBuilding(g,b.id);const gen=makeBuilding(g,'biogenerator',44,0,42);gen.energy=16000;connect(g,'cable',gen.id,b.id);startJob(g,'craft_wire',b.id);tick(g,4000);assert.equal(b.job!.workMs,4000);tick(g,4000);assert.equal(b.job!.workMs,4000);gen.energy=16000;b.output=Array.from({length:4},()=>({itemId:'stone',count:64}));tick(g,4000);assert.equal(b.job!.workMs,8000);const reloaded=sanitizeState(g);tick(reloaded,1000);assert.equal(reloaded.world.base.buildings[0].job!.workMs,8000);b.output[0]=null;tick(g,50);assert.equal(countItem(b.output,'wire'),4);assert.equal(b.job,null);assert.equal(gen.energy,0);
+});
+test('Workbench II runs pocket recipes (grass -> fiber) away from the player and counts the autonomous batch',()=>{
+ const {g,b}=setup();equip(g);stock(g,{...WORKBENCH_UPGRADE.inputs,grass:30,cable:1});upgradeBuilding(g,b.id);const gen=makeBuilding(g,'biogenerator',44,0,42);gen.energy=GEN_BUFFER;connect(g,'cable',gen.id,b.id);
+ // S4 bug: the bench II window sent the pocket recipe to the pocket (30 batches of fiber in the hands), so no batch was ever made "without you".
+ const grass=RECIPE_BY_ID.get('grass_parts')!;assert.equal(craftOwner(b,grass),b.id);assert.equal(craftOwner(undefined,grass),'hand');assert.equal(queueJob(g,'grass_parts',b.id,5),'');assert.equal(g.world.base.hand,null);assert.equal(countItem(b.input,'grass'),5);
+ g.player.x=80;tick(g,1100);refreshQuestProgress(g);assert.ok(g.progress.quests.facts.includes('system:auto'));assert.equal(countItem(b.output,'fiber'),2);assert.equal(countItem(b.output,'pulp'),1);assert.deepEqual(sanitizeState(g),g);
+ tick(g,5000);assert.equal(countItem(b.output,'fiber'),10);assert.equal(b.queue.length,0);assert.equal(b.job,null);
+ // Bench I keeps pocket recipes in the pocket; no other station accepts them.
+ const one=makeBuilding(g,'workbench',46,0,42),kiln=makeBuilding(g,'kiln',48,0,42);assert.equal(craftOwner(one,grass),'hand');assert.equal(craftOwner(one,RECIPE_BY_ID.get('craft_wire')!),one.id);assert.equal(craftOwner(kiln,grass),'hand');
+ g.player.x=46;assert.equal(startJob(g,'grass_parts',one.id),'Нужна подходящая станция');g.player.x=48;assert.equal(startJob(g,'grass_parts',kiln.id),'Нужна подходящая станция');
+ const bad:any=structuredClone(g);bad.world.base.buildings.find((v:any)=>v.id===one.id).queue=['grass_parts'];assert.throws(()=>sanitizeState(bad),/рецепт/);
 });

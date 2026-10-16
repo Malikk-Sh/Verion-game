@@ -1,4 +1,4 @@
-import { electricPort } from './production';
+import { electricPort, runsOn } from './production';
 import { heightAt, stationY, worldColliders, type Box } from '../world';
 import { freshBase, RECIPE_BY_ID, LINK_RANGE, MAX_REPEAT, GEN_BUFFER, FIBER_EU, ELECTROLYZER_O2, PORT_O2, CAPSULE_CAPACITY, type BaseState, type Job, type Building, type Link } from './production';
 import { BASIC_SUIT, BUILDABLE, CONTENT_VERSION, GENERATOR_VERSION, ITEMS, LEGACY_CONTENT_VERSIONS, SUIT_PARTS, TANKS, TOOLS, type SuitPart } from './defs';
@@ -345,15 +345,15 @@ function validateBase(value: unknown, legacy = false): BaseState {
  const raw=obj(value,'world.base'), seen=new Set<string>(), generationIds:number[]=[];
  const register=(v:unknown,p:string,prefix:string)=>{const id=str(v,p,32,ID);if(!new RegExp('^'+prefix+'-[1-9][0-9]*$').test(id)||seen.has(id))throw new InvalidState(p,'неверный или повторный ID');seen.add(id);generationIds.push(Number(id.split('-')[1]));return id;};
  const container=(v:unknown,p:string)=>{const a=arr(v,p,4);if(a.length!==4)throw new InvalidState(p,'нужно 4 слота');return a.map((s,i)=>slot(s,p+'.'+i,false));};
- const job=(v:unknown,station:string):Job|null=>{
+ const job=(v:unknown,station:string,level=1):Job|null=>{
   if(v===null)return null;const o=obj(v,'job'),id=str(o.recipeId,'job.recipeId',40,ID),r=RECIPE_BY_ID.get(id);
-  if(!r||r.station!==station)throw new InvalidState('job.recipeId','неподходящий рецепт');
+  if(!r||!runsOn({kind:station,level},r))throw new InvalidState('job.recipeId','неподходящий рецепт');
   const reserved=arr(o.reserved,'job.reserved',8).map((s,i)=>entry(s,'job.reserved.'+i,undefined,false)),water=int(o.water,'job.water',0,1000),expected=Object.entries(r.inputs).filter(([id])=>id!=='water'||water===0);
   if(reserved.length!==expected.length||reserved.some(s=>s.durability!==undefined||s.milliGU!==undefined)||expected.some(([id,n])=>reserved.filter(s=>s.itemId===id&&s.count===n).length!==1))throw new InvalidState('job.reserved','входы не совпадают с рецептом');
   if(water!==0&&water!==(r.inputs.water??0)*1000)throw new InvalidState('job.water','неверный резерв воды');
   return {recipeId:id,workMs:num(o.workMs,'job.workMs',0,r.seconds*1000),reserved,water,repeat:legacy&&o.repeat===undefined?0:int(o.repeat,'job.repeat',0,MAX_REPEAT)};
  };
- const queue=(v:unknown,station:string)=>arr(v,'queue',5).map(v=>{const id=str(v,'queue.recipe',40,ID);if(RECIPE_BY_ID.get(id)?.station!==station)throw new InvalidState('queue.recipe','неподходящий рецепт');return id;});
+ const queue=(v:unknown,station:string,level=1)=>arr(v,'queue',5).map(v=>{const id=str(v,'queue.recipe',40,ID),r=RECIPE_BY_ID.get(id);if(!r||!runsOn({kind:station,level},r))throw new InvalidState('queue.recipe','неподходящий рецепт');return id;});
  const buildings=arr(raw.buildings,'base.buildings',64).map((v):Building=>{const o=obj(v,'building'),kind=str(o.kind,'building.kind',32,ID),dome=legacy&&kind==='dome';if(!dome&&!(BUILDABLE as readonly string[]).includes(kind))throw new InvalidState('building.kind','неизвестный корпус');
   if(typeof o.lowPriority!=='boolean')throw new InvalidState('building.lowPriority','ожидался boolean');
   if(typeof o.enabled!=='boolean')throw new InvalidState('building.enabled','ожидался boolean');
@@ -361,7 +361,7 @@ function validateBase(value: unknown, legacy = false): BaseState {
   if(kind==='biogenerator'&&input.some(s=>s&&s.itemId!=='fiber'))throw new InvalidState('building.input','генератор принимает только волокна');
   const level=legacy?1:int(o.level,'building.level',1,2) as 1|2;
   if(level===2&&kind!=='workbench')throw new InvalidState('building.level','нет такого улучшения');
-  const b:Building={level,rot:legacy&&o.rot===undefined?0:int(o.rot,'building.rot',0,3),id:register(o.id,'building.id','build'),kind:kind as Building['kind'],x:int(o.x,'building.x',-195,355),y:num(o.y,'building.y',-100,200),z:int(o.z,'building.z',-195,355),input,output,job:job(o.job,kind),queue:queue(o.queue,kind),enabled:o.enabled,lowPriority:o.lowPriority,energy:int(o.energy,'building.energy',0,GEN_BUFFER),fuel:int(o.fuel,'building.fuel',0,FIBER_EU),water:int(o.water,'building.water',0,20000),oxygen:int(o.oxygen,'building.oxygen',0,kind==='electrolyzer'?ELECTROLYZER_O2:PORT_O2)};
+  const b:Building={level,rot:legacy&&o.rot===undefined?0:int(o.rot,'building.rot',0,3),id:register(o.id,'building.id','build'),kind:kind as Building['kind'],x:int(o.x,'building.x',-195,355),y:num(o.y,'building.y',-100,200),z:int(o.z,'building.z',-195,355),input,output,job:job(o.job,kind,level),queue:queue(o.queue,kind,level),enabled:o.enabled,lowPriority:o.lowPriority,energy:int(o.energy,'building.energy',0,GEN_BUFFER),fuel:int(o.fuel,'building.fuel',0,FIBER_EU),water:int(o.water,'building.water',0,20000),oxygen:int(o.oxygen,'building.oxygen',0,kind==='electrolyzer'?ELECTROLYZER_O2:PORT_O2)};
   if(dome){const z=obj(o.zone,'building.zone');(b as Building&{zone:Obj}).zone={q:int(z.q,'zone.q',0,960000),temperature:num(z.temperature,'zone.temperature',-150,150),purity:num(z.purity,'zone.purity',0,1),lossRemainder:int(z.lossRemainder,'zone.lossRemainder',0,999)};}
   if(!legacy&&(kind==='workbench'&&level===1?b.queue.length>0:b.queue.length+(b.job?1:0)>5))throw new InvalidState('building.queue','очередь недоступна/переполнена');
   if(kind!=='biogenerator'&&(b.energy||b.fuel))throw new InvalidState('building','энергия/топливо не у генератора');if(kind!=='electrolyzer'&&b.water)throw new InvalidState('building.water','вода не у электролиза');if(!['electrolyzer','refill','distributor'].includes(kind)&&b.oxygen)throw new InvalidState('building.oxygen','нет газового буфера');return b;

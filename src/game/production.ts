@@ -58,6 +58,11 @@ export const hasQueue = (b?: Building) => !!b && (b.kind !== 'workbench' || b.le
 // A bench I whose batch is complete but blocked by a full output does not hold the hands (nor other benches).
 export const manualWork = (g: GameState) => g.world.base.buildings.filter(b=>b.kind==='workbench'&&b.level===1&&b.job&&b.enabled&&nearby(g,b)&&b.job.workMs<(RECIPE_BY_ID.get(b.job.recipeId)?.seconds??0)*1000).sort((a,b)=>Math.hypot(a.x-g.player.x,a.z-g.player.z)-Math.hypot(b.x-g.player.x,b.z-g.player.z))[0];
 export const energyRate = (b: Building, r: Recipe) => b.kind === 'workbench' && b.level === 2 ? WORKBENCH_UPGRADE.EU_per_second : r.EU_per_second;
+/** S5: workbench II also runs pocket recipes, so what its window queues is made there, with or without the player
+ * (in S4 the window sent grass → fiber to the pocket and no batch ever counted as made without you). */
+export const runsOn = (b: { kind: string; level?: number }, r: Recipe) => r.station === b.kind || (r.station === 'hand' && b.kind === 'workbench' && b.level === 2);
+/** Where a recipe chosen in a station window (or in the pocket workshop, `b` undefined) is made. */
+export const craftOwner = (b: Building | undefined, r: Recipe) => b && runsOn(b, r) ? b.id : 'hand';
 export const electricPort = (b: {kind:string;level?:number}) => !['capsule','kiln'].includes(b.kind) && (b.kind !== 'workbench' || b.level === 2);
 export function upgradeBuilding(g: GameState, id: string): string {
  const b=machine(g,id);if(!b || b.kind!=='workbench')return 'Для этой постройки пока нет улучшения';
@@ -73,7 +78,7 @@ export function upgradeBuilding(g: GameState, id: string): string {
 /** Move just the missing recipe inputs; selection never spends materials. */
 export function loadRecipeInputs(g: GameState, recipeId: string, id: string): string {
  const b=machine(g,id),r=RECIPE_BY_ID.get(recipeId);
- if(!b || !r || r.station!==b.kind)return 'Нужна подходящая станция';
+ if(!b || !r || !runsOn(b,r))return 'Нужна подходящая станция';
  if(!nearby(g,b))return 'Подойдите к станции';
  const inv=structuredClone(g.player.inventory),input=structuredClone(b.input);
  for(const [item,n] of Object.entries(r.inputs))if(item!=='water'||b.water<n*1000){
@@ -84,7 +89,7 @@ export function loadRecipeInputs(g: GameState, recipeId: string, id: string): st
 }
 export function startJob(g: GameState, recipeId: string, id = 'hand', buffered = false): string {
  const r = RECIPE_BY_ID.get(recipeId), b = id === 'hand' ? undefined : machine(g,id);
- if (!r || (id === 'hand' ? r.station !== 'hand' : !b || r.station !== b.kind)) return 'Нужна подходящая станция';
+ if (!r || (id === 'hand' ? r.station !== 'hand' : !b || !runsOn(b,r))) return 'Нужна подходящая станция';
  if (id==='hand' && Object.keys(r.inputs).length>2)return 'В кармане доступны два типа материалов';
  if (g.player.vitals.health <= 0) return 'Персонаж погиб';
  if (id === 'hand' ? g.world.base.hand : b!.job) return 'Сначала завершите или отмените текущую работу';
@@ -110,7 +115,7 @@ export function startJob(g: GameState, recipeId: string, id = 'hand', buffered =
 export function queueJob(g: GameState, recipeId: string, id = 'hand', count = 5): string {
  const r=RECIPE_BY_ID.get(recipeId),b=id==='hand'?undefined:machine(g,id),queue=id==='hand'?g.world.base.handQueue:b?.queue;
  if(!hasQueue(b))return 'Очередь открывается после улучшения верстака';
- if(!r||!queue||r.station!==(b?.kind??'hand')||!Number.isInteger(count)||count<1||count>5)return 'Неверная очередь';
+ if(!r||!queue||(b?!runsOn(b,r):r.station!=='hand')||!Number.isInteger(count)||count<1||count>5)return 'Неверная очередь';
  if(queue.length+count+(b?.job?1:0)>5)return 'В очереди максимум 5 рецептов';
  if(g.player.vitals.health<=0)return 'Персонаж погиб';
  if(b&&Math.hypot(b.x-g.player.x,b.z-g.player.z)>3.2)return 'Подойдите к станции';
