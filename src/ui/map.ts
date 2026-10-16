@@ -76,7 +76,7 @@ export function createMap(d: Deps) {
  const host = el('map-view'), canvas = el<HTMLCanvasElement>('map'), ctx = canvas.getContext('2d')!;
  const layers = loadLayers();
  let w = 0, h = 0, dpr = 1, view: View = { cx: 40, cz: 40, zoom: 2 }, chosenZoom: number | null = null, card: Card | null = null, dirty = true, lastDraw = -Infinity, open = false;
- let anim: { from: View; to: View; t0: number } | null = null, hits: (Hit & { card: Card })[] = [], labelCount = 0, markerCount = 0, draws = 0, veinMarks = 0;
+ let anim: { from: View; to: View; t0: number } | null = null, hits: (Hit & { card: Card })[] = [], labelCount = 0, markerCount = 0, draws = 0, veinMarks = 0, glassMarks: Tone[] = [];
  // ---------- Relief raster: built in slices at idle, drawn under a transform ----------
  const N = rasterSize(CELL), raster = document.createElement('canvas'); raster.width = raster.height = N;
  const rctx = raster.getContext('2d')!, image = rctx.createImageData(N, N);
@@ -183,7 +183,7 @@ export function createMap(d: Deps) {
  function draw(now: number) {
   const g = d.game(); if (!g || !w) return;
   if (anim) { const k = Math.min(1, (now - anim.t0) / 300), e = k * k * (3 - 2 * k); view = { cx: anim.from.cx + (anim.to.cx - anim.from.cx) * e, cz: anim.from.cz + (anim.to.cz - anim.from.cz) * e, zoom: anim.from.zoom + (anim.to.zoom - anim.from.zoom) * e }; if (k >= 1) anim = null; }
-  draws++; dirty = false; lastDraw = now; hits = []; veinMarks = 0; const labels: Lbl[] = [];
+  draws++; dirty = false; lastDraw = now; hits = []; veinMarks = 0; glassMarks = []; const labels: Lbl[] = [];
   const S = (x: number, z: number) => toScreen(view, w, h, x, z), z = view.zoom, p = d.player(), pp = S(p.x, p.z);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = '#061518'; ctx.fillRect(0, 0, w, h);
   const tl = S(MAX, MAX); ctx.imageSmoothingEnabled = true; ctx.drawImage(raster, tl.x, tl.y, SIZE * z, SIZE * z);
@@ -197,7 +197,7 @@ export function createMap(d: Deps) {
    const base = g.world.base, by = new Map(base.buildings.map(b => [b.id, b]));
    for (const l of base.links) { const a = by.get(l.from), b = by.get(l.to); if (!a || !b) continue; const s = S(a.x, a.z), e = S(b.x, b.z); ctx.strokeStyle = l.kind === 'cable' ? 'rgba(255,196,110,.75)' : 'rgba(127,230,218,.8)'; ctx.lineWidth = 1.5; ctx.setLineDash(l.kind === 'cable' ? [] : [4, 3]); ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke(); }
    ctx.setLineDash([]);
-   const prints: MapFootprint[] = [...mapFootprintSources.flatMap(f => f(g))];
+   const prints: MapFootprint[] = [...mapFootprintSources.flatMap(f => f(g))]; glassMarks = prints.map(f => f.tone);
    for (const b of base.buildings) { const half = bodyHalf(b.kind); prints.push({ id: b.id, x: b.x, z: b.z, w: half * 2, d: half * 2, rot: b.rot, tone: stationStatus(g, b).tone, label: stationName(b) }); }
    for (const f of prints) {
     const s = S(f.x, f.z), fw = Math.max(10, f.w * z), fd = Math.max(10, f.d * z), c = TONE[f.tone]; markers++;
@@ -345,7 +345,7 @@ export function createMap(d: Deps) {
    return true;
   },
   showCard: (c: Card | null) => showCard(c),
-  debug: () => ({ zoom: (anim?.to ?? view).zoom, center: { x: (anim?.to ?? view).cx, z: (anim?.to ?? view).cz }, layers: { ...layers }, card: card ? { kind: card.kind, id: card.id } : null, raster: rows / N, draws, markers: markerCount, veins: veinMarks, labels: labelCount, size: { w, h, dpr, backing: canvas.width } }),
+  debug: () => ({ zoom: (anim?.to ?? view).zoom, center: { x: (anim?.to ?? view).cx, z: (anim?.to ?? view).cz }, layers: { ...layers }, card: card ? { kind: card.kind, id: card.id } : null, raster: rows / N, draws, markers: markerCount, veins: veinMarks, structures: glassMarks, labels: labelCount, size: { w, h, dpr, backing: canvas.width } }),
  };
  function updateVitals() {
   const v = d.vitals(), o2 = el('map-o2'), hp = el('map-hp');
