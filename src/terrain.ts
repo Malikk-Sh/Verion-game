@@ -1,11 +1,12 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { MIN, MAX, SIZE, gridHeight, FORMATIONS } from './world';
 
 /**
  * Chunked terrain with three static levels of detail.
  * 80 m blocks: a coarse 4 m mesh everywhere, replaced near the viewer by four 40 m chunks on the exact
  * 1 m collision grid (FINE_R), and between that and the quality radius by four 2 m chunks (S4). All levels
- * are built lazily, one chunk per frame; their vertices lie on the same grid points; skirts hide the small
+ * are built lazily, one chunk per frame, and a finished block is merged into one mesh (one draw call instead of four); their vertices lie on the same grid points; skirts hide the small
  * cracks between levels.
  */
 /** `slope` (1 − n.y over 2 m) and `cavity` come from fixed 1 m-grid stencils in both levels of detail (no colour pop when a
@@ -52,7 +53,7 @@ export class Terrain {
  readonly group=new THREE.Group();
  private blocks:TerrainBlock[]=[];
  private order:typeof this.blocks=[];private lastX=Infinity;private lastZ=Infinity;private generation=0;
- private pending:{block:TerrainBlock;level:Level;parts:THREE.Mesh[];task:ReturnType<typeof patchSteps>}|null=null;
+ private pending:{block:TerrainBlock;level:Level;parts:THREE.BufferGeometry[];task:ReturnType<typeof patchSteps>}|null=null;
  private radius=110;private fineR=FINE_R;
  constructor(private material:THREE.Material,private color:GroundColor){
   for(let z=MIN;z<MAX;z+=BLOCK)for(let x=MIN;x<MAX;x+=BLOCK){
@@ -76,13 +77,14 @@ export class Terrain {
    }
    this.evictHidden();
   }
-  if(this.pending&&this.pending.block.want!==this.pending.level){for(const m of this.pending.parts){this.group.remove(m);m.geometry.dispose();}this.pending=null;}
+  if(this.pending&&this.pending.block.want!==this.pending.level){for(const g of this.pending.parts)g.dispose();this.pending=null;}
   if(!this.pending){const block=this.order.find(b=>b.want&&!b[b.want]);if(!block)return;const level=block.want!;this.pending={block,level,parts:[],task:patchSteps(block.x,block.z,CHUNK,STEP[level],this.color)};}
   const deadline=performance.now()+budgetMs;
   while(this.pending&&performance.now()<deadline){const r=this.pending.task.next();if(!r.done)continue;
-   const m=new THREE.Mesh(r.value,this.material);m.receiveShadow=true;m.visible=false;this.group.add(m);this.pending.parts.push(m);
+   this.pending.parts.push(r.value);
    const {block:b,level,parts}=this.pending;
-   if(parts.length===4){b[level]=parts;this.show(b);this.pending=null;this.evictHidden();}
+   if(parts.length===4){const merged=mergeGeometries(parts);for(const g of parts)g.dispose();if(!merged)throw new Error('Terrain block merge failed');merged.computeBoundingSphere();merged.computeBoundingBox();
+    const m=new THREE.Mesh(merged,this.material);m.receiveShadow=true;m.visible=false;this.group.add(m);b[level]=[m];this.show(b);this.pending=null;this.evictHidden();}
    else{const i=parts.length;this.pending.task=patchSteps(b.x+(i%2)*CHUNK,b.z+Math.floor(i/2)*CHUNK,CHUNK,STEP[level],this.color);}
    break; // one upload-sized mesh per rendered frame
   }
@@ -93,6 +95,8 @@ export class Terrain {
    for(const b of cached.filter(b=>b.want!==level&&this.shown(b)!==level).sort((a,b)=>a[key]-b[key])){if(count<=limit)break;for(const m of b[level]!){this.group.remove(m);m.geometry.dispose();}b[level]=null;count--;}}
  }
  /** Fine and middle blocks built so far (for the metrics overlay). */
+ /** No level is being built and every block shows the level it wants (draw calls stop changing). */
+ get settled(){return !this.pending&&!this.order.some(b=>b.want&&!b[b.want]);}
  get fineBlocks(){return this.blocks.filter(b=>b.fine).length;}
  get midBlocks(){return this.blocks.filter(b=>b.mid).length;}
 }

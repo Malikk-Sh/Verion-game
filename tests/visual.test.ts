@@ -82,7 +82,7 @@ test('Ground colour inputs (2 m slope, cavity, surface weights) match in both te
  // The block 120…200 × 40…120 holds the valley's eastern slopes (2 m slope up to ≈ 0.4).
  const p=new THREE.Vector3(160,2,80);for(let i=0;i<8&&!t.fineBlocks;i++)t.update(p,1000);assert.equal(t.fineBlocks,1);
  const at=new Map<string,number[]>(),meshes=t.group.children as THREE.Mesh[];
- for(const m of meshes.filter(m=>m.visible&&m.geometry.attributes.position.count>1000)){const g=m.geometry.attributes,n=41*41;for(let i=0;i<n;i++)at.set(g.position.getX(i)+','+g.position.getZ(i),[g.color.getX(i),g.color.getY(i),g.color.getZ(i),g.surface.getX(i),g.surface.getY(i)]);}
+ for(const m of meshes.filter(m=>m.visible&&m.geometry.attributes.position.count>1000)){const g=m.geometry.attributes,n=g.position.count;for(let i=0;i<n;i++)at.set(g.position.getX(i)+','+g.position.getZ(i),[g.color.getX(i),g.color.getY(i),g.color.getZ(i),g.surface.getX(i),g.surface.getY(i)]);}
  const coarse=meshes.find(m=>!m.visible&&m.geometry.boundingBox!.min.x===120&&m.geometry.boundingBox!.min.z===40&&m.geometry.attributes.position.count<1000)!;assert.ok(coarse);
  const g=coarse.geometry.attributes;let compared=0,steep=0;
  for(let i=0;i<21*21;i++){const f=at.get(g.position.getX(i)+','+g.position.getZ(i));assert.ok(f);const c=[g.color.getX(i),g.color.getY(i),g.color.getZ(i),g.surface.getX(i),g.surface.getY(i)];
@@ -90,9 +90,9 @@ test('Ground colour inputs (2 m slope, cavity, surface weights) match in both te
  assert.equal(compared,441);assert.ok(steep>5,'the block must contain sloped ground for the check to mean anything');
  // The 2 m middle level (diagonal neighbours) gets the very same inputs at its vertices.
  for(let i=0;i<60&&!t.midBlocks;i++)t.update(p,1000);assert.ok(t.midBlocks>0);
- const mids=(t.group.children as THREE.Mesh[]).filter(m=>m.visible&&m.geometry.attributes.position.count===21*21+21*4&&m.geometry.boundingBox!.max.x-m.geometry.boundingBox!.min.x===40);assert.equal(mids.length,4);
+ const mids=(t.group.children as THREE.Mesh[]).filter(m=>m.visible&&m.geometry.attributes.position.count===4*(21*21+21*4)&&m.geometry.boundingBox!.max.x-m.geometry.boundingBox!.min.x===80);assert.equal(mids.length,1,'a finished middle block is one merged mesh');
  for(const m of mids){const a=m.geometry.attributes;
-  for(let i=0;i<21*21;i+=5){const x=a.position.getX(i),z=a.position.getZ(i);assert.ok(Math.abs(a.color.getX(i)-groundSlope(heightAt,x,z))<1e-6);assert.ok(Math.abs(a.color.getY(i)-(groundCavity(heightAt,x,z)*.5+.5))<1e-6);}}
+  for(let i=0;i<a.position.count;i+=5){const x=a.position.getX(i),z=a.position.getZ(i);assert.ok(Math.abs(a.color.getX(i)-groundSlope(heightAt,x,z))<1e-6);assert.ok(Math.abs(a.color.getY(i)-(groundCavity(heightAt,x,z)*.5+.5))<1e-6);}}
  // The stencils themselves: a plane has no cavity; a bowl is a hollow (> 0), a dome a crest (< 0).
  const plane=(x:number,z:number)=>x*.3+z*.1,bowl=(x:number,z:number)=>(x*x+z*z)*.02;
  assert.ok(Math.abs(groundSlope(plane,5,5)-(1-1/Math.hypot(.3,1,.1)))<1e-12);assert.equal(groundCavity(plane,5,5),0);
