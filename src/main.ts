@@ -33,8 +33,9 @@ import { Character, type Input } from './controller';
 import { Ambience } from './audio';
 import { boxes, box, EYE, FIXED_DT, heightAt, LANDMARKS, worldColliders, type Landmark } from './world';
 import { createMap } from './ui/map';
-import { DIRS, directionName } from './ui/mapView';
-import { resolveNav, type Waypoint } from './game/navigation';
+import { DIRS } from './ui/mapView';
+import { grantScanner, scanDeposit, scanRoom, scanStation, type ScanReading } from './game/scanner';
+import { resolveNav, stationName, type Waypoint } from './game/navigation';
 import { SimClock } from './game/clock';
 import { ITEMS, MATERIALS, TANKS, TOOLS } from './game/defs';
 import { phaseSeconds, isDay, offsetFor, MORNING_S, EVENING_S } from './game/daycycle';
@@ -42,9 +43,9 @@ import { selectHotbar, oxygenGU, wornParts } from './game/backpack';
 import { survivalTick, survivalSpeed, eatPulp, refillCapsule, refillFromCapsule, loseCargo, respawnAtCapsule, accessibleOxygen, CAPSULE_CAPACITY } from './game/survival';
 import { createPanels, cellContent, cellAria } from './ui/panels';
 import { createViewModel } from './viewmodel';
-import { NODES, NODE_BY_ID, depositScale, depositById, depositLeft, allDeposits, veinNode, VEIN_LOOK, type ResourceNode } from './game/resources';
+import { NODES, NODE_BY_ID, depositScale, depositById, depositLeft, allDeposits, veinNode, type ResourceNode } from './game/resources';
 import { newGame, cloneState, sanitizeState, SPAWN_POSE, HOTBAR_SIZE, type GameState } from './game/state';
-import { mineTick, pickUp, toolSlot, itemName, REACH, mineSeconds, stockText, wearText, type Mining } from './game/mining';
+import { mineTick, pickUp, toolSlot, itemName, REACH, mineSeconds, wearText, type Mining } from './game/mining';
 import { natureTick } from './game/nature';
 import { SaveStore, SaveError, type SlotRecord } from './persist/store';
 import { Saver, type SaverStatus } from './persist/saver';
@@ -88,6 +89,8 @@ function boot(){
  const token=(globalThis.crypto?.randomUUID?.()??Math.random().toString(36).slice(2)+Date.now().toString(36));
  let game:GameState|null=null,store:SaveStore|null=null,saver:Saver|null=null,storeError='',slotId:string|null=null;
  let holdMine=false,holdRefill=false,aimNode:string|null=null,aimNear=Infinity,hadPassage=false,aimReason='',mineRatio=0,nearDrop:string|null=null,slots:SlotRecord[]=[],actionKind='none',hudKey='';
+ /** S5 (D37): what the selected scanner reads now (null when the scanner is not selected or nothing is in reach). */
+ let scanAim:{kind:'landmark'}|{kind:'deposit';id:string}|{kind:'station';id:string}|{kind:'room';key:number;door:boolean}|null=null;
  let refillTanks=false;
  // S4 mining feel: the strike timeline of the current hold (strikes.ts) drives the swing, the reticle ring and every impact cue.
  let swingActive=false,swingStruck=false,swingNeed=0,swingPoseValue=0,kickT=1,kickPitch=0,kickYaw=0,lastHit='',strikesLanded=0,ringNeed=0,heldModel:string|null=null;
@@ -248,7 +251,7 @@ function boot(){
   else if(actionKind==='pickup'&&nearDrop){const moved=pickUp(game,nearDrop);audio.tone(moved?'item':'warn');toast(moved?'Поднято':'Рюкзак полон',moved?`${moved} предм.`:'Освободите ячейку');syncDrops();hudKey='';updateHotbar();}
   else if(actionKind==='upgrade'&&nearMachine)production.openUpgrade(nearMachine);
   else if(actionKind==='machine'&&nearMachine)production.open(nearMachine);
-  else if(actionKind==='scan')inspect();
+  else if(actionKind==='scan')scan();
   else if(actionKind==='eat' && game && eatPulp(game)==='ate'){ audio.tone('item'); toast('Питание','Пульпа использована · +8 сытости'); hudKey=''; updateVitals(); updateHotbar(); updateAimUI(); }
  }
  actionBtn.addEventListener('pointerdown',e=>{e.preventDefault();if(!running)return;if(interaction.cellTool){holdPlace=game?.player.inventory[game.player.hotbar]?.itemId==='window';placedInHold.clear();capture(actionBtn,e);placeCell();return;}if(actionKind==='mine'||actionKind==='refill'){holdMine=actionKind==='mine';holdRefill=actionKind==='refill';capture(actionBtn,e);}else doAction();});
@@ -266,7 +269,7 @@ function boot(){
   const s=inv[game.player.hotbar];
   el('hotbar-name').textContent=s?ITEMS[s.itemId].name:`Ячейка ${game.player.hotbar+1} пуста`;
   el('hotbar-meta').textContent=!s?'':s.durability!==undefined?`${s.durability} / ${TOOLS[s.itemId].durability}`:s.milliGU!==undefined?`${Math.round(s.milliGU/1000)} GU`:ITEMS[s.itemId].stack>1?`×${s.count}`:'';
-  heldModel=s?.itemId==='wrench'?'wrench':s&&TOOLS[s.itemId]&&(s.durability??0)>0?s.itemId:null;hand.setItem(heldModel);
+  heldModel=s?.itemId==='wrench'||s?.itemId==='scanner'?s.itemId:s&&TOOLS[s.itemId]&&(s.durability??0)>0?s.itemId:null;hand.setItem(heldModel);
   if(dialog==='inventory-panel')panels.drawInventory();
  }
  el('objective').onclick=openQuests;
@@ -339,14 +342,18 @@ function boot(){
  el('jump').onpointerdown=event=>{event.preventDefault();if(running)input.jump=true;};
 
  function toast(kind:string,text:string){const t=el('toast');t.hidden=true;void t.offsetWidth;el('toast-kind').textContent=kind;el('toast-text').textContent=text;t.hidden=false;}
- function inspect(){
-  if(!nearest||!running)return;
-  visited.add(nearest.id);audio.tone('scan');
-  el('info-kind').textContent=nearest.kind;el('info-title').textContent=nearest.name;el('info-text').textContent=nearest.description;
-  const y=heightAt(nearest.x,nearest.z),fromCapsule=Math.hypot(nearest.x-40,nearest.z-40);
-  const rows:[string,string][]=[['Координаты',`${Math.round(nearest.x)} · ${Math.round(nearest.z)}`],['Высота',`${y>=0?'+':''}${y.toFixed(1)} м`],['От капсулы',`${Math.round(fromCapsule)} м`]];
-  el('info-data').replaceChildren(...rows.map(([k,v])=>{const d=document.createElement('div'),dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=k;dd.textContent=v;d.append(dt,dd);return d;}));
-  if(nearest.id===selected)selected='guide';
+ /** S5 (D37): the selected scanner reads the target: a short sweep and tone, then the scan card (time keeps running). */
+ let lastScan='';
+ function scan(){
+  const t=scanAim;if(!t||!running||!game)return;let r:ScanReading|null=null;
+  if(t.kind==='landmark'){if(!nearest)return;visited.add(nearest.id);const y=heightAt(nearest.x,nearest.z);r={kind:nearest.kind,title:nearest.name,text:nearest.description,rows:[['Координаты',`${Math.round(nearest.x)} · ${Math.round(nearest.z)}`],['Высота',`${y>=0?'+':''}${y.toFixed(1)} м`],['От капсулы',`${Math.round(Math.hypot(nearest.x-40,nearest.z-40))} м`]]};if(nearest.id===selected)selected='guide';}
+  else if(t.kind==='deposit')r=scanDeposit(game,t.id);
+  else if(t.kind==='station'){const b=machine(game,t.id);if(b)r=scanStation(game,b);}
+  else r=scanRoom(around(t.key).map(n=>roomAtCell(game!,n)).find(Boolean)??structureRoom(game,t.key,256),t.door);
+  if(!r)return;lastScan=t.kind;audio.tone('scan');hand.scan();
+  const sweep=el('scan-sweep');sweep.hidden=true;void sweep.offsetWidth;sweep.hidden=false;
+  el('info-kind').textContent=r.kind;el('info-title').textContent=r.title;el('info-text').textContent=r.text;
+  el('info-data').replaceChildren(...r.rows.map(([k,v])=>{const d=document.createElement('div'),dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=k;dd.textContent=v;d.append(dt,dd);return d;}));
   setDialog('info-panel');updateUI();
  }
  addEventListener('keydown',event=>{
@@ -367,7 +374,7 @@ function boot(){
   if(event.code==='KeyF'&&!event.repeat&&interaction.cellTool){holdPlace=game?.player.inventory[game.player.hotbar]?.itemId==='window';placedInHold.clear();placeCell();}
   else if(event.code==='KeyF'&&!event.repeat){if(actionKind==='mine'||actionKind==='refill'){holdMine=actionKind==='mine';holdRefill=actionKind==='refill';}else doAction();}
   keys.add(event.code);if(event.code==='Space'&&!event.repeat)input.jump=true;
-  if(event.code==='KeyE'&&!event.repeat)inspect();updateRun();
+  if(event.code==='KeyE'&&!event.repeat&&actionKind==='scan')scan();updateRun();
  });
  addEventListener('keyup',event=>{keys.delete(event.code);if(event.code==='KeyF'){if(holdRefill)void saver?.save();holdMine=holdRefill=false;endHold();}updateRun();});
  const stick=el('joystick');
@@ -461,12 +468,14 @@ function boot(){
   if(!saver.halted)await saver.save();saver.stopHeartbeat();await store.releaseLease(slotId,token).catch(()=>{});saver=null;slotId=null;
  }
  function startGame(state:GameState,id:string|null,revision:number,baseRevision=revision){
-  game=state;refreshQuestProgress(state);questBook.reset();prints.clear();slotId=id;clock.stop();clock.activeTicks=state.meta.activeTicks;mining.nodeId=null;mining.ticks=0;
+  game=state;const scannerGrant=grantScanner(state);refreshQuestProgress(state);questBook.reset();prints.clear();slotId=id;clock.stop();clock.activeTicks=state.meta.activeTicks;mining.nodeId=null;mining.ticks=0;
   actor.reset();Object.assign(actor,{x:state.player.x,y:state.player.y,z:state.player.z,yaw:state.player.yaw,pitch:state.player.pitch});actor.previous={x:actor.x,y:actor.y,z:actor.z};lastSurvivalEvent='none';holdMine=holdRefill=false;
   visited.clear();discovered.clear();state.progress.visited.forEach(v=>visited.add(v));state.progress.discovered.forEach(v=>discovered.add(v));waypoint=state.progress.waypoint??null;selected=resolveNav(state,state.progress.selected,waypoint)==='invalid'?'guide':state.progress.selected;guideOverride=null;lastCompleted=-1;lastStep=null;lastTaskKey='';
   applyNodes();built.reset();built.sync(state);world.invalidateShadows();syncDrops();hudKey='';updateHotbar();shownDay=null;world.setTime(phaseSeconds(state.meta.activeTicks,state.world.dayOffsetTicks),true);updateDayButton();panels.reset();
   if(id&&store){saver=new Saver(store,id,token,revision,state.meta.activeTicks,snapshot,setSaveStatus,baseRevision,(name,ms)=>diagnostics.span(name,ms));saver.startHeartbeat();setSaveStatus(saver.status);}else{saver=null;setSaveStatus({kind:'none'});}
   updateUI();
+  // S5 (D37): an expedition started before the scanner existed gets one, once.
+  if(scannerGrant!=='none'){toast(scannerGrant==='backpack'?'Сканер в рюкзаке':'Сканер у капсулы',scannerGrant==='backpack'?'Выберите его в быстром доступе, чтобы сканировать':'Рюкзак полон — заберите сканер у люка капсулы');syncDrops();void saver?.save();}
  }
  async function newExpedition():Promise<boolean>{
   await closeCurrent();
@@ -543,14 +552,14 @@ function boot(){
    const ti=toolSlot(game),sel=game.player.inventory[game.player.hotbar],secs=mineSeconds(game,n.material);
    blocked=game.world.base.hand||manualWork(game)?'Ручная работа: завершите или отмените':secs===null?(sel&&TOOLS[sel.itemId]?'Инструмент сломан':game.player.inventory.some(x=>x&&TOOLS[x.itemId])?'Выберите мультитул':'Нужен инструмент'):'';
    el('aim-name').textContent=itemName(n.itemId)+(secs!==null?` · ${secs%1?secs.toFixed(1):secs} с${ti<0&&n.material!=='grass'?' · руками':''}`:'');
-   el('aim-meta').textContent=aimReason||blocked||stockText(depositLeft(game,n.id),n.amount,countItem(game.player.inventory,n.itemId));box.classList.toggle('blocked',!!(aimReason||blocked));
+   // S5 (D37): the stock left moved to the scanner; the label keeps the name, the block time and warnings only.
+   el('aim-meta').textContent=aimReason||blocked;box.classList.toggle('blocked',!!(aimReason||blocked));
    const tool=ti>=0&&n.material!=='grass'?game.player.inventory[ti]:null;el('aim-wear').textContent=aimReason||blocked||!tool?'':wearText(tool.durability,TOOLS[tool.itemId]?.durability);
    (el('aim-bar').firstElementChild as HTMLElement).style.transform=`scaleX(${mineRatio})`;
    kind='mine';label='Добыть';iconId='i-pick';
   }else if(nearDrop){kind='pickup';label='Поднять';iconId='i-pack';}
   else if(kind!=='eat'&&nearMachine){kind='machine';label='Открыть станцию';iconId='i-plug';const b=game&&machine(game,nearMachine);if(b){if(selected?.itemId==='wrench'&&b.kind==='workbench'&&b.level===1){kind='upgrade';label='Улучшить';iconId='i-gear';}box.hidden=!running;const st=stationStatus(game!,b);el('aim-name').textContent=b.kind==='workbench'?'Верстак '+(b.level===2?'II':'I'):ITEMS[b.kind].name;el('aim-meta').textContent=kind==='upgrade'?'Ключ · улучшение до II · F':st.title+' · F';box.classList.toggle('blocked',st.tone==='warn');(el('aim-bar').firstElementChild as HTMLElement).style.transform='scaleX(0)';document.body.dataset.aim='true';}}
   else if(kind==='eat'){blocked=game!.player.survival.foodCooldownMs>0?'Подождите перед следующей порцией':'';}
-  else if(nearest){kind='scan';label='Сканировать';iconId='i-scan';}
   if(game&&interaction.cellTool){const id=selected?.itemId;kind='cell';label=id==='airlock'?'Встроить шлюз':'Поставить';iconId='i-pack';el('aim-name').textContent=(selected?ITEMS[selected.itemId].name:'')+(id==='airlock'?' · Q — поворот':'');el('aim-meta').textContent=interaction.problem||(id==='window'?'Поставить · F, удерживать — ряд':'Встроить · F');blocked=interaction.problem;box.classList.toggle('blocked',!!blocked);}
   else if(game&&!nearMachine&&(interaction.target?.startsWith('glass:')||interaction.target?.startsWith('door-'))){
    const door=interaction.target.startsWith('door-')?doorById(game,interaction.target):undefined,key=door?doorKeys(door)[0]:Number(interaction.target.slice(6));
@@ -562,6 +571,15 @@ function boot(){
   else if(game&&interaction.target?.startsWith('crate-')){kind='crate';label='Открыть ящик';iconId='i-pack';el('aim-name').textContent='Ящик';el('aim-meta').textContent='Открыть · F';}
   else if(game&&interaction.target==='capsule'&&kind!=='eat'){kind='capsule';label='Открыть заправку';iconId='i-plug';el('aim-name').textContent='Капсула · кислородный порт';el('aim-meta').textContent='Заправить баллоны · F';}
   if(pendingRemove&&performance.now()<pendingRemove.until&&interaction.struck?.key===pendingRemove.key){if(!el('aim-name').textContent)el('aim-name').textContent=interaction.struck.door?'Шлюз':'Стеклоблок';el('aim-meta').textContent=pendingRemove.text;box.classList.add('blocked');}
+  // S5 (D37): with the scanner selected the action reads the aimed deposit, station or structure, else the nearby place;
+  // without it there is no scan action at all (and the scanner never mines).
+  scanAim=null;
+  if(game&&selected?.itemId==='scanner'){
+   const st=interaction.target,door=st?.startsWith('door-')?doorById(game,st):undefined;
+   scanAim=n?{kind:'deposit',id:n.id}:nearMachine?{kind:'station',id:nearMachine}:st?.startsWith('glass:')?{kind:'room',key:Number(st.slice(6)),door:false}:door?{kind:'room',key:doorKeys(door)[0],door:true}:nearest?{kind:'landmark'}:null;
+   kind=scanAim?'scan':'none';label='Сканировать';iconId='i-scan';blocked='';el('aim-meta').textContent='';el('aim-wear').textContent='';box.classList.remove('blocked');(el('aim-bar').firstElementChild as HTMLElement).style.transform='scaleX(0)';
+   const b=nearMachine?machine(game,nearMachine):undefined;el('aim-name').textContent=!scanAim?'':scanAim.kind==='deposit'?n!.name:scanAim.kind==='station'&&b?stationName(b):scanAim.kind==='room'?(door?'Шлюз':'Стеклоблок'):nearest?.name??'';
+  }
   box.hidden=!running||!el('aim-name').textContent;document.body.dataset.aim=String(!box.hidden);
   if(box.hidden){el('aim-name').textContent='';el('aim-meta').textContent='';el('aim-wear').textContent='';box.classList.remove('blocked');(el('aim-bar').firstElementChild as HTMLElement).style.transform='scaleX(0)';}
   el('retrieve-station').hidden=!running||!(nearMachine||interaction.struck)||interaction.building||interaction.linking;
@@ -596,12 +614,11 @@ function boot(){
   if(ev.toolBroke){haptics.play('broke');audio.tone('warn');toast('Инструмент сломан',itemName('tool_stone')+' · новый мультитул: 4 камня + 2 волокна в мастерской');}
   hudKey='';updateHotbar();
  }
- /** S4 (D33): a new vein appeared somewhere (never within 24 m): toast with material and direction, a dust ring where it rose. */
- function announceVeins(ids:string[]){
-  for(const id of ids){const n=depositById(game!,id);if(!n)continue;const look=VEIN_LOOK[n.material as keyof typeof VEIN_LOOK],d=Math.hypot(n.x-actor.x,n.z-actor.z);
-   toast(`Новая жила: ${itemName(look.itemId).toLowerCase()} — ${directionName(n.x-actor.x,n.z-actor.z)}`,`${n.name} · ${Math.round(d)} м`);
-   fx.landing(n.x,heightAt(n.x,n.z),n.z,world.groundColorAt(n.x,n.z,new THREE.Color()));}
-  audio.tone('discover');world.invalidateShadows();void saver?.save();
+ /** S4 (D33) / S5 (D38): a new vein appeared somewhere (never within 24 m). The sandbox does not announce it: no toast and
+  *  no tone, only the quiet rise of the outcrop and a dust ring where it came up; the map shows it like any deposit. */
+ function veinsRose(ids:string[]){
+  for(const id of ids){const n=depositById(game!,id);if(n)fx.landing(n.x,heightAt(n.x,n.z),n.z,world.groundColorAt(n.x,n.z,new THREE.Color()));}
+  world.invalidateShadows();void saver?.save();
  }
  // ---------- Compass strip ----------
  const compass=el<HTMLCanvasElement>('compass'),cctx=compass.getContext('2d')!;
@@ -748,7 +765,7 @@ function boot(){
     else if(swingActive){swingActive=swingStruck=false;world.deposits.setCrack(null);}}
   }
   if(regrown)applyNodes(spawned);
-  if(spawned.length&&game){announceVeins(spawned);spawned.length=0;}
+  if(spawned.length&&game){veinsRose(spawned);spawned.length=0;}
   if(game&&steps>0&&refreshQuestProgress(game))productionChanged=true;
   if(productionChanged&&game&&game.player.vitals.health>0){hudKey='';updateHotbar();if(dialog==='production-panel')production.draw();void saver?.save();}
   if(game&&saver)saver.tick(clock.activeTicks);measured=diagnostics.stage('simulation',measured);if(dialog==='production-panel')production.tick();measured=diagnostics.stage('production-ui',measured);

@@ -441,6 +441,7 @@
 | canister | Канистра жидкости | equipment | 1 |
 | gas_canister | Канистра газа | equipment | 1 |
 | wrench | Гаечный ключ | equipment | 1 |
+| scanner | Сканер | equipment | 1 |
 | tool_stone | Каменный мультитул | equipment | 1 |
 | pick_iron | Железная кирка | equipment | 1 |
 | pick_steel | Стальная кирка | equipment | 1 |

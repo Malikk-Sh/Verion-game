@@ -47,7 +47,8 @@ export type GameState = {
  };
  world: { crates: Record<string,Slot[]>; base: BaseState; capsuleMilliGU: number; nodes: Record<string, number>; /** Active-time accumulators (ms) of regrowing deposits. */ regrow: Record<string, number>; drops: Drop[]; nextDropId: number; dayOffsetTicks: number;
   /** S4 (D33): live new veins, the queue of veins still to appear (active ms) and the next vein number. */ veins: Vein[]; respawn: Respawn[]; nextVeinId: number };
- progress: { visited: string[]; discovered: string[]; selected: string; quests: QuestProgress; /** S4 map mark («Метка», D34); optional: older pages drop it, sanitize defaults it to null. */ waypoint?: { x: number; z: number } | null };
+ progress: { visited: string[]; discovered: string[]; selected: string; quests: QuestProgress; /** S4 map mark («Метка», D34); optional: older pages drop it, sanitize defaults it to null. */ waypoint?: { x: number; z: number } | null;
+  /** S5 (D37): the scanner was handed out (new worlds start with it; older saves get it once, scanner.ts). Optional: absent = not yet. */ scanner?: boolean };
 };
 export const SPAWN_POSE = { x: 40, z: 42, yaw: .38, pitch: -.035 };
 const basicSuit = (): Suit => ({ helmet: { itemId: BASIC_SUIT.helmet, count: 1 }, chest: { itemId: BASIC_SUIT.chest, count: 1 }, legs: { itemId: BASIC_SUIT.legs, count: 1 }, boots: { itemId: BASIC_SUIT.boots, count: 1 } });
@@ -55,11 +56,12 @@ export function newGame(worldId: string, seed: number, createdAt: number, y: num
  const inventory = emptyInventory();
  inventory[0] = { itemId: 'tool_stone', count: 1, durability: TOOLS.tool_stone.durability };
  inventory[1] = { itemId: 'pulp', count: 4 };
+ inventory[2] = { itemId: 'scanner', count: 1 };
  return {
   meta: { worldId, name, seed: seed >>> 0, planetId: 'verdana', generatorVersion: GENERATOR_VERSION, contentVersion: CONTENT_VERSION, stateVersion: STATE_VERSION, createdAt, activeTicks: 0 },
   player: { x: SPAWN_POSE.x, y, z: SPAWN_POSE.z, yaw: SPAWN_POSE.yaw, pitch: SPAWN_POSE.pitch, vitals: { health: 100, satiety: 100 }, survival: freshSurvival(), suit: basicSuit(), bottles: [{ itemId: 'bottle_1', count: 1, milliGU: TANKS.bottle_1.capacity }, null], inventory, hotbar: 0 },
   world: { crates: {'crate-a':emptyInventory(),'crate-b':emptyInventory()}, base: freshBase(), capsuleMilliGU: CAPSULE_CAPACITY, nodes: Object.fromEntries(NODES.map(n => [n.id, n.amount])), regrow: {}, drops: [], nextDropId: 1, dayOffsetTicks: START_OFFSET_TICKS, veins: [], respawn: [], nextVeinId: 1 },
-  progress: { visited: [], discovered: [], selected: 'guide', quests: freshQuestProgress(), waypoint: null },
+  progress: { visited: [], discovered: [], selected: 'guide', quests: freshQuestProgress(), waypoint: null, scanner: true },
  };
 }
 export const cloneState = (s: GameState): GameState => structuredClone(s);
@@ -327,6 +329,7 @@ export function sanitizeState(input: unknown): GameState {
  const completed=arr(qp.completed,'quests.completed',QUEST_IDS.length).map(v=>{if(!(QUEST_IDS as readonly unknown[]).includes(v))throw new InvalidState('quests.completed','неизвестная цель');return v as QuestId;});
  if(new Set(facts).size!==facts.length||new Set(completed).size!==completed.length)throw new InvalidState('quests','повтор факта или цели');
  if(qp.tracked!==null&&!(QUEST_IDS as readonly unknown[]).includes(qp.tracked))throw new InvalidState('quests.tracked','неизвестная цель');
+ if(pr.scanner!==undefined&&typeof pr.scanner!=='boolean')throw new InvalidState('progress.scanner','ожидался boolean');
  return {
   meta: { worldId: str(m.worldId, 'meta.worldId', 48, ID), name: str(m.name, 'meta.name', 48), seed: int(m.seed, 'meta.seed', 0, 0xffffffff), planetId: 'verdana', generatorVersion: GENERATOR_VERSION, contentVersion: CONTENT_VERSION, stateVersion: STATE_VERSION, createdAt: int(m.createdAt, 'meta.createdAt', 0, 8.64e15), activeTicks: int(m.activeTicks, 'meta.activeTicks', 0, Number.MAX_SAFE_INTEGER) },
   player: { x: num(pl.x, 'player.x', -200, 360), y: num(pl.y, 'player.y', -100, 200), z: num(pl.z, 'player.z', -200, 360), yaw: num(pl.yaw, 'player.yaw', -1e6, 1e6), pitch: num(pl.pitch, 'player.pitch', -2, 2),
@@ -335,7 +338,7 @@ export function sanitizeState(input: unknown): GameState {
    bottles: [bottleSlot(bottles[0], 'player.bottles[0]'), bottleSlot(bottles[1], 'player.bottles[1]')], inventory: inv.map((s, i) => slot(s, `player.inventory[${i}]`)),
    hotbar: int(pl.hotbar, 'player.hotbar', 0, HOTBAR_SIZE - 1) },
   world: { crates:Object.fromEntries(['crate-a','crate-b'].map(id=>{const a=arr(obj(w.crates,'world.crates')[id],'crate.'+id,24);if(a.length!==24)throw new InvalidState('crate','нужно 24 слота');return [id,a.map((v,i)=>slot(v,'crate.'+id+'.'+i))];})), base: validateBase(w.base), capsuleMilliGU: int(w.capsuleMilliGU, 'world.capsuleMilliGU', 0, CAPSULE_CAPACITY), nodes, regrow, drops, nextDropId, dayOffsetTicks: int(w.dayOffsetTicks, 'world.dayOffsetTicks', 0, CYCLE_TICKS - 1), ...validateVeins(w) },
-  progress: { visited: ids(pr.visited, 'progress.visited'), discovered: ids(pr.discovered, 'progress.discovered'), selected: str(pr.selected, 'progress.selected', 32, ID), quests:{facts,completed,tracked:qp.tracked as QuestId|null}, waypoint: pr.waypoint == null ? null : { x: num(obj(pr.waypoint, 'progress.waypoint').x, 'progress.waypoint.x', -200, 360), z: num(obj(pr.waypoint, 'progress.waypoint').z, 'progress.waypoint.z', -200, 360) } },
+  progress: { visited: ids(pr.visited, 'progress.visited'), discovered: ids(pr.discovered, 'progress.discovered'), selected: str(pr.selected, 'progress.selected', 32, ID), quests:{facts,completed,tracked:qp.tracked as QuestId|null}, waypoint: pr.waypoint == null ? null : { x: num(obj(pr.waypoint, 'progress.waypoint').x, 'progress.waypoint.x', -200, 360), z: num(obj(pr.waypoint, 'progress.waypoint').z, 'progress.waypoint.z', -200, 360) }, ...(pr.scanner === true ? { scanner: true } : {}) },
  };
 }
 

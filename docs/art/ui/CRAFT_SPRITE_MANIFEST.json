@@ -563,5 +563,20 @@
       "game_sha256": "a3b57ddd77c3e965c7ee16448238a76d9372039167e72e53f00b318fb8c001a0",
       "transparent_background": true
     }
+  ],
+  "rendered_tools": [
+    {
+      "id": "scanner",
+      "generation_mode": "rendered from in-game model",
+      "source": "tools/render_scanner_sprite.mjs → tools/scanner-sprite.ts (viewmodel.ts HAND_MODELS.scanner)",
+      "game_path": "src/assets/items/scanner.webp",
+      "game_dimensions": [
+        512,
+        512
+      ],
+      "game_bytes": 7204,
+      "game_sha256": "1690be434a833f7bf9e77ee17e775a4b425ec4b9f2fa04308752d1224fbd8ca3",
+      "transparent_background": true
+    }
   ]
 }

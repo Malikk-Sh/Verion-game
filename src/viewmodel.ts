@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { reducedMotion } from './motion';
 /**
  * First-person hand tool. Rendered in its own small scene after the world with a cleared depth
  * buffer, so it never clips into rocks. Models are procedural placeholders built per tool ID;
@@ -22,6 +23,30 @@ function stoneMultitool(): THREE.Object3D {
  return g;
 }
 function wrench():THREE.Group{const g=new THREE.Group(),metal=new THREE.MeshStandardMaterial({color:0xaac0c7,metalness:.7,roughness:.35});const part=(x:number,y:number,w:number,h:number)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,.035),metal);m.position.set(x,y,0);g.add(m);};part(0,0,.065,.48);part(-.055,.26,.045,.14);part(.055,.26,.045,.14);part(0,.20,.14,.055);g.rotation.z=-.15;return g;}
+/** S5 (D37): the handheld scanner — graphite grip, ivory body with orange bands, a cyan screen facing the holder and an
+ *  emitter lens on top. `userData.glow(v)` brightens the screen and the lens while a scan runs (0 rest … 1 sweep). */
+function scanner(): THREE.Object3D {
+ const g = new THREE.Group();
+ const dark = new THREE.MeshStandardMaterial({ color: '#262c2f', roughness: .55, metalness: .4, flatShading: true });
+ const ivory = new THREE.MeshStandardMaterial({ color: '#e9e2d2', roughness: .6, metalness: .05, flatShading: true });
+ const orange = new THREE.MeshStandardMaterial({ color: '#e8742a', roughness: .45, metalness: .2, emissive: '#5a2008', emissiveIntensity: .25 });
+ const steel = new THREE.MeshStandardMaterial({ color: '#8d979a', roughness: .35, metalness: .85 });
+ const screen = new THREE.MeshStandardMaterial({ color: '#0f3a3c', roughness: .3, metalness: 0, emissive: '#3fe0d0', emissiveIntensity: .8 });
+ const lens = new THREE.MeshStandardMaterial({ color: '#9ff6ff', roughness: .15, metalness: .1, emissive: '#57e6d6', emissiveIntensity: 1.2 });
+ const grip = new THREE.Mesh(new THREE.BoxGeometry(.052, .17, .046), dark); grip.position.set(0, -.12, .004); grip.rotation.x = .12; g.add(grip);
+ const guard = new THREE.Mesh(new THREE.BoxGeometry(.06, .02, .056), orange); guard.position.y = -.035; g.add(guard);
+ const body = new THREE.Mesh(new THREE.BoxGeometry(.12, .14, .062), ivory); body.position.y = .045; g.add(body);
+ for (const y of [-.012, .102]) { const band = new THREE.Mesh(new THREE.BoxGeometry(.124, .014, .066), orange); band.position.y = y; g.add(band); }
+ const bezel = new THREE.Mesh(new THREE.BoxGeometry(.096, .088, .006), dark); bezel.position.set(0, .055, .033); g.add(bezel);
+ const face = new THREE.Mesh(new THREE.PlaneGeometry(.082, .072), screen); face.position.set(0, .055, .0365); g.add(face);
+ // A sweep line and two bars on the screen (geometry, no texture).
+ for (const [y, w] of [[.075, .06], [.04, .045], [.028, .03]] as const) { const bar = new THREE.Mesh(new THREE.PlaneGeometry(w, .006), lens); bar.position.set(-.004, y, .037); g.add(bar); }
+ const neck = new THREE.Mesh(new THREE.CylinderGeometry(.026, .032, .03, 8), steel); neck.position.y = .13; g.add(neck);
+ const dome = new THREE.Mesh(new THREE.SphereGeometry(.03, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), lens); dome.position.y = .145; g.add(dome);
+ const fin = new THREE.Mesh(new THREE.BoxGeometry(.01, .05, .02), dark); fin.position.set(.045, .14, -.01); g.add(fin);
+ g.userData.glow = (v: number) => { screen.emissiveIntensity = .8 + v * 1.6; lens.emissiveIntensity = 1.2 + v * 2.5; };
+ return g;
+}
 /** S4: a suit glove for bare-hand gathering; `userData.curl(v)` closes the fingers (0 open … 1 fist). */
 function glove(): THREE.Object3D {
  const g = new THREE.Group(), cloth = new THREE.MeshStandardMaterial({ color: '#4a5256', roughness: .8, metalness: .05 }), pad = new THREE.MeshStandardMaterial({ color: '#7d8589', roughness: .9 });
@@ -43,7 +68,7 @@ function glove(): THREE.Object3D {
  g.userData.curl = (v: number) => { for (const f of fingers) f.rotation.x = -.12 - v * 1.3; thumb.rotation.x = -v * .5; thumb.rotation.y = .75 - v * .45; };
  g.userData.curl(.15); return g;
 }
-export const HAND_MODELS: Record<string, Builder> = { tool_stone: stoneMultitool, wrench, hand: glove };
+export const HAND_MODELS: Record<string, Builder> = { tool_stone: stoneMultitool, wrench, scanner, hand: glove };
 
 export function createViewModel() {
  const scene = new THREE.Scene();
@@ -52,7 +77,7 @@ export function createViewModel() {
  const rig = new THREE.Group(), holder = new THREE.Group(); rig.add(holder); scene.add(rig);
  const built = new Map<string, THREE.Object3D>();
  // `want` is the selected model; `current` is the one drawn (it stays while lowering out of view).
- let current: string | null = null, want: string | null = null, show = 0;
+ let current: string | null = null, want: string | null = null, show = 0, scanT = 0;
  const base = new THREE.Vector3(.36, -.36, -.62);
  function mount(id: string | null) {
   current = id; show = 0; holder.clear(); holder.scale.setScalar(.72);
@@ -76,8 +101,11 @@ export function createViewModel() {
    (m?.userData.curl as ((v: number) => void) | undefined)?.(.15 + hit * .85 - raise * .15);
   } else {
    const s = hit - .55 * raise;
-   holder.position.set(base.x + bobX * .6, base.y - (1 - e) * .35 + bobY * .5 - s * .05, base.z + s * .06);
-   holder.rotation.set(-.35 - s * .9, .55, .25 + s * .2);
+   // A scan lifts the scanner towards the centre and lights its screen (S5); the light stays under reduced motion.
+   scanT = Math.max(0, scanT - dt * 1.4); const k = current === 'scanner' ? Math.sin(Math.min(1, scanT) * Math.PI) : 0, lift = reducedMotion() ? 0 : k;
+   holder.position.set(base.x + bobX * .6 - lift * .07, base.y - (1 - e) * .35 + bobY * .5 - s * .05 + lift * .07, base.z + s * .06 - lift * .05);
+   holder.rotation.set(-.35 - s * .9 + lift * .3, .55 - lift * .2, .25 + s * .2);
+   (m?.userData.glow as ((v: number) => void) | undefined)?.(k);
   }
   hemi.color.copy(light.hemi.color); hemi.groundColor.copy(light.hemi.groundColor); hemi.intensity = light.hemi.intensity;
   sun.color.copy(light.sun.color); sun.intensity = light.sun.intensity * .75;
@@ -87,5 +115,5 @@ export function createViewModel() {
   const previous=want;for(const id of Object.keys(HAND_MODELS))if(!built.has(id))built.set(id,HAND_MODELS[id]());
   holder.clear();for(const model of built.values())holder.add(model);want='prewarm';update(1,camera,light,0,0,0);await renderer.compileAsync(scene,camera);renderer.render(scene,camera);holder.clear();current=want=null;setItem(previous);
  }
- return { scene, setItem, update, prewarm, get visible() { return current !== null; }, get item() { return want; } };
+ return { scene, setItem, update, prewarm, /** Starts the scan lift and glow of the held scanner. */ scan() { scanT = 1; }, get visible() { return current !== null; }, get item() { return want; } };
 }

@@ -174,6 +174,7 @@ bottle_3|Баллон III
 canister|Канистра жидкости
 gas_canister|Канистра газа
 wrench|Гаечный ключ
+scanner|Сканер
 tool_stone|Каменный мультитул
 pick_iron|Железная кирка
 pick_steel|Стальная кирка
@@ -190,7 +191,7 @@ turret|Защитная турель
 ammo|Боеприпасы турели
 beacon|Навигационный маяк'''
 for line in objects.splitlines():
- i,n=line.split('|'); item(i,n,'equipment' if i.startswith(('suit','bottle','underwear','pick','drill','sword','jetpack','tool_')) or i in ['wrench','grapple','claws','canister','gas_canister','rocket_1','rocket_2','rocket_3','rover','trailer'] else 'placeable',1 if i.startswith(('suit','bottle','underwear','pick','drill','sword','jetpack','tool_','rocket')) or i in ['wrench','grapple','claws','canister','gas_canister','rover','trailer'] else 16)
+ i,n=line.split('|'); item(i,n,'equipment' if i.startswith(('suit','bottle','underwear','pick','drill','sword','jetpack','tool_')) or i in ['wrench','scanner','grapple','claws','canister','gas_canister','rocket_1','rocket_2','rocket_3','rover','trailer'] else 'placeable',1 if i.startswith(('suit','bottle','underwear','pick','drill','sword','jetpack','tool_','rocket')) or i in ['wrench','scanner','grapple','claws','canister','gas_canister','rover','trailer'] else 16)
 
 def R(id,station,inp,out,t=5,power=0,tech='start',scope='core',note=''):
  recipes.append(dict(id=id,station=station,inputs=inp,outputs=out,seconds=t,EU_per_second=power,tech=tech,scope=scope,note=note))

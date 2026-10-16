@@ -1126,6 +1126,11 @@
       "kind": "equipment",
       "stack": 1
     },
+    "scanner": {
+      "name": "Сканер",
+      "kind": "equipment",
+      "stack": 1
+    },
     "tool_stone": {
       "name": "Каменный мультитул",
       "kind": "equipment",

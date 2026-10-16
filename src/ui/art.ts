@@ -35,6 +35,8 @@ import sprite_hydrogen from '../assets/items/hydrogen.webp';
 // S4: rendered from the in-game models (tools/render_room_sprites.mjs).
 import sprite_window from '../assets/items/window.webp';
 import sprite_airlock from '../assets/items/airlock.webp';
+// S5 (D37): rendered from the hand model (tools/render_scanner_sprite.mjs).
+import sprite_scanner from '../assets/items/scanner.webp';
 import figureBoots from '../assets/figure/suit_boots.webp';
 /**
  * Shared local raster sprites: one asset for hotbar, inventory, equipment and inspection.
@@ -44,7 +46,7 @@ import figureBoots from '../assets/figure/suit_boots.webp';
 export const ITEM_ART: Partial<Record<string, string>> = {
  tool_stone: tool, bottle_1: tank, pulp: food, iron_raw: iron, copper_raw: copper,
  ice, stone, suit_helmet: helmet, suit_chest: chest, suit_legs: legs, suit_boots: boots,
- wrench: sprite_wrench, fiber: sprite_fiber, iron: sprite_iron, copper: sprite_copper,
+ wrench: sprite_wrench, scanner: sprite_scanner, fiber: sprite_fiber, iron: sprite_iron, copper: sprite_copper,
  grass: sprite_grass, sand: sprite_sand, glass: sprite_glass, wire: sprite_wire, circuit: sprite_circuit,
  cable: sprite_cable, gas_pipe: sprite_gas_pipe, workbench: sprite_workbench, kiln: sprite_kiln,
  biogenerator: sprite_biogenerator, electrolyzer: sprite_electrolyzer, refill: sprite_refill,
