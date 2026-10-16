@@ -146,6 +146,15 @@ try{
   {const n=await draws();await page.click('#map-button');await page.waitForFunction(k=>window.__vireon.getState().dialog==='map-panel'&&window.__vireon.getState().map.draws>k,n);}
   m=(await state()).map;assert.equal(m.card,null);q=at(door.x+.5,door.z+.5);await page.mouse.click(q.x,q.y);
   assert.deepEqual((await state()).map.card,{kind:'station',id:door.id});assert.equal(await page.locator('#map-go').innerText(),'Ведём · закрыть');
+  // S5: at the maximum 24 px/m every glass column of the room is a 1 m square, and the airlock still opens with one tap.
+  // A drag brings the airlock to the middle (a drag pans, never taps); each wheel notch zooms about it to an exact factor.
+  {await page.click('#map-back');assert.equal((await state()).map.card,null);
+   q=at(door.x+.5,door.z+.5);await page.mouse.move(q.x,q.y);await page.mouse.down();await page.mouse.move(mb.x+mb.width/2,mb.y+mb.height/2,{steps:6});await page.mouse.up();assert.equal((await state()).map.card,null,'a drag pans, it does not open a card');
+   while((m=(await state()).map).zoom<24){const want=Math.min(24,m.zoom*Math.exp(.6));q=at(door.x+.5,door.z+.5);await page.mouse.move(q.x,q.y);await page.mouse.wheel(0,-400);assert.ok(Math.abs((await state()).map.zoom-want)<1e-6,'one wheel notch zooms to '+want);}
+   await page.waitForFunction(k=>window.__vireon.getState().map.draws>k,(await state()).map.draws);m=(await state()).map;
+   const cols=new Set([...(await snapshot()).world.base.glass.map(k=>Math.floor(k/128)),(door.x+256)*1024+door.z+256]);assert.equal(m.columns,cols.size,'every glass column of the room is drawn at 24 px/m');
+   q=at(door.x+.5,door.z+.5);assert.ok(q.x>mb.x&&q.x<mb.x+mb.width&&q.y>mb.y&&q.y<mb.y+mb.height,'the airlock is on screen');await page.mouse.click(q.x,q.y);assert.deepEqual((await state()).map.card,{kind:'station',id:door.id});
+   await shot('map-max');}
   await page.click('#map-guide');s=await state();assert.equal(s.selected,'guide');if(s.dialog==='map-panel')await page.click('#close-map');assert.equal((await state()).running,true);
   check('Map: the glass room is an outline tinted by its air; its airlock opens a room card, is led to and returns to the journal');}
  // ---------- Growing behind a second wall, the airlock both ways, a confirmed breach ----------
