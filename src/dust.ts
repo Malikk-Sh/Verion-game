@@ -67,6 +67,8 @@ export type Sheet = { x: number; z: number; y0: number; y1: number; len: number;
  */
 export class SandDrift {
  sheets: Sheet[] = []; cap: number = DRIFT.standard; private clock = 0; private rnd: () => number;
+ /** Ribbons born so far (diagnostics: the gust check counts births, not ribbons left from an earlier gust). */
+ born = 0;
  constructor(seed = 4242) { let r = seed >>> 0; this.rnd = () => { r = (Math.imul(r, 1664525) + 1013904223) >>> 0; return r / 4294967296; }; }
  setQuality(q: DustQuality) { this.cap = DRIFT[q]; if (this.sheets.length > this.cap) this.sheets.length = this.cap; }
  clear() { this.sheets.length = 0; this.clock = 0; }
@@ -85,7 +87,7 @@ export class SandDrift {
    const life = 2.5 + this.rnd() * 2, speed = 1.4 + this.rnd() * .7, ahead = 4 + this.rnd() * 10, side = (this.rnd() - .5) * 14, half = wind.speed * speed * life / 2;
    const x = ox + fx * ahead - fz * side - wind.dirX * half, z = oz + fz * ahead + fx * side - wind.dirZ * half;
    const len = 3 + this.rnd() * 4, hx = wind.dirX * len / 2, hz = wind.dirZ * len / 2, c = color?.(x, z);
-   this.sheets.push({ x, z, y0: ground(x - hx, z - hz), y1: ground(x + hx, z + hz), len, height: .25 + this.rnd() * .4, speed, age: 0, life, seed: this.rnd(), r: c?.r ?? .85, g: c?.g ?? .74, b: c?.b ?? .56 });
+   this.born++; this.sheets.push({ x, z, y0: ground(x - hx, z - hz), y1: ground(x + hx, z + hz), len, height: .25 + this.rnd() * .4, speed, age: 0, life, seed: this.rnd(), r: c?.r ?? .85, g: c?.g ?? .74, b: c?.b ?? .56 });
   }
  }
 }

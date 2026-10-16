@@ -576,5 +576,5 @@ export function createWorld(scene:THREE.Scene,wind=new Wind()){
   measure?.('animation',performance.now()-at);
  }
  setQuality('standard');
- return{setTime,setQuality,prepare,invalidateShadows:()=>{if(!sun.shadow.needsUpdate)shadowRedraws++;sun.shadow.needsUpdate=true;},get shadowRedraws(){return shadowRedraws;},lights,lightRoots,wind,motes,drift:{get live(){return drift.live;},get cap(){return sand.cap;}},groundColorAt,sunLight:sun,hemiLight:hemi,get sunDirection(){return sunTrue;},update,setNodeAmount,syncVeins,nodeGroups,deposits,followSky:(_p:THREE.Vector3)=>{},landmarks:LANDMARKS,grassCount:GRASS.length,meshes,terrain,get quality(){return quality;},get nightValue(){return k;}};
+ return{setTime,setQuality,prepare,invalidateShadows:()=>{if(!sun.shadow.needsUpdate)shadowRedraws++;sun.shadow.needsUpdate=true;},get shadowRedraws(){return shadowRedraws;},lights,lightRoots,wind,motes,drift:{get live(){return drift.live;},get cap(){return sand.cap;},get born(){return sand.born;}},groundColorAt,sunLight:sun,hemiLight:hemi,get sunDirection(){return sunTrue;},update,setNodeAmount,syncVeins,nodeGroups,deposits,followSky:(_p:THREE.Vector3)=>{},landmarks:LANDMARKS,grassCount:GRASS.length,meshes,terrain,get quality(){return quality;},get nightValue(){return k;}};
 }

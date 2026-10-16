@@ -48,7 +48,7 @@ test('Sand drift: ribbons only in gusts, upwind and near the player, on the grou
  const ground=(x:number,z:number)=>.05*x-.02*z,calm={gust:.5,vx:1.2,vz:0,dirX:1,dirZ:0,speed:1.2},gust={gust:.95,vx:2.1,vz:.4,dirX:.982,dirZ:.188,speed:2.14};
  const d=new SandDrift(7);d.setQuality('low');for(let i=0;i<200;i++)d.update(.05,calm,100,100,ground);assert.equal(d.sheets.length,0,'no ribbons in a calm');
  for(let i=0;i<400;i++){d.update(.05,gust,100,100,ground);assert.ok(d.sheets.length<=DRIFT.low);}
- assert.ok(d.sheets.length>0,'a strong gust raises ribbons');
+ assert.ok(d.sheets.length>0&&d.born>=d.sheets.length,'a strong gust raises ribbons (and counts them as born)');
  for(const s of d.sheets){assert.ok(Math.hypot(s.x-100,s.z-100)<30);assert.ok(Math.abs(s.y0-ground(s.x-gust.dirX*s.len/2,s.z-gust.dirZ*s.len/2))<1e-9&&Math.abs(s.y1-ground(s.x+gust.dirX*s.len/2,s.z+gust.dirZ*s.len/2))<1e-9,'both ends rest on the ground');assert.ok(s.height<=.65&&s.len<=7);assert.ok(SandDrift.strength(s,gust.gust)>=0&&SandDrift.strength(s,gust.gust)<=1);assert.equal(SandDrift.strength(s,.4),0,'no visible ribbon below a gust of 0.45');}
  // A fresh ribbon crosses the view: at mid-life it is 4…14 m in front of the player (looking −z here), then it moves downwind.
  const born=new SandDrift(3);for(let i=0;i<40&&!born.sheets.length;i++)born.update(.05,gust,0,0,ground,undefined,false,0,-1);const s0={...born.sheets[0]},mid=[s0.x+gust.vx*s0.speed*s0.life/2,s0.z+gust.vz*s0.speed*s0.life/2];assert.ok(-mid[1]>=3.9&&-mid[1]<=14.6&&Math.abs(mid[0])<=7.1,'crosses the view ahead: '+mid);born.update(.1,gust,0,0,ground,undefined,false,0,-1);assert.ok(born.sheets[0].x>s0.x);
