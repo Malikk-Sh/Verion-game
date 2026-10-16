@@ -4,27 +4,36 @@ import { StaticBatch, surface, quad, beam, rod } from './geometry';
 import { chiseledRock, oreOutcrop } from './rocks';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { fbm, ridged, noise2 } from './noise';
-import { groundTextures, hullTextures, gratingTexture, consoleScreen, panelTexture } from './textures';
-import { createSky, createDust } from './sky';
+import { groundTextures, hullTextures, gratingTexture, consoleScreen, panelTexture, macroNoiseTexture } from './textures';
+import { createSky, createMotes } from './sky';
+import { Wind } from './wind';
+import { reducedMotion } from './motion';
 import { Terrain, createShadeBaker, useBakedShade } from './terrain';
 import { CYCLE_S, nightAmount, sunDirection } from './game/daycycle';
-import { PATCH_NODES, SHARED_PATCH_SPLIT } from './game/resources';
+import { PATCH_NODES, SHARED_PATCH_SPLIT, VEIN_SPOT_BY_ID, VEIN_LOOK, veinScale, type Vein } from './game/resources';
+import { createLightPool, LIGHT_PRIORITY } from './lights';
+import { createDepositFeel } from './depositFeel';
 
 export type Quality = 'low'|'standard'|'high';
+// S4: sun shadows fade out over the outer 10% of the shadow frustum instead of ending at a hard line (no extra taps).
+THREE.ShaderChunk.shadowmap_pars_fragment=THREE.ShaderChunk.shadowmap_pars_fragment.replace('\t\treturn mix( 1.0, shadow, shadowIntensity );','\t\tfloat edgeFade=smoothstep(0.,.1,min(min(shadowCoord.x,1.-shadowCoord.x),min(shadowCoord.y,1.-shadowCoord.y)));\n\t\treturn mix( 1.0, shadow, shadowIntensity*edgeFade );');
 const lin=(r:number,g:number,b:number)=>new THREE.Color().setRGB(r,g,b,THREE.LinearSRGBColorSpace);
 const smooth=(a:number,b:number,t:number)=>{const u=Math.max(0,Math.min(1,(t-a)/(b-a)));return u*u*(3-2*u);};
-/** Beyond the walkable 560 m square: a rising ring of ridged, snow-capped mountains. */
+/** Beyond the walkable 560 m square: a rising ring of ridged, snow-capped mountains. S4: a second, finer ridge layer
+ * and eroded gullies give a sharper silhouette (purely visual: nothing out here is walkable, collided with or saved). */
 export function outerHeight(x:number,z:number){
  const cx=Math.max(MIN,Math.min(MAX,x)),cz=Math.max(MIN,Math.min(MAX,z)),d=Math.hypot(x-cx,z-cz);
  if(d<=0)return rawHeight(cx,cz)-3;
  const ramp=smooth(0,160,d),r=ridged(x*.0045+3,z*.0045-2,5,41);
- return rawHeight(cx,cz)-.8+d*.25+ramp*(r*r*190+fbm(x*.015,z*.015,3,5)*18)+smooth(0,50,d)*fbm(x*.04,z*.04,3,9)*8;
+ // The sharper layer comes and goes along the ring (a broad mask), so the skyline alternates jagged and rounded ranges.
+ const far=smooth(25,220,d)*(.35+.65*smooth(-.3,.35,fbm(x*.0032+9,z*.0032,2,88))),r2=ridged(x*.011-7+fbm(x*.006,z*.006,2,63)*1.5,z*.011+4,4,61),gully=Math.abs(noise2(x*.015+fbm(x*.008,z*.008,2,77)*2.2,z*.015,73));
+ return rawHeight(cx,cz)-.8+d*.25+ramp*(r*r*190+fbm(x*.015,z*.015,3,5)*18)+smooth(0,50,d)*fbm(x*.04,z*.04,3,9)*8+far*(r2*r2*r2*62-smooth(.2,0,gully)*12*(.4+r2));
 }
 /** Hull faces: octagon ring, perimeter-proportional U so decals never straddle a corner rib. */
 export const HULL_RING=[[-1.86,3],[1.86,3],[2.5,2.34],[2.5,-2.34],[1.86,-3],[-1.86,-3],[-2.5,-2.34],[-2.5,2.34]];
 export const HULL_U=(()=>{const len=HULL_RING.map((a,i)=>{const b=HULL_RING[(i+1)%8];return Math.hypot(b[0]-a[0],b[1]-a[1]);}),total=len.reduce((x,y)=>x+y,0);let u=0;return len.map(l=>{const r=[u/total,(u+l)/total,l] as [number,number,number];u+=l;return r;});})();
 
-export function createWorld(scene:THREE.Scene){
+export function createWorld(scene:THREE.Scene,wind=new Wind()){
  const lowDecoration:THREE.Object3D[]=[];
  const rng=random(558),dummy=new THREE.Object3D(),color=new THREE.Color();
  const cache=new Map<string,THREE.MeshStandardMaterial>();
@@ -65,22 +74,38 @@ export function createWorld(scene:THREE.Scene){
  const ground=groundTextures();ground.map.repeat.set(1,1);ground.normalMap.anisotropy=4;
  const terrainMat=new THREE.MeshStandardMaterial({vertexColors:true,map:ground.map,normalMap:ground.normalMap,normalScale:new THREE.Vector2(.45,.45),roughness:1,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1});
  terrainMat.name='terrain';
- const antiTile=(s:THREE.WebGLProgramParametersWithUniforms)=>{s.fragmentShader=s.fragmentShader.replace('#include <map_fragment>',`#ifdef USE_MAP
-  vec4 t1=texture2D(map,vMapUv);vec4 t2=texture2D(map,vMapUv*.23+vec2(.31,.17));diffuseColor.rgb*=mix(t1.rgb,t2.rgb,.45)*1.18;
- #endif`);};
+ // S4 look (point 9 without touching heights): the texture is projected from the side on steep faces (no stretching), thin
+ // strata follow world height there, a macro noise breaks the repeat at distance, and loose sand shows ripples across the wind.
+ const macro=macroNoiseTexture();
+ const antiTile=(s:THREE.WebGLProgramParametersWithUniforms)=>{s.uniforms.uMacro={value:macro};
+  s.vertexShader='attribute vec2 surface;varying vec3 vTerrW;varying vec3 vTerrN;varying vec2 vSurf;\n'+s.vertexShader.replace('#include <project_vertex>',`#include <project_vertex>
+  vTerrW=(modelMatrix*vec4(transformed,1.)).xyz;vTerrN=normalize(mat3(modelMatrix)*objectNormal);vSurf=surface;`);
+  s.fragmentShader='uniform sampler2D uMacro;varying vec3 vTerrW;varying vec3 vTerrN;varying vec2 vSurf;\n'+s.fragmentShader.replace('#include <map_fragment>',`float ripple=0.,ripplePh=0.;
+ #ifdef USE_MAP
+  vec3 tn=normalize(vTerrN);float steep=smoothstep(.3,.62,vSurf.y);
+  vec4 t1=texture2D(map,vMapUv),t2=texture2D(map,vMapUv*.23+vec2(.31,.17));vec3 side=texture2D(map,(abs(tn.x)>abs(tn.z)?vTerrW.zy:vTerrW.xy)*vec2(.38,.7)).rgb;
+  diffuseColor.rgb*=mix(mix(t1.rgb,t2.rgb,.45),side,steep)*1.18;
+  vec4 mc=texture2D(uMacro,vTerrW.xz*.023),mf=texture2D(uMacro,vTerrW.xz*.0061+vec2(.37,.11));
+  diffuseColor.rgb*=mix(.9,1.08,mc.r*.55+mf.r*.45);
+  diffuseColor.rgb*=1.+steep*(sin(vTerrW.y*5.2+mc.g*4.+mf.r*6.)*.08-.02);
+  ripplePh=(vTerrW.x+sin(vTerrW.z*.37)*.55+mc.g*1.8)*13.;
+  ripple=vSurf.x*(1.-smoothstep(9.,22.,length(vTerrW-cameraPosition)))*(1.-smoothstep(.7,1.8,fwidth(ripplePh)));
+  diffuseColor.rgb*=1.-.035*ripple*sin(ripplePh);
+ #endif`).replace('#include <normal_fragment_maps>',`#include <normal_fragment_maps>
+  if(ripple>.01)normal=normalize(normal-(viewMatrix*vec4(cos(ripplePh)*.3*ripple,0.,0.,0.)).xyz);`);};
  const P=[['#9b7a58','dust'],['#86694d','earth'],['#6e655c','gravel'],['#b1946f','path'],['#8a7d6c','silt'],['#e7ecee','snow'],['#4d4642','rock'],['#6a4a3a','redrock'],['#b9a583','sand']] as const;
  const C=Object.fromEntries(P.map(([h,k])=>[k,new THREE.Color(h)])) as Record<string,THREE.Color>;
  const paths=[[40,44,43,56],[43,56,62,63],[62,63,80,56],[40,44,56,45],[62,63,30,79],[80,56,110,72],[80,56,104,-40],[30,79,-40,140]];
  const tmpC=new THREE.Color();
- const groundColor=(x:number,z:number,h:number,slope:number,out:THREE.Color)=>{
-  out.copy(C.dust).lerp(C.earth,smooth(-.3,.4,fbm(x*.035,z*.035,3,2)));
-  out.lerp(C.gravel,smooth(.18,.5,fbm(x*.09+4,z*.09,3,6))*.8);
+ const groundColor=(x:number,z:number,h:number,slope:number,out:THREE.Color,cavity=0,surf?:Float32Array)=>{
+  const earth=smooth(-.3,.4,fbm(x*.035,z*.035,3,2));out.copy(C.dust).lerp(C.earth,earth);
+  const gravel=smooth(.18,.5,fbm(x*.09+4,z*.09,3,6))*.8;out.lerp(C.gravel,gravel);
   let p=Infinity;for(const q of paths)p=Math.min(p,segDist(x,z,q[0],q[1],q[2],q[3]));
-  out.lerp(C.path,smooth(2.4,.6,p+noise2(x*.5,z*.5,3)*.6)*.5);
+  const path=smooth(2.4,.6,p+noise2(x*.5,z*.5,3)*.6)*.5;out.lerp(C.path,path);
   const silt=smooth(16,10,Math.hypot((x-100)*.9,z-132));out.lerp(C.silt,silt);
   if(silt>0)out.lerp(tmpC.set('#cbbfa8'),smooth(.3,0,Math.abs(silt-.35))*.5);
   const cf=smooth(CRATER.r-14,CRATER.r-26,Math.hypot(x-CRATER.x,z-CRATER.z));out.lerp(tmpC.set('#b39c7b'),cf*.7);
-  const cn=Math.abs(canyonDist(x,z));out.lerp(C.sand,smooth(7,3,cn)*.75);
+  const cn=Math.abs(canyonDist(x,z)),bed=smooth(7,3,cn)*.75;out.lerp(C.sand,bed);
   out.multiplyScalar(1-smooth(8,3,Math.hypot(x-40,z-40.5))*.32*(0.7+.3*noise2(x,z,5)));
   // Exposed rock on steep ground, with strata on scarps (mesa, canyon, crater rim).
   const steep=smooth(.22,.55,slope);
@@ -88,28 +113,43 @@ export function createWorld(scene:THREE.Scene){
   // Snow: high ground and gentle north-facing hollows; ice pocket in the valley.
   const snow=Math.max(smooth(15,8,Math.hypot(x-30,z-80)+fbm(x*.15,z*.15,2,4)*6),smooth(38,60,h+fbm(x*.03,z*.03,3,3)*14)*smooth(.6,.25,slope)*.55);
   out.lerp(C.snow,snow);
-  out.multiplyScalar(.93+noise2(x*.7,z*.7,19)*.07);
+  // S4: hollows and gullies collect darker fines; crests and rims are wind-scoured and paler.
+  out.multiplyScalar((.93+noise2(x*.7,z*.7,19)*.07)*(1-.16*Math.max(0,cavity)+.07*Math.max(0,-cavity)));
+  // Loose sand (ripples in the shader): the riverbed, dusty flats and the crater floor; not on gravel, paths, rock or snow.
+  if(surf)surf[0]=Math.max(bed,(1-earth)*.85,cf*.7)*(1-gravel)*(1-path*2)*(1-steep)*(1-snow)*smooth(.12,.04,slope);
   return out;
  };
+ /** Ground colour under a point (dust from footsteps and landings takes it on). */
+ function groundColorAt(x:number,z:number,out=new THREE.Color()){const e=1,h=heightAt(x,z),sx=(heightAt(x+e,z)-heightAt(x-e,z))/(2*e),sz=(heightAt(x,z+e)-heightAt(x,z-e))/(2*e);return groundColor(x,z,h,1-1/Math.hypot(sx,1,sz),out);}
  const bakeUniforms={uBake:{value:null as unknown as THREE.Texture},uBake2:{value:null as unknown as THREE.Texture},uBakeMix:{value:0},uBakeMin:{value:new THREE.Vector2()},uBakeSize:{value:new THREE.Vector2(1,1)},uBakeAmount:{value:1}};
  useBakedShade(terrainMat,bakeUniforms,antiTile);
  const terrain=new Terrain(terrainMat,groundColor);scene.add(terrain.group);
  // ---------- Outer mountains beyond the walkable square ----------
+ // S4: a 10 m grid split into 8 sectors around the valley, so those behind the camera are culled; they lie outside the shadow
+ // frustum, so they do not receive the shadow map (a cheaper shader for a large part of the screen).
  {
-  const step=12,min=MIN-480,max=MAX+480,n=Math.round((max-min)/step)+1,pos:number[]=[],col:number[]=[],uv:number[]=[],idx:number[]=[],hh:number[]=[];
-  for(let j=0;j<n;j++)for(let i=0;i<n;i++){const x=min+i*step,z=min+j*step;hh.push(outerHeight(x,z));}
+  const step=10,min=MIN-480,max=MAX+480,n=Math.round((max-min)/step)+1,hh=new Float32Array(n*n),col=new Float32Array(n*n*3),nrm=new Float32Array(n*n*3),srf=new Float32Array(n*n*2),H=(i:number,j:number)=>hh[Math.max(0,Math.min(n-1,j))*n+Math.max(0,Math.min(n-1,i))];
+  for(let j=0;j<n;j++)for(let i=0;i<n;i++)hh[j*n+i]=outerHeight(min+i*step,min+j*step);
   for(let j=0;j<n;j++)for(let i=0;i<n;i++){
-   const x=min+i*step,z=min+j*step,h=hh[j*n+i];
-   const sx=(hh[j*n+Math.min(n-1,i+1)]-hh[j*n+Math.max(0,i-1)])/(2*step),sz=(hh[Math.min(n-1,j+1)*n+i]-hh[Math.max(0,j-1)*n+i])/(2*step),slope=Math.hypot(sx,sz);
-   pos.push(x,h,z);uv.push(x/2.6,z/2.6);
+   const x=min+i*step,z=min+j*step,h=H(i,j),sx=(H(i+1,j)-H(i-1,j))/(2*step),sz=(H(i,j+1)-H(i,j-1))/(2*step),slope=Math.hypot(sx,sz),cav=(H(i+1,j)+H(i-1,j)+H(i,j+1)+H(i,j-1)-4*h)/step;
    color.copy(C.dust).lerp(C.rock,smooth(.15,.6,slope)).lerp(tmpC.set('#403c3a'),smooth(.7,1.3,slope)*.7);
-   color.lerp(C.snow,smooth(95,150,h+fbm(x*.02,z*.02,3,3)*40)*smooth(1.1,.5,slope)*.75);
-   color.multiplyScalar(.9+noise2(x*.08,z*.08,7)*.1);col.push(color.r,color.g,color.b);
+   // Layered scarps, dust settled in gullies, snow on high ground that holds it: crests and north faces.
+   color.lerp(C.redrock,smooth(.45,.9,slope)*smooth(-.1,.7,Math.sin(h*.35+fbm(x*.01,z*.01,2,9)*3))*.45);
+   color.lerp(C.dust,smooth(.1,.6,cav)*.35);
+   color.lerp(C.snow,smooth(95,150,h+fbm(x*.02,z*.02,3,3)*40-cav*20+sz*25)*smooth(1.1,.5,slope)*.8);
+   color.multiplyScalar((.9+noise2(x*.08,z*.08,7)*.1)*(1-.12*smooth(0,.8,cav)));col.set([color.r,color.g,color.b],(j*n+i)*3);
+   const l=Math.hypot(sx,1,sz);nrm.set([-sx/l,1/l,-sz/l],(j*n+i)*3);srf[(j*n+i)*2+1]=1-1/l; // grid normals: no shading seams between sectors
   }
-  const inside=(x:number,z:number)=>x>MIN+step&&x<MAX-step&&z>MIN+step&&z<MAX-step;
-  for(let j=0;j<n-1;j++)for(let i=0;i<n-1;i++){const a=j*n+i,x=min+i*step,z=min+j*step;if(inside(x,z)&&inside(x+step,z+step))continue;idx.push(a,a+n,a+1,a+1,a+n,a+n+1);}
-  const g=surface(pos,idx,uv);g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));
-  const m=new THREE.Mesh(g,terrainMat);m.name='outer-mountains';m.receiveShadow=true;scene.add(m);
+  const inside=(x:number,z:number)=>x>MIN+step&&x<MAX-step&&z>MIN+step&&z<MAX-step,sectors:number[][]=[[],[],[],[],[],[],[],[]];
+  for(let j=0;j<n-1;j++)for(let i=0;i<n-1;i++){const x=min+i*step,z=min+j*step;if(inside(x,z)&&inside(x+step,z+step))continue;sectors[Math.floor((Math.atan2(z+step/2-80,x+step/2-80)/Math.PI+1)*4)%8].push(j*n+i);}
+  for(const [k,cells] of sectors.entries()){
+   const map=new Map<number,number>(),pos:number[]=[],c:number[]=[],uv:number[]=[],nv:number[]=[],sv:number[]=[],idx:number[]=[];
+   const v=(a:number)=>{let r=map.get(a);if(r===undefined){r=map.size;map.set(a,r);const i=a%n,j=(a-i)/n,x=min+i*step,z=min+j*step;pos.push(x,hh[a],z);uv.push(x/2.6,z/2.6);c.push(col[a*3],col[a*3+1],col[a*3+2]);nv.push(nrm[a*3],nrm[a*3+1],nrm[a*3+2]);sv.push(0,srf[a*2+1]);}return r;};
+   for(const a of cells)idx.push(v(a),v(a+n),v(a+1),v(a+1),v(a+n),v(a+n+1));
+   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(nv,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
+   g.setAttribute('color',new THREE.Float32BufferAttribute(c,3));g.setAttribute('surface',new THREE.Float32BufferAttribute(sv,2));g.setIndex(idx);g.computeBoundingSphere();
+   const m=new THREE.Mesh(g,terrainMat);m.name='outer-mountains-'+k;m.receiveShadow=false;scene.add(m);
+  }
  }
 
  // ---------- Rocks ----------
@@ -128,7 +168,9 @@ export function createWorld(scene:THREE.Scene){
   batch.add(tall,rock,x,heightAt(x,z)-.4,z,w,hh,w*.8,lean*.5,ry,lean,'#e6e0d6');
   for(let k=0;k<7;k++){const a=rng()*6.28,d=2+rng()*2.5,px=x+Math.cos(a)*d,pz=z+Math.sin(a)*d;batch.add(boulders[k%6],rock,px,heightAt(px,pz)-.1,pz,.5+rng()*.9,.4+rng()*.8,.5+rng()*.8,0,rng()*6,0);}
  }
- // Pebbles: instanced, receive shadows only.
+ // Pebbles: instanced, receive shadows only. S4: only those within PEBBLE_R of the viewer are drawn
+ // (the list is rebuilt every 8 m of travel; ~45% lie scattered over the whole map and were all drawn).
+ const PEBBLE_R=70,pebbleAt=new THREE.Vector3(Infinity,0,Infinity);let updatePebbles=(_p:THREE.Vector3)=>{};
  {
   const peb=chiseledRock(7,{detail:0,cuts:5});const count=2600;
   const inst=new THREE.InstancedMesh(peb,rock,count);lowDecoration.push(inst);inst.name='decorative-pebbles';let k=0;const pr=random(77);
@@ -140,6 +182,12 @@ export function createWorld(scene:THREE.Scene){
    inst.setColorAt(k,color.set(tones[k%4]).multiplyScalar(.8+pr()*.3));k++;
   }
   inst.receiveShadow=true;scene.add(inst);
+  const all=inst.instanceMatrix.array.slice(),tint=inst.instanceColor!.array.slice(),xs=new Float32Array(count),zs=new Float32Array(count);
+  for(let i=0;i<count;i++){xs[i]=all[i*16+12];zs[i]=all[i*16+14];}
+  inst.boundingSphere=new THREE.Sphere(new THREE.Vector3(),PEBBLE_R+2);
+  updatePebbles=p=>{if(Math.hypot(p.x-pebbleAt.x,p.z-pebbleAt.z)<8)return;pebbleAt.copy(p);let n=0;const m=inst.instanceMatrix.array as Float32Array,c=inst.instanceColor!.array as Float32Array;
+   for(let i=0;i<count;i++)if((xs[i]-p.x)**2+(zs[i]-p.z)**2<PEBBLE_R*PEBBLE_R){m.set(all.subarray(i*16,i*16+16),n*16);c.set(tint.subarray(i*3,i*3+3),n*3);n++;}
+   inst.count=n;inst.boundingSphere!.center.set(p.x,heightAt(p.x,p.z),p.z);for(const a of [inst.instanceMatrix,inst.instanceColor!]){a.clearUpdateRanges();a.addUpdateRange(0,n*a.itemSize);a.needsUpdate=true;}};
  }
 
  // ---------- Landing capsule ----------
@@ -323,8 +371,10 @@ export function createWorld(scene:THREE.Scene){
    batch.add(boulders[i%6],ice,x,heightAt(x,z)-s*.3,z,s,s*.6,s,0,rng()*6,0,'#e8f4f8');}
  }
  // ---------- Mineable deposits (S1): each node is its own group so it shrinks as it is mined ----------
+ // S4: the batch keeps piece ranges, so loose blocks can disappear one by one (depositFeel.ts).
  const nodeGroups=new Map<string,THREE.Group>();
- const deposit=(id:string,x:number,z:number,build:(b:StaticBatch)=>void)=>{const b=new StaticBatch();build(b);const g=new THREE.Group();g.name='node-'+id;g.position.set(x,heightAt(x,z),z);b.finish(g);scene.add(g);nodeGroups.set(id,g);};
+ const deposit=(id:string,x:number,z:number,build:(b:StaticBatch)=>void)=>{const b=new StaticBatch(0,undefined,true);build(b);const g=new THREE.Group();g.name='node-'+id;g.position.set(x,heightAt(x,z),z);g.userData.y0=g.position.y;b.finish(g);scene.add(g);nodeGroups.set(id,g);};
+ const deposits=createDepositFeel(nodeGroups,()=>{if(!sun.shadow.needsUpdate)shadowRedraws++;sun.shadow.needsUpdate=true;});
  {
   const I=oreOutcrop(610,{strata:3,base:'#4a4038',dust:'#8a6a50',dark:'#2a2320'},{freq:2.2,width:.05,blobs:.74,lift:.018,crystals:.12,stain:'#7a3f22'});
   deposit('iron-a',67,65,b=>{b.add(I.host,rock,0,-.1,0,1.8,1.7,1.5,0,.3,0);b.add(I.veins,iron,0,-.1,0,1.8,1.7,1.5,0,.3,0);});
@@ -342,12 +392,13 @@ export function createWorld(scene:THREE.Scene){
    for(let i=0;i<5;i++){const g=chiseledRock(330+i,{detail:2,base:'#ffffff',dust:'#f4fbff',dark:'#6f98a8',cuts:7,flatTop:.7,lumpy:.1}),a=i*1.3,d=i?.55:0,s=i?.45+pr()*.2:.9;b.add(g,ice,Math.cos(a)*d,-.15,Math.sin(a)*d,s,s*(i?1.1:1.25),s*.9,(pr()-.5)*.3,pr()*6,(pr()-.5)*.3);}});
  }
  deposit('sand-a',49,59,b=>{b.add(boulders[2],rock,0,-.12,0,1.5,.45,1.3,0,.2,0,'#d3bb82');});
+ // Deposit builders shared by the S3 deposits and the S4 new veins (D33).
+ const sandHeap=(b:StaticBatch,s:number,seed:number)=>{const pr=random(seed);b.add(boulders[2],rock,0,-.12,0,1.5*s,.45*s,1.3*s,0,pr()*6,0,'#d3bb82');for(let i=0;i<5;i++){const a=pr()*6.28,d=(.7+pr()*.5)*s;b.add(boulders[i%6],rock,Math.cos(a)*d,-.1,Math.sin(a)*d,.5*s,.18*s,.45*s,0,pr()*6,0,i%2?'#cdb67f':'#dcc58f');}};
+ const scree=(b:StaticBatch,s:number,seed:number)=>{const pr=random(seed);b.add(boulders[3],rock,0,-.12,0,1.2*s,1*s,1.1*s,0,pr()*6,0,'#b5a998');for(let i=0;i<10;i++){const a=i/10*6.28+pr()*.5,d=(.8+pr()*.7)*s,k=(.25+pr()*.3)*s;b.add(boulders[i%6],rock,Math.cos(a)*d,-.08,Math.sin(a)*d,k*1.2,k,k*1.1,0,pr()*6,0,i%2?'#a89c8c':'#c2b6a4');}};
+ const iceSlab=(b:StaticBatch,s:number,seed:number)=>{const pr=random(seed);for(let i=0;i<4;i++){const g=chiseledRock(seed+i,{detail:2,base:'#ffffff',dust:'#f4fbff',dark:'#6f98a8',cuts:7,flatTop:.6,lumpy:.1}),a=i*1.6,d=i?.6*s:0,k=(i?.5+pr()*.2:.95)*s;b.add(g,ice,Math.cos(a)*d,-.15,Math.sin(a)*d,k*1.1,k*(i?1:1.1),k*.95,(pr()-.5)*.3,pr()*6,(pr()-.5)*.3);}};
+ const vein=(b:StaticBatch,metal:'iron'|'copper',s:number,seed:number,ry:number)=>{const host=metal==='iron'?{strata:3,base:'#4a4038',dust:'#8a6a50',dark:'#2a2320'}:{strata:2,base:'#3c4640',dust:'#6f8f7c',dark:'#232a27'},o=oreOutcrop(seed,host,metal==='iron'?{freq:2.3,width:.05,blobs:.74,lift:.018,crystals:.12,stain:'#7a3f22'}:{freq:1.9,width:.045,blobs:.72,lift:.02,crystals:.22,stain:'#3f8f78'});b.add(o.host,rock,0,-.1,0,1.7*s,1.5*s,1.4*s,0,ry,0);b.add(o.veins,metal==='iron'?iron:copper,0,-.1,0,1.7*s,1.5*s,1.4*s,0,ry,0);};
  // ---------- S3 deposits: a second source of every early material, and rich far veins ----------
  {
-  const sandHeap=(b:StaticBatch,s:number,seed:number)=>{const pr=random(seed);b.add(boulders[2],rock,0,-.12,0,1.5*s,.45*s,1.3*s,0,pr()*6,0,'#d3bb82');for(let i=0;i<5;i++){const a=pr()*6.28,d=(.7+pr()*.5)*s;b.add(boulders[i%6],rock,Math.cos(a)*d,-.1,Math.sin(a)*d,.5*s,.18*s,.45*s,0,pr()*6,0,i%2?'#cdb67f':'#dcc58f');}};
-  const scree=(b:StaticBatch,s:number,seed:number)=>{const pr=random(seed);b.add(boulders[3],rock,0,-.12,0,1.2*s,1*s,1.1*s,0,pr()*6,0,'#b5a998');for(let i=0;i<10;i++){const a=i/10*6.28+pr()*.5,d=(.8+pr()*.7)*s,k=(.25+pr()*.3)*s;b.add(boulders[i%6],rock,Math.cos(a)*d,-.08,Math.sin(a)*d,k*1.2,k,k*1.1,0,pr()*6,0,i%2?'#a89c8c':'#c2b6a4');}};
-  const iceSlab=(b:StaticBatch,s:number,seed:number)=>{const pr=random(seed);for(let i=0;i<4;i++){const g=chiseledRock(seed+i,{detail:2,base:'#ffffff',dust:'#f4fbff',dark:'#6f98a8',cuts:7,flatTop:.6,lumpy:.1}),a=i*1.6,d=i?.6*s:0,k=(i?.5+pr()*.2:.95)*s;b.add(g,ice,Math.cos(a)*d,-.15,Math.sin(a)*d,k*1.1,k*(i?1:1.1),k*.95,(pr()-.5)*.3,pr()*6,(pr()-.5)*.3);}};
-  const vein=(b:StaticBatch,metal:'iron'|'copper',s:number,seed:number,ry:number)=>{const host=metal==='iron'?{strata:3,base:'#4a4038',dust:'#8a6a50',dark:'#2a2320'}:{strata:2,base:'#3c4640',dust:'#6f8f7c',dark:'#232a27'},o=oreOutcrop(seed,host,metal==='iron'?{freq:2.3,width:.05,blobs:.74,lift:.018,crystals:.12,stain:'#7a3f22'}:{freq:1.9,width:.045,blobs:.72,lift:.02,crystals:.22,stain:'#3f8f78'});b.add(o.host,rock,0,-.1,0,1.7*s,1.5*s,1.4*s,0,ry,0);b.add(o.veins,metal==='iron'?iron:copper,0,-.1,0,1.7*s,1.5*s,1.4*s,0,ry,0);};
   deposit('stone-b',24,25,b=>scree(b,1.05,5301));
   deposit('sand-b',58,100,b=>sandHeap(b,1.1,5311));
   deposit('iron-c',98,63,b=>vein(b,'iron',.9,640,1.2));
@@ -359,9 +410,27 @@ export function createWorld(scene:THREE.Scene){
   deposit('copper-mesa',-70,140,b=>vein(b,'copper',1.15,670,2.7));
   deposit('ice-crater',266,262,b=>iceSlab(b,1.6,380));
  }
+ // ---------- S4 (D33): new veins. Each is built when it appears (its own geometry, so the draw ranges of its loose
+ // pieces stay its own) and removed once its crumble has finished. Materials are the shared deposit ones (already compiled).
+ const veinKeys=new Map<string,string>(),retired=new Set<string>(),redrawShadows=()=>{if(!sun.shadow.needsUpdate)shadowRedraws++;sun.shadow.needsUpdate=true;};
+ function buildVein(v:Vein){
+  const s=VEIN_SPOT_BY_ID.get(v.spot)!,k=veinScale(v),n=Number(v.id.slice(5))||1,seed=7000+n*13,ry=(n*2.399)%6.283;
+  deposit(v.id,s.x,s.z,b=>{if(v.material==='iron'||v.material==='copper')vein(b,v.material,.9*k,seed,ry);else if(v.material==='stone')scree(b,k,seed);else if(v.material==='sand')sandHeap(b,k,seed);else iceSlab(b,k,seed);});
+ }
+ function dropVein(id:string){
+  const g=nodeGroups.get(id);veinKeys.delete(id);retired.delete(id);if(!g)return;deposits.forget(id);
+  g.traverse(o=>{const m=o as THREE.Mesh;if(m.isMesh&&m!==deposits.shell)m.geometry.dispose();});scene.remove(g);nodeGroups.delete(id);redrawShadows();
+ }
+ /** Live veins → groups: new ones are built (and rise when `fresh`), changed ones rebuilt, gone ones retire after their crumble. */
+ function syncVeins(veins:readonly Vein[],fresh:readonly string[]=[]){
+  const live=new Set<string>();
+  for(const v of veins){const key=v.spot+':'+v.material+':'+v.size,have=veinKeys.get(v.id);live.add(v.id);retired.delete(v.id);if(have===key)continue;if(have!==undefined)dropVein(v.id);
+   veinKeys.set(v.id,key);buildVein(v);redrawShadows();if(fresh.includes(v.id))deposits.emerge(v.id,VEIN_LOOK[v.material].height*veinScale(v)+.2);}
+  for(const id of veinKeys.keys())if(!live.has(id)&&!retired.has(id)){retired.add(id);deposits.setAmount(id,0,1);}
+ }
  const grassHarvest=new Map<string,()=>void>();
  const grassRemaining=new Map<string,number>();
- const setNodeAmount=(id:string,left:number,amount:number)=>{grassRemaining.set(id,left/amount);grassHarvest.get(id)?.();const g=nodeGroups.get(id);if(g){g.visible=left>0;g.scale.setScalar(.42+.58*Math.max(0,left)/amount);}};
+ const setNodeAmount=(id:string,left:number,amount:number)=>{grassRemaining.set(id,left/amount);grassHarvest.get(id)?.();deposits.setAmount(id,left,amount);};
  {
  // Loose weathered pieces resting on the ground (sunk slightly, never hovering).
   for(const [ox,oz,m] of [[67,65,iron],[83,55,copper]] as const)for(let i=0;i<7;i++){const a=rng()*6.28,d=1.6+rng()*1.8,px=ox+Math.cos(a)*d,pz=oz+Math.sin(a)*d,s=.1+rng()*.14;
@@ -369,7 +438,7 @@ export function createWorld(scene:THREE.Scene){
  }
 
  // ---------- Local vegetation: low rosettes, 5–9 folded leaves, swaying in the wind ----------
- const windUniform={value:0};
+ const windUniform={value:0},windDir={value:new THREE.Vector2(1,0)},windGust={value:.55};
  {
   const gv:number[]=[],gc:number[]=[],gs:number[]=[],leaves=8,segs=4,base=new THREE.Color('#3c4a39'),mid=new THREE.Color('#6d7c5d'),tip=new THREE.Color('#b8ae80');
   for(let l=0;l<leaves;l++){
@@ -386,8 +455,14 @@ export function createWorld(scene:THREE.Scene){
   }
   const g=surface(gv);g.setAttribute('color',new THREE.Float32BufferAttribute(gc,3));g.setAttribute('sway',new THREE.Float32BufferAttribute(gs,1));
   const m=new THREE.MeshStandardMaterial({vertexColors:true,side:THREE.DoubleSide,roughness:.82});
-  const grassMat=m;grassMat.onBeforeCompile=s=>{s.uniforms.uWind=windUniform;s.vertexShader='attribute float sway;uniform float uWind;\n'+s.vertexShader.replace('#include <begin_vertex>',`#include <begin_vertex>
-   vec3 ip=instanceMatrix[3].xyz;float w=sway*sway;transformed.x+=sin(uWind*1.6+ip.x*.35+ip.z*.2)*.07*w;transformed.z+=cos(uWind*1.2+ip.x*.2)*.05*w;`);};
+  // S4: the bend is a world-space vector along the shared wind (moved into each tuft's rotated, scaled frame),
+  // with a wave travelling downwind across the meadow and a gust-driven flutter.
+  const grassMat=m;grassMat.onBeforeCompile=s=>{Object.assign(s.uniforms,{uWind:windUniform,uWindDir:windDir,uGust:windGust});s.vertexShader='attribute float sway;uniform float uWind,uGust;uniform vec2 uWindDir;\n'+s.vertexShader.replace('#include <begin_vertex>',`#include <begin_vertex>
+   vec3 ip=instanceMatrix[3].xyz;float w=sway*sway;float wave=uWind*1.8-dot(ip.xz,uWindDir)*.3;
+   float bend=(.3+.7*uGust)*(.6+.4*sin(wave))+.18*uGust*sin(uWind*5.1+ip.x*1.7+ip.z*1.3);
+   vec2 side=vec2(-uWindDir.y,uWindDir.x)*sin(uWind*2.3+ip.z*.8+ip.x*.3)*.025;
+   vec3 wd=vec3(uWindDir.x*bend*.13+side.x,-.05*bend,uWindDir.y*bend*.13+side.y)*w;
+   mat3 sw=mat3(instanceMatrix);transformed+=transpose(sw)*wd/dot(sw[0],sw[0]);`);};
   useBakedShade(grassMat,bakeUniforms,grassMat.onBeforeCompile);
   const inst=new THREE.InstancedMesh(g,m,GRASS.length);
   GRASS.forEach((p,i)=>{dummy.position.set(p.x,heightAt(p.x,p.z)-.02,p.z);dummy.scale.setScalar(p.s*1.35);dummy.rotation.set(0,p.rotation,0);dummy.updateMatrix();inst.setMatrixAt(i,dummy.matrix);inst.setColorAt(i,color.setHSL(.2+rng()*.06,.12+rng()*.1,.62+rng()*.3));});
@@ -400,15 +475,17 @@ export function createWorld(scene:THREE.Scene){
 
  // ---------- Sky, light, fog, atmosphere ----------
  const sky=createSky();scene.add(sky.mesh);
- const dust=createDust(260);scene.add(dust.points);
+ const motes=createMotes();scene.add(motes.mesh);
  const hemi=new THREE.HemisphereLight('#bcd3dc','#8a7358',1.15);scene.add(hemi);
  const sun=new THREE.DirectionalLight('#ffd9a8',3.4);sun.castShadow=true;scene.add(sun,sun.target);
  const sc=sun.shadow.camera;sc.left=-42;sc.right=42;sc.top=42;sc.bottom=-42;sc.near=1;sc.far=260;sun.shadow.bias=-.00008;sun.shadow.normalBias=.08;sun.shadow.radius=1.5;sun.shadow.autoUpdate=false;sun.shadow.needsUpdate=true;
- const doorLight=new THREE.PointLight('#ffb870',9,13,1.7);doorLight.position.set(40,cy(1.8),43.8);scene.add(doorLight);
- const interior=new THREE.PointLight('#ffd3a0',3.2,6.5,1.6);interior.position.set(40,cy(3.3),39.8);scene.add(interior);
+ // Capsule lamps are hidden emitters: the fixed pool (lights.ts) lends them real lights when they are near.
+ const lights=createLightPool(scene,4),lightRoots:THREE.Object3D[]=[];
+ const doorLight=new THREE.PointLight('#ffb870',9,13,1.7);doorLight.position.set(40,cy(1.8),43.8);scene.add(doorLight);lights.add(doorLight,LIGHT_PRIORITY.door);
+ const interior=new THREE.PointLight('#ffd3a0',3.2,6.5,1.6);interior.position.set(40,cy(3.3),39.8);scene.add(interior);lights.add(interior,LIGHT_PRIORITY.interior);
  const fog=new THREE.FogExp2(lin(.8,.68,.53),.0022);scene.fog=fog;
- const D={sun:new THREE.Color('#ffd9a8'),hemiSky:new THREE.Color('#bcd3dc'),hemiGround:new THREE.Color('#8a7358'),fog:lin(.8,.68,.53),dust:new THREE.Color('#fff1d6')};
- const N={sun:new THREE.Color('#8fa9d6'),hemiSky:new THREE.Color('#5f7896'),hemiGround:new THREE.Color('#2b2f36'),fog:lin(.07,.1,.15),dust:new THREE.Color('#a9c4e6')};
+ const D={sun:new THREE.Color('#ffd9a8'),hemiSky:new THREE.Color('#bcd3dc'),hemiGround:new THREE.Color('#8a7358'),fog:lin(.8,.68,.53),dust:new THREE.Color('#f6e2bd')};
+ const N={sun:new THREE.Color('#8fa9d6'),hemiSky:new THREE.Color('#5f7896'),hemiGround:new THREE.Color('#2b2f36'),fog:lin(.07,.1,.15),dust:new THREE.Color('#5d6f86')};
  const moon=new THREE.Vector3(.5,.55,.67).normalize(),sunTrue=new THREE.Vector3(),lightDir=new THREE.Vector3(),lastBake=new THREE.Vector3();
  // Baked terrain/formation shade follows the moving sun: rebuilt a few rows per frame, then cross-faded.
  const baker=createShadeBaker([{x:100,z:103,r:3.2,top:heightAt(100,103)+18},{x:106.5,z:104.2,r:2.6,top:heightAt(106.5,104.2)+14},...[115,120,125,130,135].map(x=>({x,z:72,r:8,top:9.5}))]);
@@ -432,7 +509,7 @@ export function createWorld(scene:THREE.Scene){
   hemi.color.copy(D.hemiSky).lerp(N.hemiSky,v);hemi.groundColor.copy(D.hemiGround).lerp(N.hemiGround,v);hemi.intensity=THREE.MathUtils.lerp(1.15,.6,v);
   bakeUniforms.uBakeAmount.value=1-v;
   fog.color.copy(D.fog).lerp(N.fog,v);fog.density=THREE.MathUtils.lerp(.0022,.0038,v);
-  dust.uniforms.tint.value.copy(D.dust).lerp(N.dust,v);dust.uniforms.opacity.value=THREE.MathUtils.lerp(.28,.22,v);
+  motes.uniforms.uTint.value.copy(D.dust).lerp(N.dust,v);motes.uniforms.uOpacity.value=THREE.MathUtils.lerp(1.25,.6,v);motes.uniforms.uNight.value=v;motes.uniforms.uSun.value.copy(lightDir);
   doorLight.intensity=THREE.MathUtils.lerp(9,16,v);interior.intensity=THREE.MathUtils.lerp(3.2,4.2,v);
   warm.emissiveIntensity=THREE.MathUtils.lerp(2.6,3.4,v);glass.emissiveIntensity=THREE.MathUtils.lerp(.5,1.8,v);
 
@@ -441,11 +518,16 @@ export function createWorld(scene:THREE.Scene){
  /** Sets the day phase. Small steps follow the clock; a large jump (Sun/Moon skip, load) is animated over ≈1.5 s unless `instant`. */
  function setTime(t:number,instant=false){targetPhase=((t%CYCLE_S)+CYCLE_S)%CYCLE_S;if(instant||phase<0){phase=targetPhase;applyPhase(phase);bakeNow(lightDir);}}
  function setQuality(q:Quality){quality=q;sun.castShadow=q!=='low';const size=q==='high'?2048:1024,ext=q==='high'?60:42;
+  sun.shadow.normalBias=2*ext/size; // about one texel (8.2 cm Standard, 5.9 cm High)
   if(sun.shadow.mapSize.x!==size||sc.right!==ext){sun.shadow.mapSize.set(size,size);sc.left=sc.bottom=-ext;sc.right=sc.top=ext;sc.updateProjectionMatrix();sun.shadow.map?.dispose();sun.shadow.map=null as unknown as THREE.WebGLRenderTarget;}
-  dust.points.visible=q!=='low';for(const m of lowDecoration)m.visible=q!=='low';terrain.setQuality(q);sun.shadow.needsUpdate=true;const environment=(q==='low'?environments.low:environments.full)[k<.5?0:1];if(environment)scene.environment=environment.texture;}
+  motes.setQuality(q);for(const m of lowDecoration)m.visible=q!=='low';terrain.setQuality(q);lights.resize(q==='low'?2:4);shadowAt.set(Infinity,0,0);sun.shadow.needsUpdate=true;const environment=(q==='low'?environments.low:environments.full)[k<.5?0:1];if(environment)scene.environment=environment.texture;}
  const snapped=new THREE.Vector3(),lx=new THREE.Vector3(),ly=new THREE.Vector3(),up=new THREE.Vector3(0,1,0),center=new THREE.Vector3(),shadowDir=new THREE.Vector3(),shadowCenter=new THREE.Vector3(Infinity,Infinity,Infinity);
+ // S4: the shadow map follows its own light direction (updated after a 0.25° turn) and its own centre
+ // (moved after 3 m of travel, texel-snapped), so it is redrawn about twice a second, not every frame.
+ const shadowL=new THREE.Vector3(),shadowAt=new THREE.Vector3(Infinity,0,0);let shadowRedraws=0;
  /** Capture stable day/night reflections during loading, never during active play. */
  function prepare(renderer:THREE.WebGLRenderer){
+  deposits.prewarm();
   if(environments.low.length)return;
   const gen=new THREE.PMREMGenerator(renderer);
   for(const [targets,size] of [[environments.low,64],[environments.full,128]] as const)for(const night of [0,1]){
@@ -456,30 +538,39 @@ export function createWorld(scene:THREE.Scene){
  }
  function update(dt:number,camera:THREE.Camera,renderer:THREE.WebGLRenderer,allowMaintenance=true,measure?:(name:string,ms:number)=>void,anchor?:THREE.Vector3){
   let at=performance.now();
-  sky.mesh.position.copy(camera.position);time+=dt;windUniform.value=time;sky.uniforms.time.value=time;dust.uniforms.time.value=time;dust.uniforms.origin.value.copy(camera.position);
+  sky.mesh.position.copy(camera.position);time+=dt;sky.uniforms.time.value=time;
+  // Shared wind (frozen with the scene; still under reduced motion): grass, clouds, motes; fx and audio read it too.
+  wind.update(dt);windUniform.value=wind.time;windDir.value.set(wind.dirX,wind.dirZ);windGust.value=wind.gust;sky.uniforms.cloud.value.set(wind.cloudX,wind.cloudZ);
+  const mu=motes.uniforms;motes.mesh.visible=!reducedMotion();mu.uOffset.value.set(wind.driftX,wind.driftZ);mu.uTime.value=wind.time;mu.uWind.value.set(wind.vx,0,wind.vz);mu.uGust.value=wind.gust;mu.uOrigin.value.copy(camera.position);
+  mu.uPx.value=(camera as THREE.PerspectiveCamera).projectionMatrix.elements[5]*renderer.domElement.height/2;
   if(phase!==targetPhase){const d=wrapS(targetPhase-phase);phase=Math.abs(d)<=Math.max(2,dt*320)?targetPhase:((phase+Math.sign(d)*dt*320)%CYCLE_S+CYCLE_S)%CYCLE_S;applyPhase(phase);}
-  // Incremental re-bake when the light has turned by more than ~1.5°; then a 1.5 s cross-fade.
+  // Incremental re-bake when the light has turned by more than ~3° (S4; was 1.5°); then a 1.5 s cross-fade.
   if(fading){bakeUniforms.uBakeMix.value=Math.min(1,bakeUniforms.uBakeMix.value+dt/1.5);if(bakeUniforms.uBakeMix.value>=1){bakeUniforms.uBake.value=bakeUniforms.uBake2.value;bakeUniforms.uBakeMix.value=0;fading=false;}}
   else if(baker.busy&&allowMaintenance){if(baker.step(10,2)){bakeUniforms.uBake2.value=baker.flip();bakeUniforms.uBakeMix.value=0;fading=true;}}
-  else if(k<.98&&lightDir.angleTo(lastBake)>.026){lastBake.copy(lightDir);baker.begin(lightDir);}
+  else if(k<.98&&lightDir.angleTo(lastBake)>.05){lastBake.copy(lightDir);baker.begin(lightDir);}
   measure?.('shade',performance.now()-at);at=performance.now();
   const environment=(quality==='low'?environments.low:environments.full)[k<.5?0:1];if(environment)scene.environment=environment.texture;
   // Fade reflection intensity to zero at the palette switch: no capture cost or sudden flash.
   scene.environmentIntensity=THREE.MathUtils.lerp(.55,.25,k)*THREE.MathUtils.smoothstep(Math.abs(k-.5),0,.12);
   measure?.('environment',performance.now()-at);at=performance.now();
   // Ground-anchored frustum: camera bob and turning cannot move the shadow projection.
-  const L=sky.uniforms.sunDir.value as THREE.Vector3;lx.crossVectors(up,L).normalize();ly.crossVectors(L,lx);
   center.copy(anchor??camera.position);center.y=heightAt(center.x,center.z);
-  const texel=(sc.right-sc.left)/sun.shadow.mapSize.x,px=Math.round(center.dot(lx)/texel)*texel,py=Math.round(center.dot(ly)/texel)*texel,pz=Math.round(center.dot(L)/texel)*texel;
-  snapped.copy(lx).multiplyScalar(px).addScaledVector(ly,py).addScaledVector(L,pz);
-  if(!shadowCenter.equals(snapped)||!shadowDir.equals(L)){shadowCenter.copy(snapped);shadowDir.copy(L);sun.shadow.needsUpdate=true;}
-  sun.target.position.copy(snapped);sun.position.copy(snapped).addScaledVector(L,130);sun.target.updateMatrixWorld();
+  const turned=shadowL.angleTo(lightDir)>.0044;
+  if(turned||center.distanceToSquared(shadowAt)>9){
+   if(turned)shadowL.copy(lightDir);shadowAt.copy(center);const L=shadowL;lx.crossVectors(up,L).normalize();ly.crossVectors(L,lx);
+   const texel=(sc.right-sc.left)/sun.shadow.mapSize.x,px=Math.round(center.dot(lx)/texel)*texel,py=Math.round(center.dot(ly)/texel)*texel,pz=Math.round(center.dot(L)/texel)*texel;
+   snapped.copy(lx).multiplyScalar(px).addScaledVector(ly,py).addScaledVector(L,pz);
+   if(!shadowCenter.equals(snapped)||!shadowDir.equals(L)){shadowCenter.copy(snapped);shadowDir.copy(L);sun.shadow.needsUpdate=true;shadowRedraws++;}
+   sun.target.position.copy(snapped);sun.position.copy(snapped).addScaledVector(L,130);sun.target.updateMatrixWorld();
+  }
+  updatePebbles(camera.position);
   if(allowMaintenance)terrain.update(camera.position,2);
   measure?.('terrain',performance.now()-at);at=performance.now();
   const blink=(Math.sin(time*3)>.6?1:0);redLight.emissiveIntensity=.3+blink*3.5;beacon.emissiveIntensity=1.2+Math.sin(time*2.2)*.8;holo.opacity=.55+Math.sin(time*1.7)*.2;
   screenClock-=dt;if(screenClock<=0&&camera.position.distanceTo(interior.position)<14){screenClock=.25;screen.draw(time,k>.5);}
+  lights.update(camera,dt,lightRoots);deposits.update(dt);for(const id of retired)if(!deposits.isCrumbling(id))dropVein(id);
   measure?.('animation',performance.now()-at);
  }
  setQuality('standard');
- return{setTime,setQuality,prepare,invalidateShadows:()=>{sun.shadow.needsUpdate=true;},sunLight:sun,hemiLight:hemi,get sunDirection(){return sunTrue;},update,setNodeAmount,nodeGroups,followSky:(_p:THREE.Vector3)=>{},landmarks:LANDMARKS,grassCount:GRASS.length,meshes,terrain,get quality(){return quality;},get nightValue(){return k;}};
+ return{setTime,setQuality,prepare,invalidateShadows:()=>{if(!sun.shadow.needsUpdate)shadowRedraws++;sun.shadow.needsUpdate=true;},get shadowRedraws(){return shadowRedraws;},lights,lightRoots,wind,motes,groundColorAt,sunLight:sun,hemiLight:hemi,get sunDirection(){return sunTrue;},update,setNodeAmount,syncVeins,nodeGroups,deposits,followSky:(_p:THREE.Vector3)=>{},landmarks:LANDMARKS,grassCount:GRASS.length,meshes,terrain,get quality(){return quality;},get nightValue(){return k;}};
 }

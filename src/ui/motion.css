@@ -8,6 +8,9 @@
 @keyframes feed-out{to{opacity:0;transform:translateX(12px)}}
 @keyframes feed-bump{40%{transform:scale(1.35);color:#fff}}
 .feed-token{position:fixed;z-index:30;width:36px;height:36px;pointer-events:none;filter:drop-shadow(0 0 8px rgba(84,226,236,.7))}.feed-token img{width:100%;height:100%;object-fit:contain}
+/* S4: «+1» over the struck point in the world (placed per frame by feed.ts); amber when it went to the ground. */
+.world-pop{position:absolute;left:0;top:0;display:flex;align-items:center;gap:3px;padding:2px 4px;font-size:13px;font-weight:700;color:var(--aqua);white-space:nowrap;pointer-events:none;z-index:3;will-change:transform,opacity;text-shadow:0 0 3px rgba(0,0,0,.85)}
+.world-pop .art{width:20px;height:20px}.world-pop .art img{width:100%;height:100%;object-fit:contain}.world-pop.ground{color:var(--amber-hi)}.world-pop.ground span{font-size:11px}
 #hotbar .cell.bump,#hud-buttons .bump{animation:cell-bump .45s cubic-bezier(.2,.8,.2,1)}
 @keyframes cell-bump{0%{filter:brightness(1)}30%{filter:brightness(1.8);transform:scale(1.12)}100%{filter:none;transform:none}}
 /* Lists ease in once when a window opens. */

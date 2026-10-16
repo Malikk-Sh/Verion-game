@@ -145,42 +145,46 @@ function distributorBody(k: Kit, m: Mats) {
  k.box(m.blue, 0, .78, .415, .5, .04, .012); k.box(m.screen, -.2, .62, .418, .16, .1, .01);
  k.cyl(m.steel, -.3, .25, .42, .045, .12, Math.PI / 2);
 }
-function domeBody(k: Kit, m: Mats) {
- // Platform with a lip, slim dark frame over the 4×4×3 cell shell, an arched glass vault on top
- // and an airlock vestibule. The vault is visual: the sealed volume stays the 48 m³ cell grid.
- k.box(m.floor, 0, .05, 0, 4.3, .1, 4.3); k.box(m.hull, 0, .03, 0, 4.5, .06, 4.5);
- k.box(m.orange, 0, .105, 2.12, 1.1, .015, .06);
- for (const x of [-1, 0, 1]) for (const z of [-2, 2]) k.box(m.frame, x, 1.5, z, .05, 3, .05);
- for (const z of [-1, 0, 1]) for (const x of [-2, 2]) k.box(m.frame, x, 1.5, z, .05, 3, .05);
- for (const y of [.12, 1, 2, 3]) { const t = y === 3 || y === .12 ? .09 : .045; k.box(m.frame, 0, y, -2, 4.05, t, t); k.box(m.frame, 0, y, 2, 4.05, t, t); k.box(m.frame, -2, y, 0, t, t, 4.05); k.box(m.frame, 2, y, 0, t, t, 4.05); }
- for (const x of [-2.02, 2.02]) for (const z of [-2.02, 2.02]) { k.box(m.hull, x, 1.55, z, .12, 3.1, .12); k.box(m.orange, x, .5, z, .13, .08, .13); }
- // Vault ribs (half-ellipses across x) and ridge.
- const ribs = 9, rise = .95;
- for (const z of [-2, -1, 0, 1, 2]) for (let i = 0; i < ribs; i++) {
-  const a0 = Math.PI * i / ribs, a1 = Math.PI * (i + 1) / ribs, x0 = -Math.cos(a0) * 2, y0 = 3 + Math.sin(a0) * rise, x1 = -Math.cos(a1) * 2, y1 = 3 + Math.sin(a1) * rise;
-  const len = Math.hypot(x1 - x0, y1 - y0); k.box(z === -2 || z === 2 ? m.hull : m.frame, (x0 + x1) / 2, (y0 + y1) / 2, z, len + .02, .06, z === -2 || z === 2 ? .1 : .05, 0, 0, Math.atan2(y1 - y0, x1 - x0));
- }
- k.box(m.hull, 0, 3 + rise + .03, 0, .14, .06, 4.1);
- // Airlock vestibule: two side frames with windows, lintel, threshold, keypad.
- for (const x of [-.68, .68]) { k.box(m.hull, x, 1.25, 2.38, .1, 2.5, .62); k.box(m.frame, x * 1.04, 1.45, 2.38, .02, 1.1, .4); }
- k.box(m.hull, 0, 2.55, 2.38, 1.46, .16, .64); k.box(m.orange, 0, 2.66, 2.38, 1.46, .05, .66);
- k.box(m.frame, 0, .13, 2.45, 1.26, .06, .5);
- k.box(m.dark, .5, 1.25, 2.7, .12, .18, .02);
- // Interior lamp bar.
- k.box(m.frame, 0, 2.94, 0, 1.4, .04, .12);
+/**
+ * Airlock door (S4): the vestibule of the retired prefab dome fitted into one 1×2 m cell column. Hull jambs fill the
+ * full cell depth (they close the seam to the glass beside them), a lintel with the orange band, a threshold, keypads
+ * and two sliding shutters with windows: the outer one at the front (+z at rot 0), the inner one at the back.
+ * Origin: the centre of the lower cell's floor.
+ */
+function doorBody(k: Kit, m: Mats) {
+ for (const x of [-.45, .45]) { k.box(m.hull, x, 1, 0, .1, 2, 1); k.box(m.frame, x * 1.12, 1.2, 0, .012, 1.1, .46); k.box(m.orange, x, .3, 0, .11, .06, 1.01); }
+ k.box(m.hull, 0, 1.9, 0, .8, .2, 1); for (const z of [-.505, .505]) k.box(m.orange, 0, 1.93, z, .8, .05, .012);
+ k.box(m.frame, 0, .03, 0, .8, .06, 1); for (const z of [-.43, .43]) { k.box(m.orange, 0, .065, z, .7, .012, .05); k.box(m.frame, 0, 1.79, z, .8, .02, .07); }
+ for (const z of [-.508, .508]) k.box(m.dark, .45, 1.15, z, .07, .16, .012);
 }
-/** The arched glass of the vault, built once and shared. */
-const VAULT = (() => {
- let g: THREE.BufferGeometry | null = null;
- return () => { if (!g) { const c = new THREE.CylinderGeometry(1, 1, 4, 18, 1, true, Math.PI / 2, Math.PI); c.rotateX(Math.PI / 2); c.scale(2, .95, 1); c.translate(0, 3, 0); g = c; } return g; };
-})();
+export type DoorLook = { status: StationStatus; outer: number; inner: number };
+export type DoorVisual = { group: THREE.Group; update(dt: number, look: DoorLook, still?: boolean): void; dispose(): void };
+let DOOR: THREE.Group | null = null;
+/** One placed airlock: the cached static frame plus its own shutters and status lamps. */
+export function buildDoor(): DoorVisual {
+ const m = M(); if (!DOOR) { const k = new Kit(); doorBody(k, m); DOOR = k.finish(); }
+ const group = new THREE.Group(); for (const c of DOOR.children) { const mesh = c as THREE.Mesh, copy = new THREE.Mesh(mesh.geometry, mesh.material); copy.castShadow = mesh.castShadow; copy.receiveShadow = true; group.add(copy); }
+ const shutters = [.43, -.43].map(z => { const s = new THREE.Group(); s.position.set(0, 1.79, z); const p = new THREE.Mesh(BOX, m.panel); p.scale.set(.8, 1.72, .04); p.position.y = -.86; p.castShadow = true; s.add(p); const w = new THREE.Mesh(BOX, m.glass); w.scale.set(.34, .18, .05); w.position.set(0, -.5, 0); s.add(w); group.add(s); return s; });
+ const mat = new THREE.MeshStandardMaterial({ color: '#202628', emissive: LAMP_COLOR.idle, emissiveIntensity: 2.2, roughness: .3 });
+ for (const z of [-.51, .51]) { const l = new THREE.Mesh(lampGeo, mat); l.position.set(0, 1.9, z); group.add(l); }
+ let t = Math.random() * 10;
+ return {
+  group,
+  // A shutter rolls up into the lintel (scale from its top edge); reduced motion jumps straight to the state.
+  update(dt, look, still = false) {
+   t += still ? 0 : dt; mat.emissive.set(LAMP_COLOR[look.status]); mat.emissiveIntensity = look.status === 'warn' ? 1.2 + Math.max(0, Math.sin(t * 6)) * 2.4 : look.status === 'off' ? .2 : 2.2;
+   [look.outer, look.inner].forEach((open, i) => { const s = shutters[i], k = Math.max(.04, 1 - open); s.scale.y = still ? (open > .5 ? .04 : 1) : k; });
+  },
+  dispose: () => mat.dispose(),
+ };
+}
 type Animated = { kind: BuildingKind; parts: Record<string, THREE.Object3D>; mats: Record<string, THREE.MeshStandardMaterial> };
 const STATIC = new Map<string, THREE.Group>();
 function staticGroup(kind: BuildingKind, level: number): THREE.Group {
  const key = kind + level;
  if (!STATIC.has(key)) {
   const k = new Kit(), m = M();
-  ({ workbench: () => workbenchBody(k, m, level), kiln: () => kilnBody(k, m), biogenerator: () => generatorBody(k, m), electrolyzer: () => electrolyzerBody(k, m), refill: () => refillBody(k, m), distributor: () => distributorBody(k, m), dome: () => domeBody(k, m) } as Record<BuildingKind, () => void>)[kind]();
+  ({ workbench: () => workbenchBody(k, m, level), kiln: () => kilnBody(k, m), biogenerator: () => generatorBody(k, m), electrolyzer: () => electrolyzerBody(k, m), refill: () => refillBody(k, m), distributor: () => distributorBody(k, m) } as Record<BuildingKind, () => void>)[kind]();
   STATIC.set(key, k.finish());
  }
  return STATIC.get(key)!;
@@ -198,7 +202,7 @@ export function buildStation(kind: BuildingKind, level: number): StationVisual {
  for (const child of body.children) { const mesh = child as THREE.Mesh, copy = new THREE.Mesh(mesh.geometry, mesh.material); copy.castShadow = mesh.castShadow; copy.receiveShadow = true; group.add(copy); }
  const a: Animated = { kind, parts: {}, mats: {} };
  const own: THREE.Material[] = [];
- const status = kind === 'dome' ? lamp(group, .5, 1.25, 2.6) : kind === 'workbench' ? lamp(group, .36, .92, .4) : kind === 'kiln' ? lamp(group, .36, .85, .47) : kind === 'biogenerator' ? lamp(group, .44, .74, .36) : kind === 'electrolyzer' ? lamp(group, .38, .78, .45) : kind === 'refill' ? lamp(group, 0, 1.3, .13) : lamp(group, .2, .62, .42);
+ const status = kind === 'workbench' ? lamp(group, .36, .92, .4) : kind === 'kiln' ? lamp(group, .36, .85, .47) : kind === 'biogenerator' ? lamp(group, .44, .74, .36) : kind === 'electrolyzer' ? lamp(group, .38, .78, .45) : kind === 'refill' ? lamp(group, 0, 1.3, .13) : lamp(group, .2, .62, .42);
  a.mats.lamp = status.mat; own.push(status.mat);
  if (kind === 'kiln') {
   const fire = new THREE.MeshStandardMaterial({ color: '#2a1a12', emissive: '#ff7a2a', emissiveIntensity: 0, roughness: .8 }); own.push(fire);
@@ -230,14 +234,6 @@ export function buildStation(kind: BuildingKind, level: number): StationVisual {
   const scr = new THREE.MeshStandardMaterial({ color: '#0f2a2c', emissive: '#3fc4bb', emissiveIntensity: .4, roughness: .3 }); own.push(scr);
   const s = new THREE.Mesh(BOX, scr); s.position.set(-.22, 1.2, -.345); s.scale.set(.28, .18, .01); group.add(s); a.mats.screen = scr;
   const head = new THREE.Group(); head.position.set(.2, 1.15, -.22); const tip = new THREE.Mesh(discGeo, m.steel); tip.scale.set(.02, .1, .02); head.add(tip); group.add(head); a.parts.head = head;
- }
- if (kind === 'dome') {
-  const vault = new THREE.Mesh(VAULT(), m.glass); vault.renderOrder = 2; group.add(vault);
-  const door = new THREE.Mesh(BOX, m.panel); door.scale.set(1.18, 2.36, .05); door.position.set(0, 1.3, 2.68); door.castShadow = true; group.add(door); a.parts.door = door;
-  const win = new THREE.Mesh(BOX, m.glass); win.scale.set(.5, .5, .06); win.position.set(0, 1.75, 2.69); door.add(win); win.scale.set(.42, .21, 1.4); win.position.set(0, .2, 0);
-  const lampMat = new THREE.MeshStandardMaterial({ color: '#e8f6f4', emissive: '#bff4ee', emissiveIntensity: 0, roughness: .4 }); own.push(lampMat);
-  const bar = new THREE.Mesh(BOX, lampMat); bar.scale.set(1.3, .02, .08); bar.position.set(0, 2.895, 0); group.add(bar); a.mats.room = lampMat;
-  const light = new THREE.PointLight('#cdf7f0', 0, 6, 1.6); light.position.set(0, 2.6, 0); group.add(light); a.parts.light = light;
  }
  let t = Math.random() * 10, spin = 0, heat = 0;
  function update(dt: number, look: StationLook, still = false) {
@@ -275,11 +271,11 @@ export function createGhost(scene: THREE.Scene) {
    if (!reducedMotion()) pulse += dt; const a = .3 + Math.sin(pulse * 4) * .08; ok.opacity = bad.opacity = a;
    ringMat.color.set(valid ? 0x64e6bd : 0xe76d62);
    root.position.set(x, y, z); root.visible = true; g.rotation.y = rot * Math.PI / 2;
-   const size = kind === 'dome' ? 2.25 : .62; ring.scale.setScalar(size * 1.414); ring.position.y = .03;
+   const size = .62; ring.scale.setScalar(size * 1.414); ring.position.y = .03;
    arrow.position.set(Math.sin(rot * Math.PI / 2) * (size + .35), .05, Math.cos(rot * Math.PI / 2) * (size + .35)); arrow.rotation.set(Math.PI / 2, 0, -rot * Math.PI / 2 + Math.PI);
   },
   hide() { root.visible = false; },
  };
 }
 /** Local port height used for cable/pipe attachment (top of the body). */
-export const PORT_HEIGHT: Record<BuildingKind, number> = { workbench: 1.0, kiln: 1.0, biogenerator: .9, electrolyzer: 1.05, refill: 1.1, distributor: .85, dome: .5 };
+export const PORT_HEIGHT: Record<BuildingKind, number> = { workbench: 1.0, kiln: 1.0, biogenerator: .9, electrolyzer: 1.05, refill: 1.1, distributor: .85 };

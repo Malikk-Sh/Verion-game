@@ -15,6 +15,7 @@
  color:#06201c;background:var(--cyan);box-shadow:0 6px 20px rgba(0,0,0,.4);clip-path:polygon(8px 0,calc(100% - 8px) 0,100% 50%,calc(100% - 8px) 100%,8px 100%,0 50%)}
 #production-message[data-tone=warn]{color:#2a0d05;background:var(--warn)}
 #production-message.show{animation:chip-in 2.6s cubic-bezier(.2,.8,.2,1) forwards}
+#production-message[data-tone=amber]{color:#2a1a05;background:var(--amber-hi);white-space:normal;width:max-content;max-width:calc(100% - 48px);text-align:center;line-height:1.3}
 @keyframes chip-in{0%{opacity:0;transform:translate(-50%,10px) scale(.9)}8%{opacity:1;transform:translate(-50%,0) scale(1.04)}14%{transform:translate(-50%,0) scale(1)}85%{opacity:1}100%{opacity:0;transform:translate(-50%,-6px)}}
 /* ---------- Workshop ---------- */
 .cr-layout{flex:1;min-height:0;display:grid;grid-template-columns:minmax(230px,42%) 1fr;gap:14px}
@@ -114,6 +115,14 @@
 .st-slot-cell{position:relative;width:64px;height:64px;padding:6px;display:grid;place-items:center;border:0;background:rgba(4,18,22,.8);box-shadow:inset 0 0 0 1px var(--glow);clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
 .st-slot-cell.empty .art{opacity:.22;filter:grayscale(1)}.st-slot-cell .art{width:100%;height:100%}.st-slot-cell .art img{width:100%;height:100%;object-fit:contain}
 .st-slot-cell small{position:absolute;right:5px;bottom:3px;font-size:12px;font-weight:800;color:#fff;text-shadow:0 1px 2px #000}
+.st-slot-cell.source,.st-bag-cell.source{opacity:.5;box-shadow:inset 0 0 0 2px var(--amber-hi)}
+/* S4: worn tanks next to the charging slot; tank cells drag (touch-action none, so a touch drag is not a scroll). */
+.st-layout [data-drag]{touch-action:none;cursor:grab}
+.st-suit{display:flex;align-items:flex-end;justify-content:center;gap:10px;padding:0 10px 4px;box-shadow:inset 0 -1px 0 var(--line-soft)}
+.st-suit-label{align-self:center;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--cyan)}
+.st-tank small{bottom:7px}.st-tank .art.ghost{color:var(--cyan)}
+.st-tank .st-gas{position:absolute;left:7px;right:7px;bottom:3px;height:3px;transform-origin:left;background:linear-gradient(90deg,#2fb3c0,var(--aqua));box-shadow:0 0 6px rgba(67,227,238,.6);transition:transform .3s linear}
+body.dragging .st-tank:not(.source):not(.drag-ghost){box-shadow:inset 0 0 0 2px var(--amber-hi),0 0 12px rgba(255,180,60,.35)}
 .st-slot-cell.power b{font-size:30px;color:var(--amber-hi);text-shadow:0 0 12px rgba(255,180,60,.7)}
 .st-arrow{position:relative;width:54px;height:54px;display:grid;place-items:center;color:var(--muted);font-size:22px}
 .st-ring{position:absolute;inset:0;border-radius:50%;background:conic-gradient(var(--aqua) calc(var(--p,0)*360deg),rgba(255,255,255,.08) 0);-webkit-mask:radial-gradient(circle,transparent 58%,#000 60%);mask:radial-gradient(circle,transparent 58%,#000 60%)}
@@ -143,6 +152,7 @@
 .st-link.live{box-shadow:inset 3px 0 0 #5df2a0,inset 0 0 0 1px var(--line-soft)}
 .st-link.suggest{background:rgba(255,180,60,.05);box-shadow:inset 0 0 0 1px rgba(255,180,60,.28)}
 .st-foot{margin-top:auto;padding-top:6px;border-top:1px solid var(--line-soft)}
+.st-room{overflow:auto;scrollbar-width:thin;touch-action:pan-y}
 .st-legacy summary{min-height:34px;display:flex;align-items:center;font-size:12px;cursor:pointer}
 .st-bag{min-height:0;display:flex;flex-direction:column;gap:4px;padding-left:14px;border-left:1px solid var(--glow-soft)}
 .st-bag-grid{flex:1;min-height:0;overflow:auto;display:grid;grid-template-columns:repeat(6,minmax(32px,1fr));gap:4px;align-content:start;scrollbar-width:thin}
@@ -169,6 +179,6 @@
 @media(max-width:700px){.cr-layout{grid-template-columns:minmax(190px,44%) 1fr}.cr-mini .art{width:14px;height:14px}.cr-badge.station{max-width:64px}.st-layout{grid-template-columns:minmax(0,1fr) minmax(180px,40%)}.st-bag-grid{grid-template-columns:repeat(4,minmax(32px,1fr))}}
 /* Flying item tokens of craftMotion.ts: placed by left/top in viewport space, never part of the layout. */
 .craft-motion-token{position:fixed;z-index:2000;pointer-events:none;object-fit:contain;filter:drop-shadow(0 0 5px #6bd6d6)}
-@media(prefers-reduced-motion:reduce){.craft-motion-token{display:none}#production-message.show,.st-status .st-lamp,.st-arrow.active span,.st-bag-cell.fits,.cr-detail-scroll{animation:none!important}}
+@media(prefers-reduced-motion:reduce){.craft-motion-token{display:none}#production-message.show,.st-status .st-lamp,.st-arrow.active span,.st-bag-cell.fits,.cr-detail-scroll{animation:none!important}.st-tank .st-gas{transition:none}}
 .cr-upgrade .cr-create{flex:0 0 auto;min-height:48px}
 @media(max-height:340px){.cr-desc{display:none}.cr-req>span:nth-child(2){white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.cr-card-head{gap:8px}.cr-hero{flex-basis:38px;width:38px;height:38px}.cr-titles h3{font-size:15px}.cr-make .cr-reason{font-size:11px}}

@@ -37,6 +37,14 @@ export function groundTextures(){
  const map=new THREE.DataTexture(col,S,S);map.wrapS=map.wrapT=THREE.RepeatWrapping;map.generateMipmaps=true;map.minFilter=THREE.LinearMipmapLinearFilter;map.magFilter=THREE.LinearFilter;map.colorSpace=THREE.SRGBColorSpace;map.anisotropy=4;map.needsUpdate=true;
  return {map,normalMap:normalFrom(height,S,S,1.6)};
 }
+/** S4: tileable low-frequency noise (R: broad blotches, G: finer mottling) that breaks the ground texture's repeat at distance. */
+export function macroNoiseTexture(){
+ const S=128,data=new Uint8Array(S*S*4);
+ const tile=(x:number,y:number,f:number,seed:number)=>{const u=x/S,v=y/S,k=f/S*4;return noise2(x*k,y*k,seed)*(1-u)*(1-v)+noise2((x-S)*k,y*k,seed)*u*(1-v)+noise2(x*k,(y-S)*k,seed)*(1-u)*v+noise2((x-S)*k,(y-S)*k,seed)*u*v;};
+ for(let y=0;y<S;y++)for(let x=0;x<S;x++){const i=(y*S+x)*4,a=tile(x,y,1,41)*.6+tile(x,y,2,43)*.3+tile(x,y,4,47)*.1,b=tile(x,y,4,51)*.6+tile(x,y,8,53)*.4;
+  data[i]=Math.round(Math.max(0,Math.min(1,a*.9+.5))*255);data[i+1]=Math.round(Math.max(0,Math.min(1,b*.9+.5))*255);data[i+2]=0;data[i+3]=255;}
+ const t=new THREE.DataTexture(data,S,S);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.generateMipmaps=true;t.minFilter=THREE.LinearMipmapLinearFilter;t.magFilter=THREE.LinearFilter;t.needsUpdate=true;return t;
+}
 /**
  * Hull panels: seams, rivets, grime, burnt skirt and markings.
  * `faces` gives each octagon face's U range (perimeter-proportional) so every decal is laid out

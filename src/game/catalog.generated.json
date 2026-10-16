@@ -121,6 +121,16 @@
       "kind": "placeable",
       "stack": 16
     },
+    "window": {
+      "name": "Стеклоблок",
+      "kind": "placeable",
+      "stack": 16
+    },
+    "airlock": {
+      "name": "Шлюз",
+      "kind": "placeable",
+      "stack": 16
+    },
     "cable": {
       "name": "Электрокабель",
       "kind": "placeable",
@@ -377,23 +387,6 @@
       "note": ""
     },
     {
-      "id": "craft_dome",
-      "station": "workbench",
-      "inputs": {
-        "iron": 8,
-        "glass": 12,
-        "fiber": 8
-      },
-      "outputs": {
-        "dome": 1
-      },
-      "seconds": 20,
-      "EU_per_second": 0,
-      "tech": "start",
-      "scope": "core",
-      "note": ""
-    },
-    {
       "id": "craft_cable",
       "station": "workbench",
       "inputs": {
@@ -426,14 +419,63 @@
       "note": ""
     },
     {
+      "id": "craft_airlock",
+      "station": "workbench",
+      "inputs": {
+        "iron": 4,
+        "glass": 2,
+        "fiber": 4
+      },
+      "outputs": {
+        "airlock": 1
+      },
+      "seconds": 8,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": "S4: ручной шлюз помещения 1×2 клетки (цикл 6 с, 4 GU). Привод и уплотнитель — для будущего электрического шлюза."
+    },
+    {
+      "id": "craft_window",
+      "station": "workbench",
+      "inputs": {
+        "glass": 1,
+        "iron": 1
+      },
+      "outputs": {
+        "window": 4
+      },
+      "seconds": 4,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "core",
+      "note": "S4: прозрачный герметичный блок 1 м — стены и крыша помещений любой формы."
+    },
+    {
+      "id": "dismantle_dome",
+      "station": "hand",
+      "inputs": {
+        "dome": 1
+      },
+      "outputs": {
+        "window": 64,
+        "airlock": 1
+      },
+      "seconds": 2,
+      "EU_per_second": 0,
+      "tech": "start",
+      "scope": "legacy",
+      "note": "Только для сохранений до S4: прежний купол больше не крафтится и не ставится, его разбирают на оболочку и шлюз."
+    },
+    {
       "id": "electrolysis",
       "station": "electrolyzer",
       "inputs": {
         "water": 1
       },
       "outputs": {
-        "oxygen": 240,
-        "hydrogen": 480
+        "oxygen": 500,
+        "hydrogen": 1000
       },
       "seconds": 10,
       "EU_per_second": 12,

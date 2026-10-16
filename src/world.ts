@@ -1,5 +1,5 @@
 /** Hand-authored Verdana layout (B1 positions, B3 terrain detail). Metres; north is +z. No production-world generator. */
-import { NODES, GRASS_PATCHES } from './game/resources';
+import { NODES, GRASS_PATCHES, NODE_BY_ID, VEIN_LOOK, VEIN_SPOT_BY_ID, depositScale, veinNode, type Vein } from './game/resources';
 import { fbm, noise2, ridged } from './noise';
 /** Walkable world bounds. B4: 560 × 560 m (3.5× B3 per side); the B1–B3 arrival valley keeps its 0…160 coordinates. */
 export const MIN = -200;
@@ -16,8 +16,8 @@ export const LANDMARKS: Landmark[] = [
  {id:'capsule', name:'Посадочная капсула',short:'КАПСУЛА',kind:'Убежище',x:40,z:40,radius:7,description:'Убежище и точка сохранения. Слева от выхода — каменная осыпь (48 блоков камня), к юго-западу — ещё 60 в россыпи. В капсуле дышится и заправляются баллоны, пока в ней есть кислород.'},
  {id:'base',name:'Площадка будущей базы',short:'БАЗА',kind:'16 × 16 м',x:58,z:44,radius:11,description:'Ровный участок 16 × 16 метров. Угловые метки показывают место для строительства; база здесь ещё не построена.'},
  {id:'grass',name:'Местная трава',short:'ТРАВА',kind:'Растительность',x:44,z:57,radius:5,description:'Собирается рукой. В кармане разбирается на волокно для топлива и пищевую массу. Собранные растения отрастают в активное время; ещё пять участков разбросаны по долине.'},
- {id:'iron',name:'Железный выход',short:'ЖЕЛЕЗО',kind:'Поверхностная руда',x:67,z:65,radius:6,description:'Бурая порода с тёмными металлическими прожилками и ржавыми потёками. Два выхода: 32 и 16 блоков железной руды. Добыча мультитулом — 4 с на блок; запас не восстанавливается. Ещё 32 блока — в жиле у входа в пещеру.'},
- {id:'copper',name:'Медный выход',short:'МЕДЬ',kind:'Поверхностная руда',x:83,z:55,radius:6,description:'Тёмно-зелёная порода с медными жилами и зелёной патиной. Два выхода: 22 и 10 блоков медной руды, 4 с на блок. Запас конечен; ещё 24 блока — в жиле у раздвоенной скалы.'},
+ {id:'iron',name:'Железный выход',short:'ЖЕЛЕЗО',kind:'Поверхностная руда',x:67,z:65,radius:6,description:'Бурая порода с тёмными металлическими прожилками и ржавыми потёками. Два выхода: 32 и 16 блоков железной руды. Добыча мультитулом — 4 с на блок. Ещё 32 блока — в жиле у входа в пещеру. Выработанный выход сам не восстанавливается: примерно через 5 минут новая жила появляется в другом месте участка.'},
+ {id:'copper',name:'Медный выход',short:'МЕДЬ',kind:'Поверхностная руда',x:83,z:55,radius:6,description:'Тёмно-зелёная порода с медными жилами и зелёной патиной. Два выхода: 22 и 10 блоков медной руды, 4 с на блок. Ещё 24 блока — в жиле у раздвоенной скалы. Когда выход выработан, новая медная жила со временем появляется в другом месте.'},
  {id:'ice',name:'Ледяное углубление',short:'ЛЁД',kind:'Источник воды',x:30,z:80,radius:8,description:'Вмёрзшие плиты и осколки в низине. Глыба чистого льда (24 куска) и две ледяные плиты по 40. Мультитулом быстрее, руками тоже можно. В печи лёд с волокном даёт воду для генератора кислорода.'},
  {id:'spire',name:'Раздвоенная скала',short:'ОРИЕНТИР',kind:'Дальний ориентир',x:102,z:104,radius:15,description:'Узнаваемый силуэт для возвращения и исследования. Камни имеют упрощённые столкновения; на вершину идти не требуется.'},
  {id:'cave',name:'Вход в пещеру',short:'ПЕЩЕРА',kind:'Пробный проход',x:115,z:72,radius:9,description:'Внутрь можно войти. Короткий закрытый проход проверяет высоту и ширину; шахта, раскопки и враги появятся позже.'},
@@ -29,7 +29,6 @@ export const LANDMARKS: Landmark[] = [
 ];
 /** Landmarks outside the B3 valley; they motivate a future rover. */
 export const FAR_IDS = ['canyon','mesa','crater'];
-export const ROUTE = ['grass','iron','copper','ice','cave','canyon','mesa','crater','capsule'];
 export const SPAWN = { x: 40, z: 42.0, yaw: 0.38 };
 export type Box = { id: string; minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number };
 export const boxes: Box[] = [];
@@ -102,6 +101,8 @@ export function heightAt(x:number,z:number){
  const a=gridHeight(ix,iz),b=gridHeight(ix+1,iz),c=gridHeight(ix,iz+1),d=gridHeight(ix+1,iz+1);
  return u+v<=1?a+(b-a)*u+(c-a)*v:d+(c-d)*(1-u)+(b-d)*(1-v);
 }
+/** Stations stand on the terrain under their 3×3 footprint samples (S4: glass blocks are not bodies). */
+export const stationY=(x:number,z:number)=>Math.max(...[-.5,0,.5].flatMap(dx=>[-.5,0,.5].map(dz=>heightAt(x+dx,z+dz))))+.12;
 export function random(seed=78191){let s=seed;return()=>{s=(Math.imul(s,1664525)+1013904223)>>>0;return s/4294967296;};}
 export const ROCKS: {x:number;z:number;s:number;sy:number;rotation:number}[]=[];
 const rand=random();
@@ -171,7 +172,28 @@ export function makeColliders(){
  for(const [i,f] of FORMATIONS.entries()){const c=Math.cos(f.rotation),s=Math.sin(f.rotation),hx=Math.hypot(f.w*c,f.d*s),hz=Math.hypot(f.w*s,f.d*c);boxes.push(box('formation-'+i,f.x,f.base+f.h/2,f.z,hx*1.9,f.h,hz*1.9));}
  boxes.push(box('spire-a',100,heightAt(100,103)+8,103,5,16,6));
  boxes.push(box('spire-b',106,heightAt(106,104)+6.5,104,4,13,5));
+ FIXED=boxes.map(b=>({...b}));
  return boxes;
+}
+let FIXED:Box[]=[];
+/** Each mineral collider and its deposit: it squats with the stock (depositScale) and is gone at zero. */
+const MINERALS=new Map<string,string>([['iron-outcrop','iron-a'],['copper-outcrop','copper-a'],['stone-outcrop','stone-a'],['ice-outcrop','ice-a'],...NODES.filter(n=>n.box).map(n=>['node-'+n.id,n.id] as [string,string])]);
+/**
+ * Static colliders of one saved world, pure (never the live `boxes`): the fixed ones (capsule, crates, cave, rocks),
+ * every mineral squatting with its deposit's stock (none at zero) and each live vein (S4, D33). applyNodes in main lays
+ * them into `boxes`; the v7 → v8 room migration checks airlock landings against the migrated save's own list.
+ * `veins` may be raw save data: an entry without a known spot and material is skipped (strict validation comes later).
+ */
+export function worldColliders(nodes:Readonly<Record<string,unknown>>,veins:readonly unknown[]):Box[]{
+ const out:Box[]=[];
+ for(const b of FIXED){const id=MINERALS.get(b.id);if(!id){out.push({...b});continue;}
+  const n=NODE_BY_ID.get(id)!,left=Number(nodes[id]??n.amount);if(!(left>0))continue;
+  const {xz,y}=depositScale(left,n.amount),cx=(b.minX+b.maxX)/2,cz=(b.minZ+b.maxZ)/2;
+  out.push({...b,minX:cx+(b.minX-cx)*xz,maxX:cx+(b.maxX-cx)*xz,minZ:cz+(b.minZ-cz)*xz,maxZ:cz+(b.maxZ-cz)*xz,maxY:b.minY+(b.maxY-b.minY)*y});}
+ for(const raw of veins){
+  const v=raw as Vein;if(!v||typeof v!=='object'||!VEIN_SPOT_BY_ID.has(v.spot)||!Object.hasOwn(VEIN_LOOK,v.material)||!(Number(v.amount)>0)||!(Number(v.size)>0))continue;
+  const n=veinNode(v),[bw,bh,bd]=n.box!,{xz,y}=depositScale(v.amount,v.size),y0=heightAt(n.x,n.z)-.1;out.push(box(String(v.id),n.x,y0+bh*y/2,n.z,bw*xz,bh*y,bd*xz));}
+ return out;
 }
 makeColliders();
 

@@ -22,7 +22,8 @@ try{
  await pause();await page.evaluate(async()=>{const {addItems}=await import('/src/game/inventory.ts');const s=window.__vireon.snapshot();for(const [id,n] of [['stone',8],['fiber',5],['grass',3],['iron',10],['copper',4],['wire',4],['circuit',1]])addItems(s.player.inventory,id,n);window.__vireon.setState(s);});await resume();
  // ---------- Pocket ----------
  await page.keyboard.press('b');await page.waitForFunction(()=>window.__vireon.getState().dialog==='production-panel');assert.equal((await state()).station,'hand');
- const rows=await page.locator('.cr-row[data-recipe]').count();assert.equal(rows,20);
+ // S4: the glass block and the airlock replace the dome recipe (dismantling a dome shows only to its holder).
+ const rows=await page.locator('.cr-row[data-recipe]').count();assert.equal(rows,21);
  const before=await snapshot();await page.locator('#craft-search').fill('ключ');assert.equal(await page.locator('.cr-row[data-recipe]').count(),1);await page.locator('#craft-search').fill('');
  await page.locator('.cr-cat',{hasText:'Станции'}).click();assert.ok((await page.locator('.cr-row[data-recipe]').count())>=7);await page.locator('.cr-cat',{hasText:'Все'}).click();
  await click('.cr-filter');const ready=await page.locator('.cr-row[data-recipe]').evaluateAll(es=>es.map(e=>e.dataset.recipe));assert.ok(ready.includes('craft_workbench')&&!ready.includes('craft_wrench'),'pocket “Можно” lists only pocket recipes paid from the backpack');await click('.cr-filter');

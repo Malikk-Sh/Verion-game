@@ -103,9 +103,9 @@ climate_heat|Усилитель жаркого климата
 dome|Стартовый купол со шлюзом
 room|Комнатный модуль
 bulkhead|Герметичная переборка
-airlock|Двухдверный шлюз
+airlock|Шлюз
 wall|Защитный блок
-window|Прозрачный защитный блок
+window|Стеклоблок
 floor|Блок пола
 vent|Вентиляционная решётка
 bed|Кровать
@@ -229,7 +229,6 @@ C('electrolyzer','workbench',{'iron':6,'copper':4,'glass':2})
 C('refill','workbench',{'iron':2,'copper':1})
 C('bottle_1','workbench',{'iron':2,'copper':1})
 C('distributor','workbench',{'iron':4,'copper':2,'circuit':1})
-C('dome','workbench',{'iron':8,'glass':12,'fiber':8},t=20)
 C('bed','workbench',{'iron':2,'cloth':4})
 C('chest','workbench',{'iron':2},count=1)
 C('lamp','workbench',{'iron':1,'copper':1,'glass':1},count=2,note='Без обслуживания; условный автономный источник.')
@@ -252,10 +251,11 @@ C('solar_adv','fabricator',{'solar':1,'velite':4,'circuit_adv':1},tech='velite')
 C('battery_adv','fabricator',{'battery':1,'velite':4,'circuit_adv':1},tech='velite')
 C('room','workbench',{'iron':8,'glass':4},t=20)
 C('bulkhead','workbench',{'iron':2,'seal':1})
-C('airlock','workbench',{'iron':4,'motor':1,'seal':2})
+C('airlock','workbench',{'iron':4,'glass':2,'fiber':4},note='S4: ручной шлюз помещения 1×2 клетки (цикл 6 с, 4 GU). Привод и уплотнитель — для будущего электрического шлюза.')
 C('wall','workbench',{'iron':1},count=4)
 C('floor','workbench',{'iron':1},count=4)
-C('window','workbench',{'glass':1,'iron':1},count=4)
+C('window','workbench',{'glass':1,'iron':1},t=4,count=4,note='S4: прозрачный герметичный блок 1 м — стены и крыша помещений любой формы.')
+R('dismantle_dome','hand',{'dome':1},{'window':64,'airlock':1},2,scope='legacy',note='Только для сохранений до S4: прежний купол больше не крафтится и не ставится, его разбирают на оболочку и шлюз.')
 C('vent','workbench',{'iron':1},count=2)
 C('growlight','fabricator',{'iron':2,'copper':2,'glass':2,'circuit':1},tech='steel')
 C('autofill','fabricator',{'steel':2,'circuit':2,'motor':1},tech='steel')
@@ -308,7 +308,7 @@ C('refinery','fabricator',{'steel':6,'iron':4,'motor':1,'circuit':1},tech='steel
 C('oil_pump','fabricator',{'steel':4,'motor':1,'copper':2},tech='steel')
 C('oil_generator','fabricator',{'steel':6,'motor':2,'circuit':1},tech='steel')
 C('hydrogen_collector','fabricator',{'steel':4,'velite':4,'gas_tank':1,'circuit_adv':1},tech='velite')
-R('electrolysis','electrolyzer',{'water':1},{'oxygen':240,'hydrogen':480},10,12,'power',note='H₂ автоматически сбрасывается до установки модуля сбора; воду и газы учитывать разными игровыми единицами.')
+R('electrolysis','electrolyzer',{'water':1},{'oxygen':500,'hydrogen':1000},10,12,'power',note='H₂ автоматически сбрасывается до установки модуля сбора; воду и газы учитывать разными игровыми единицами.')
 R('melt_in_generator','kiln',{'ice':1,'fiber':1},{'water':1},2,0,'start',note='1 переносимая единица воды = 1 WU; слот сырья и слот топлива.')
 R('melt_bulk','ice_melter',{'ice':4},{'water':4},4,20,'steel')
 R('extract_co2','gas_extractor',{'carbonate':1},{'co2':40,'mineral_residue':1},10,30,'steel')

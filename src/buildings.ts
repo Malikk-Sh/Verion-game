@@ -1,34 +1,29 @@
 import * as THREE from 'three';
 import { reducedMotion } from './motion';
-import { boxes, box, heightAt } from './world';
+import { boxes, box, heightAt, stationY } from './world';
 import { BUILDABLE, ITEMS, TANKS, type BuildingKind } from './game/defs';
-import { insideDome, domeFront, makeBuilding, domeFaces, habitable, telemetry, RECIPE_BY_ID, nearby, poweredComponent, type Building } from './game/production';
+import { makeBuilding, telemetry, RECIPE_BY_ID, nearby, poweredComponent, type Building } from './game/production';
+import { stationProblem, stationRoom } from './game/rooms';
+import { createGlassView } from './glass';
 import { countItem } from './game/inventory';
 import type { GameState } from './game/state';
 import { buildStation, PORT_HEIGHT, type StationLook, type StationVisual } from './stationModels';
 import type { Fx } from './fx';
-export function placementProblem(g: GameState, kind: BuildingKind, x: number, z: number, rot = 0): string {
+export { stationY };
+export function placementProblem(g: GameState, kind: BuildingKind, x: number, z: number, _rot = 0): string {
  if(!(BUILDABLE as readonly string[]).includes(kind)||!Number.isInteger(x)||!Number.isInteger(z))return 'Выберите корпус и клетку';
  if(g.world.base.buildings.length>=64)return 'Достигнут предел 64 корпусов';
  if(x < -195 || x > 355 || z < -195 || z > 355)return 'За границей участка';
  if(Math.hypot(x-g.player.x,z-g.player.z)>12)return 'Место дальше 12 м: подойдите ближе';
- const r=kind==='dome'?2.5:.48;
+ const r=.48;
  if(Math.abs(x-g.player.x)<r+.4&&Math.abs(z-g.player.z)<r+.4)return 'Место занято персонажем';
  if(x+r>36.7&&x-r<43.3&&z+r>36.5&&z-r<47)return 'Оставьте вход капсулы свободным';
  if(Math.abs(x-100)<12+r&&Math.abs(z-132)<10+r)return 'Здесь зарезервирован будущий водоём';
  const y=heightAt(x,z),heights=[];for(const dx of [-r,0,r])for(const dz of [-r,0,r])heights.push(heightAt(x+dx,z+dz));
  if(Math.max(...heights)-Math.min(...heights)>.5)return 'Неровное основание: перепад больше 0,5 м';
- // Combustion needs the outside air and an exhaust: a generator inside a dome would never burn its fuel.
- if(kind==='biogenerator'&&g.world.base.buildings.some(d=>d.kind==='dome'&&insideDome(d,x,d.y+.1,z)))return 'Генератору нужен выхлоп — ставьте его снаружи купола';
- for(const b of g.world.base.buildings){const br=b.kind==='dome'?2.5:.48;
-  if(b.kind==='dome'&&kind!=='dome'&&insideDome(b,x,b.y+.1,z))continue;
-  if(Math.abs(x-b.x)<r+br+.1&&Math.abs(z-b.z)<r+br+.1)return 'Место занято постройкой';
- }
- // The airlock sets the player down one cell inside and 3.5 m outside its door; a body there would trap them in its collider.
- const spots=(d:{x:number;z:number;rot:number})=>{const f=domeFront(d);return [[d.x+f.x,d.z+f.z],[d.x+f.x*3.5,d.z+f.z*3.5]];};
- if(kind==='dome'){const [,[px,pz]]=spots({x,z,rot}),py=heightAt(px,pz);if(g.world.base.buildings.some(b=>b.kind!=='dome'&&Math.abs(b.x-px)<.93&&Math.abs(b.z-pz)<.93))return 'Перед шлюзом стоит постройка — поверните купол';
-  if(boxes.some(b=>!b.id.startsWith('build-')&&px+.45>b.minX&&px-.45<b.maxX&&pz+.45>b.minZ&&pz-.45<b.maxZ&&py+1.8>b.minY&&py<b.maxY))return 'Перед шлюзом препятствие — поверните купол';}
- else for(const d of g.world.base.buildings)if(d.kind==='dome')for(const [px,pz] of spots(d))if(Math.abs(x-px)<r+.45&&Math.abs(z-pz)<r+.45)return 'Здесь проход шлюза — оставьте его свободным';
+ for(const b of g.world.base.buildings)if(Math.abs(x-b.x)<r+r+.1&&Math.abs(z-b.z)<r+r+.1)return 'Место занято постройкой';
+ // Glass, airlocks, their landing cells and the no-fire rule of rooms (rooms.ts).
+ const room=stationProblem(g,kind,x,stationY(x,z),z);if(room)return room;
  for(const b of boxes)if(!b.id.startsWith('build-')&&x+r>b.minX&&x-r<b.maxX&&z+r>b.minZ&&z-r<b.maxZ&&y+3>b.minY&&y<b.maxY)return 'Место занято объектом';
  return '';
 }
@@ -37,13 +32,12 @@ export function place(g: GameState, kind: BuildingKind, x: number, z: number, ro
  const inv=g.player.inventory,index=inv[g.player.hotbar]?.itemId===kind?g.player.hotbar:inv.findIndex(s=>s?.itemId===kind&&!s.packed);
  const selected=inv[index];if(!selected)return 'В рюкзаке нет: '+ITEMS[kind].name;
  const packed=selected.packed;if(--selected.count===0)inv[index]=null;
- const dome=g.world.base.buildings.find(b=>insideDome(b,x,b.y+.1,z)),y=dome?dome.y:Math.max(...[-2.5,0,2.5].flatMap(dx=>[-2.5,0,2.5].map(dz=>heightAt(x+(kind==='dome'?dx:dx*.2),z+(kind==='dome'?dz:dz*.2)))))+.12;
- const body=makeBuilding(g,kind,x,y,z,rot);if(packed)Object.assign(body,structuredClone(packed),{rot:((rot%4)+4)%4});return '';
+ const body=makeBuilding(g,kind,x,stationY(x,z),z,rot);if(packed)Object.assign(body,structuredClone(packed),{rot:((rot%4)+4)%4});return '';
 }
 /** Visual state of one station: never feeds back into the simulation. */
 export function stationLook(g: GameState, b: Building): StationLook {
  const pw = (telemetry.power.get(b.id) ?? 0) > 0, r = b.job ? RECIPE_BY_ID.get(b.job.recipeId) : undefined, running = !!b.job && !!r && b.job.workMs < r.seconds * 1000;
- if (!b.enabled && b.kind !== 'dome') return { status: 'off', working: 0 };
+ if (!b.enabled) return { status: 'off', working: 0 };
  switch (b.kind) {
   case 'workbench': {
    const work = running && (b.level === 2 ? pw : nearby(g, b));
@@ -53,8 +47,7 @@ export function stationLook(g: GameState, b: Building): StationLook {
   case 'biogenerator': { const out = (telemetry.supply.get(b.id) ?? 0) > 0; const empty = !b.fuel && !countItem(b.input, 'fiber') && b.energy < 1000; return { status: out ? 'work' : empty ? 'warn' : 'idle', working: out ? 1 : 0 }; }
   case 'electrolyzer': { const water = !!b.input[0] || b.water > 0 || running; return { status: running && pw ? 'work' : water && !pw ? 'warn' : 'idle', working: running && pw ? 1 : 0 }; }
   case 'refill': return { status: b.oxygen > 0 ? 'idle' : 'warn', working: 0 };
-  case 'distributor': { const room = g.world.base.buildings.some(d => d.kind === 'dome' && insideDome(d, b.x, b.y, b.z)); return { status: !room ? 'warn' : pw ? 'work' : 'warn', working: pw ? 1 : 0 }; }
-  case 'dome': { const pass = g.world.base.passage?.domeId === b.id ? 1 - g.world.base.passage.remainingMs / 6000 : 0; const door = pass > 0 ? Math.min(1, Math.sin(Math.PI * pass) * 1.6) : 0; const ok = habitable(b); return { status: ok ? 'work' : 'warn', working: ok ? 1 : 0, habitable: ok, door }; }
+  case 'distributor': { const room = !!stationRoom(g, b); return { status: !room ? 'warn' : pw ? 'work' : 'warn', working: pw ? 1 : 0 }; }
  }
 }
 /** Where a line attaches to a station: on top of the body, pulled towards the other end. */
@@ -62,8 +55,7 @@ export function portPoint(g: GameState, id: string, toward?: { x: number; z: num
  if (id === 'capsule') { const dx = (toward?.x ?? 40) - 40, dz = (toward?.z ?? 37) - 40, l = Math.max(Math.abs(dx), Math.abs(dz)) || 1; return new THREE.Vector3(40 + dx / l * 2.6, heightAt(40, 40) + .8, 40 + dz / l * 3); }
  const b = g.world.base.buildings.find(v => v.id === id)!;
  const p = new THREE.Vector3(b.x, b.y + PORT_HEIGHT[b.kind], b.z);
- if (toward && b.kind !== 'dome') { const dx = toward.x - b.x, dz = toward.z - b.z, l = Math.hypot(dx, dz) || 1; p.x += dx / l * .3; p.z += dz / l * .3; }
- if (b.kind === 'dome' && toward) { const dx = toward.x - b.x, dz = toward.z - b.z, l = Math.max(Math.abs(dx), Math.abs(dz)) || 1; p.x += dx / l * 2.05; p.z += dz / l * 2.05; }
+ if (toward) { const dx = toward.x - b.x, dz = toward.z - b.z, l = Math.hypot(dx, dz) || 1; p.x += dx / l * .3; p.z += dz / l * .3; }
  return p;
 }
 function stripeTexture(color: string) {
@@ -75,8 +67,8 @@ function stripeTexture(color: string) {
 const UP = new THREE.Vector3(0, 1, 0);
 export function createBuildings(scene: THREE.Scene, fx?: Fx) {
  const root = new THREE.Group(); scene.add(root);
- const glass = new THREE.MeshStandardMaterial({ color: 0x9fd6dd, transparent: true, opacity: .2, roughness: .05, metalness: .1, depthWrite: false, side: THREE.DoubleSide });
- const roofGlass = new THREE.MeshStandardMaterial({ color: 0xb6e2e6, transparent: true, opacity: .28, roughness: .08, metalness: .1, depthWrite: false, side: THREE.DoubleSide });
+ // Glass rooms and airlocks (S4): chunked faces, door models, lamps and their collision hash.
+ const glass = createGlassView(root, fx);
  const cableFlow = stripeTexture('#ffb070'), pipeFlow = stripeTexture('#9ff1ff');
  const cableMat = new THREE.MeshStandardMaterial({ color: 0x23282a, roughness: .7, metalness: .2 });
  const cableLive = new THREE.MeshStandardMaterial({ color: 0x23282a, roughness: .7, metalness: .2, emissive: 0xffffff, emissiveMap: cableFlow, emissiveIntensity: 1.4 });
@@ -91,30 +83,22 @@ export function createBuildings(scene: THREE.Scene, fx?: Fx) {
  let key = '', time = 0, initial = true;
  function clearLines() { for (const l of lines) { l.mesh.geometry.dispose(); root.remove(l.mesh); for (const e of l.extra) root.remove(e); } lines.length = 0; }
  function sync(g: GameState) {
-  const next = JSON.stringify([g.world.base.buildings.map(b => [b.id, b.kind, b.level, b.rot, b.x, b.y, b.z, b.kind === 'dome' ? b.zone.shell : 0]), g.world.base.links]);
+  glass.sync(g);
+  const next = JSON.stringify([g.world.base.buildings.map(b => [b.id, b.kind, b.level, b.rot, b.x, b.y, b.z]), g.world.base.links]);
   if (next === key) return; key = next;
   for (let i = boxes.length - 1; i >= 0; i--) if (boxes[i].id.startsWith('build-')) boxes.splice(i, 1);
   const alive = new Set(g.world.base.buildings.map(b => b.id));
-  for (const [id, s] of stations) if (!alive.has(id) || s.b.kind !== g.world.base.buildings.find(b => b.id === id)?.kind || s.b.level !== g.world.base.buildings.find(b => b.id === id)?.level || s.b.rot !== g.world.base.buildings.find(b => b.id === id)?.rot || s.b.kind === 'dome') { root.remove(s.group); s.v.dispose(); stations.delete(id); }
+  for (const [id, s] of stations) if (!alive.has(id) || s.b.kind !== g.world.base.buildings.find(b => b.id === id)?.kind || s.b.level !== g.world.base.buildings.find(b => b.id === id)?.level || s.b.rot !== g.world.base.buildings.find(b => b.id === id)?.rot) { root.remove(s.group); s.v.dispose(); stations.delete(id); born.delete(id); }
   for (const b of g.world.base.buildings) {
    let s = stations.get(b.id);
    if (!s) {
     const v = buildStation(b.kind, b.level), group = new THREE.Group(); group.name = b.id; group.add(v.group); v.group.rotation.y = b.rot * Math.PI / 2;
     if (!initial) born.set(b.id, 0);
     s = { b: { ...b, rot: b.rot }, v, group }; stations.set(b.id, s); root.add(group);
-    if (b.kind === 'dome') {
-     const faces = domeFaces(), walls: THREE.Matrix4[] = [], roof: THREE.Matrix4[] = [];
-     for (let i = 0; i < faces.length; i++) if (b.zone.shell[i] > 0) {
-      const f = faces[i], d = f.next.map((n, j) => n - f.cell[j]), cx = f.cell[0] - 1.5 + d[0] * .5, cy = f.cell[1] + .5 + d[1] * .5 + .02, cz = f.cell[2] - 1.5 + d[2] * .5, w = d[0] ? .03 : .96, h = d[1] ? .03 : .96, depth = d[2] ? .03 : .96;
-      const m = new THREE.Matrix4().makeScale(w, h, depth); m.setPosition(cx, cy, cz); (d[1] ? roof : walls).push(m);
-      boxes.push(box(b.id + '-face-' + i, b.x + cx, b.y + cy, b.z + cz, d[0] ? .1 : 1, d[1] ? .1 : 1, d[2] ? .1 : 1));
-     }
-     for (const [mat, list] of [[glass, walls], [roofGlass, roof]] as const) { if (!list.length) continue; const mesh = new THREE.InstancedMesh(cube, mat, list.length); list.forEach((m, i) => mesh.setMatrixAt(i, m)); mesh.receiveShadow = true; mesh.renderOrder = 2; group.add(mesh); }
-    }
    }
    s.b = { ...b }; s.group.position.set(b.x, b.y, b.z);
    if (b.kind === 'workbench') { const h = b.level === 2 ? 1.55 : 1.1; boxes.push(box(b.id, b.x, b.y + h / 2, b.z, .98, h, .82)); }
-   else if (b.kind !== 'dome') { const h = b.kind === 'kiln' ? 1.35 : b.kind === 'refill' ? 1.45 : b.kind === 'distributor' ? .95 : 1.25; const w = b.kind === 'refill' ? .7 : .94; boxes.push(box(b.id, b.x, b.y + h / 2, b.z, w, h, w)); }
+   else { const h = b.kind === 'kiln' ? 1.35 : b.kind === 'refill' ? 1.45 : b.kind === 'distributor' ? .95 : 1.25; const w = b.kind === 'refill' ? .7 : .94; boxes.push(box(b.id, b.x, b.y + h / 2, b.z, w, h, w)); }
   }
   clearLines();
   for (const l of g.world.base.links) {
@@ -150,10 +134,10 @@ export function createBuildings(scene: THREE.Scene, fx?: Fx) {
   initial = false;
  }
  /** A newly loaded world appears as saved; only later placements animate. */
- function reset() { key = ''; initial = true; knownLinks.clear(); puff.clear(); for (const s of stations.values()) { root.remove(s.group); s.v.dispose(); } stations.clear(); clearLines(); born.clear(); }
+ function reset() { glass.reset(); key = ''; initial = true; knownLinks.clear(); puff.clear(); for (const s of stations.values()) { root.remove(s.group); s.v.dispose(); } stations.clear(); clearLines(); born.clear(); }
  /** Animates stations and flow; `dt` is real frame time (0 while frozen). */
  function update(g: GameState | null, dt: number) {
-  if (!g) return; time += dt;
+  if (!g) return; time += dt; glass.update(g, dt);
   // Reduced motion: no flow, spin, drop-in, draw-in or smoke; lamps and colours still show the state.
   const still = reducedMotion(), m = still ? 0 : dt;
   cableFlow.offset.x -= m * 1.6; pipeFlow.offset.x -= m * 1.2;
@@ -161,7 +145,7 @@ export function createBuildings(scene: THREE.Scene, fx?: Fx) {
    const b = g.world.base.buildings.find(v => v.id === s.b.id); if (!b) continue;
    s.v.update(dt, stationLook(g, b), still);
    const t = born.get(b.id);
-   if (t !== undefined) { const k = still ? 1 : Math.min(1, t + dt * 2.4); born.set(b.id, k); const e = 1 - Math.pow(1 - k, 3), over = Math.sin(k * Math.PI) * .08; s.v.group.scale.set(1 + over, e + over * .5, 1 + over); s.v.group.position.y = (1 - e) * .6; if (t < .55 && k >= .55 && !still) fx?.land(b.x, b.y, b.z, b.kind === 'dome' ? 2.3 : .6); if (k >= 1) { born.delete(b.id); s.v.group.scale.setScalar(1); s.v.group.position.y = 0; } }
+   if (t !== undefined) { const k = still ? 1 : Math.min(1, t + dt * 2.4); born.set(b.id, k); const e = 1 - Math.pow(1 - k, 3), over = Math.sin(k * Math.PI) * .08; s.v.group.scale.set(1 + over, e + over * .5, 1 + over); s.v.group.position.y = (1 - e) * .6; if (t < .55 && k >= .55 && !still) fx?.land(b.x, b.y, b.z, .6); if (k >= 1) { born.delete(b.id); s.v.group.scale.setScalar(1); s.v.group.position.y = 0; } }
    if (fx && m > 0) emitFrom(g, b, dt);
   }
   for (const l of lines) if (l.grow < 1) { l.grow = still ? 1 : Math.min(1, l.grow + dt * 1.8); const idx = l.mesh.geometry.index; l.mesh.geometry.setDrawRange(0, Math.floor((idx ? idx.count : l.mesh.geometry.attributes.position.count) * l.grow / 3) * 3); if (l.grow >= 1) for (const e of l.extra) e.visible = true; }
@@ -182,11 +166,10 @@ export function createBuildings(scene: THREE.Scene, fx?: Fx) {
   if (b.kind === 'kiln' && look.working) { const [x, y, z] = world(.2, 2.12, -.18); fx!.smoke(x, y, z); if (Math.random() < .5) { const [ex, ey, ez] = world(0, .45, .48); fx!.ember(ex, ey, ez); } next = .28; }
   else if (b.kind === 'biogenerator' && look.working) { const [x, y, z] = world(.3, 1.36, -.24); fx!.smoke(x, y, z, true); next = .32; }
   else if (b.kind === 'electrolyzer' && look.working) { const [x, y, z] = world(.3, 1.2, -.24); fx!.steam(x, y, z); next = .45; }
-  else if (b.kind === 'dome' && g.world.base.passage?.domeId === b.id) { const [x, y, z] = world(0, 1.2, 2.75); fx!.hiss(x, y, z); next = .25; }
   else next = .6;
   puff.set(b.id, next);
  }
  /** Newly placed station drops in with a short settle animation. */
  function celebrate(id: string) { born.set(id, 0); }
- return { sync, reset, update, celebrate, root, tankFull: (t: { itemId: string; milliGU?: number }) => (t.milliGU ?? 0) >= TANKS[t.itemId].capacity };
+ return { sync, reset, update, celebrate, root, glass, /** A station is dropping in: its shadow must follow. */ get animating() { for (const id of born.keys()) if (stations.has(id)) return true; return false; }, tankFull: (t: { itemId: string; milliGU?: number }) => (t.milliGU ?? 0) >= TANKS[t.itemId].capacity };
 }

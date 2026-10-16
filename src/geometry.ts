@@ -5,10 +5,12 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
  * Static model pieces are merged by material; detail need not mean a draw call per bolt.
  * Every piece is normalised to position/normal/uv/color so different sources merge,
  * and an optional tint multiplies vertex colour (one rock material, many rock tones).
+ * With `pieces`, each merged mesh records the running vertex count after every added piece
+ * (`userData.pieces`), so a deposit can hide its last pieces with a draw range (S4 mining).
  */
 export class StaticBatch {
  private groups = new Map<string, {material:THREE.Material;geometries:THREE.BufferGeometry[]}>();
- constructor(private cellSize=0,private spatial:(material:THREE.Material)=>boolean=()=>true){}
+ constructor(private cellSize=0,private spatial:(material:THREE.Material)=>boolean=()=>true,private pieces=false){}
  add(geometry: THREE.BufferGeometry, material: THREE.Material, x=0,y=0,z=0,sx=1,sy=1,sz=1,rx=0,ry=0,rz=0,tint?:THREE.ColorRepresentation) {
   const g=geometry.index?geometry.toNonIndexed():geometry.clone();
   for(const name of Object.keys(g.attributes))if(!['position','normal','uv','color'].includes(name))g.deleteAttribute(name);
@@ -26,7 +28,7 @@ export class StaticBatch {
   const meshes:THREE.Mesh[]=[];
   for(const [key,{material,geometries}] of this.groups){
    const geometry=mergeGeometries(geometries);if(!geometry)throw new Error('Static geometry merge failed');
-   geometry.computeBoundingSphere();const mesh=new THREE.Mesh(geometry,material);mesh.name=(material.name||material.type)+(key.includes(':')?':'+key.split(':')[1]:'');const s=shadow(material);mesh.castShadow=s.cast;mesh.receiveShadow=s.receive;scene.add(mesh);meshes.push(mesh);geometries.forEach(g=>g.dispose());
+   geometry.computeBoundingSphere();const mesh=new THREE.Mesh(geometry,material);if(this.pieces){let n=0;mesh.userData.pieces=geometries.map(g=>n+=g.attributes.position.count);}mesh.name=(material.name||material.type)+(key.includes(':')?':'+key.split(':')[1]:'');const s=shadow(material);mesh.castShadow=s.cast;mesh.receiveShadow=s.receive;scene.add(mesh);meshes.push(mesh);geometries.forEach(g=>g.dispose());
   }
   this.groups.clear();return meshes;
  }

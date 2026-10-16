@@ -49,14 +49,17 @@ try {
   const { ITEM_ART } = await import('/src/ui/art.ts');
   const { ITEMS } = await import('/src/game/defs.ts');
   return await Promise.all(Object.keys(ITEMS).map(async id => {
-   const img = new Image(); img.src = ITEM_ART[id] || ''; await img.decode();
+   if (!ITEM_ART[id]) return { id, width: 0, cornerAlpha: 255, opaque: false };
+   const img = new Image(); img.src = ITEM_ART[id]; await img.decode();
    const c = document.createElement('canvas'); c.width = c.height = 512; const x = c.getContext('2d'); x.drawImage(img, 0, 0);
    const a = x.getImageData(0, 0, 512, 512).data;
    return { id, width: img.naturalWidth, cornerAlpha: a[3], opaque: a.some((n, i) => i % 4 === 3 && n > 250) };
   }));
  });
- assert.equal(art.length, 11); assert.ok(art.every(a => a.width === 512 && a.cornerAlpha < 3 && a.opaque));
- report.assets = art; check('All 11 current items load at 512px with transparent margins and solid object pixels');
+ // Every item of the live registry has a sprite (S4: the glass block and the airlock are rendered from their in-game models).
+ const bad = art.filter(a => !(a.width === 512 && a.cornerAlpha < 3 && a.opaque)).map(a => a.id);
+ assert.ok(art.some(a => a.id === 'window') && art.some(a => a.id === 'airlock')); assert.deepEqual(bad, []);
+ report.assets = art; check(`All ${art.length} current items load at 512px with transparent margins and solid object pixels`);
  await page.keyboard.press('KeyI');
  for (const [w, h] of viewports) {
   await page.setViewportSize({ width: w, height: h }); await page.waitForTimeout(300);

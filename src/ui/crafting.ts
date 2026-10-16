@@ -3,6 +3,7 @@ import { countItem } from '../game/inventory';
 import { RECIPES, RECIPE_BY_ID, WORKBENCH_UPGRADE, cancelJob, clearQueue, collectInput, collectOutput, energyRate, loadRecipeInputs, machine, nearby, queueJob, removeQueuedJob, startJob, upgradeBuilding, powerRate, MAX_REPEAT, type Recipe, type Building } from '../game/production';
 import { readyWorldItem } from '../game/backpack';
 import { nearestNode, nearestStation, type GuideTarget } from '../game/guide';
+import { nextVeinSeconds } from '../game/nature';
 import { stationStatus } from '../game/stationStatus';
 import type { GameState } from '../game/state';
 import { itemArt } from './art';
@@ -14,7 +15,7 @@ const name = (id: string) => ITEMS[id]?.name ?? ({ water: 'Вода', oxygen: '�
 export const STATION_NAME: Record<string, string> = { hand: 'В кармане', workbench: 'Верстак', kiln: 'Плавильная печь', electrolyzer: 'Генератор кислорода' };
 const RAW = new Set(['stone', 'iron_raw', 'copper_raw', 'sand', 'ice', 'grass']);
 /** Stable progression order; the list never jumps around while the player crafts. */
-const ORDER = ['grass_parts', 'craft_tool_stone', 'craft_workbench', 'craft_kiln', 'smelt_iron_raw', 'smelt_copper_raw', 'glass', 'melt_in_generator', 'craft_wire', 'craft_cable', 'craft_circuit', 'craft_biogenerator', 'craft_electrolyzer', 'craft_gas_pipe', 'craft_bottle_1', 'craft_refill', 'craft_dome', 'craft_distributor', 'craft_wrench', 'electrolysis'];
+const ORDER = ['grass_parts', 'craft_tool_stone', 'craft_workbench', 'craft_kiln', 'smelt_iron_raw', 'smelt_copper_raw', 'glass', 'melt_in_generator', 'craft_wire', 'craft_cable', 'craft_circuit', 'craft_biogenerator', 'craft_electrolyzer', 'craft_gas_pipe', 'craft_bottle_1', 'craft_refill', 'craft_window', 'craft_airlock', 'craft_distributor', 'craft_wrench', 'electrolysis'];
 const rank = (id: string) => { const i = ORDER.indexOf(id); return i < 0 ? 99 : i; };
 export type CraftCategory = 'all' | 'material' | 'gear' | 'station' | 'line';
 const CATEGORIES: [CraftCategory, string][] = [['all', 'Все'], ['material', 'Материалы'], ['gear', 'Снаряжение'], ['station', 'Станции'], ['line', 'Линии']];
@@ -57,7 +58,7 @@ export function createCraftingView() {
   if (RAW.has(id)) {
    const t = nearestNode(g, id);
    if (t) { const go = button(`${t.name} · ${Math.round(Math.hypot(t.x - g.player.x, t.z - g.player.z))} м`, () => navigate?.(t), 'cr-go'); go.title = 'Показать на компасе'; box.append(go); }
-   else box.textContent = 'Запасы исчерпаны — ищите дальние залежи на карте';
+   else { const s = nextVeinSeconds(g, id); box.textContent = s !== null ? `Залежи выработаны — новая жила появится примерно через ${Math.max(1, Math.round(s / 60))} мин` : 'Запасы исчерпаны — ищите дальние залежи на карте'; }
    return box;
   }
   const r = VISIBLE.find(v => v.outputs[id]);
@@ -150,6 +151,7 @@ export function createCraftingView() {
    for (const r of VISIBLE) {
     const out = Object.keys(r.outputs)[0];
     if (query && !name(out).toLowerCase().includes(query.toLowerCase())) continue;
+    if (r.id === 'dismantle_dome' && !countItem(g.player.inventory, 'dome')) continue;
     if (category !== 'all' && recipeCategory(r) !== category) continue;
     const can = affordable(g, r, b), here = usable(r);
     if (onlyReady && (!here || can < 1)) continue;
@@ -175,7 +177,7 @@ export function createCraftingView() {
   const titles = h('div', '', 'cr-titles'); titles.append(h('span', (STATION_NAME[r.station] ?? r.station) + ' · ' + r.seconds + ' с' + (b && here && energyRate(b, r) ? ' · ' + energyRate(b, r) + ' EU/с' : ''), 'cr-kicker'), h('h3', name(out) + (r.outputs[out] > 1 ? ' ×' + r.outputs[out] : '')));
   head.append(titles);
   scroll.append(head);
-  const desc = ITEMS[out]?.description ?? (out === 'water' ? 'Переносимая вода для генератора кислорода.' : out === 'oxygen' ? 'Кислород для дыхания, баллонов и купола.' : '');
+  const desc = ITEMS[out]?.description ?? (out === 'water' ? 'Переносимая вода для генератора кислорода.' : out === 'oxygen' ? 'Кислород для дыхания, баллонов и помещений.' : '');
   if (desc) scroll.append(h('p', desc, 'cr-desc'));
   // Where this is made.
   const req = h('div', '', 'cr-req');
