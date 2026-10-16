@@ -1,6 +1,6 @@
 import { Diagnostics, observeDiagnostics } from './diagnostics';
 import { sceneInterval } from './renderPolicy';
-import { createWorldInteraction } from './worldInteraction';
+import { aimDeposit, createWorldInteraction } from './worldInteraction';
 import { stationStatus } from './game/stationStatus';
 import { createFx } from './fx';
 import { createFootprints, printAllowed } from './footprints';
@@ -31,7 +31,7 @@ import { installFullscreen } from './fullscreen';
 import { createWorld, type Quality } from './scene';
 import { Character, type Input } from './controller';
 import { Ambience } from './audio';
-import { boxes, box, EYE, FIXED_DT, heightAt, LANDMARKS, type Landmark } from './world';
+import { boxes, box, EYE, FIXED_DT, heightAt, LANDMARKS, worldColliders, type Landmark } from './world';
 import { createMap } from './ui/map';
 import { DIRS, directionName } from './ui/mapView';
 import { resolveNav, type Waypoint } from './game/navigation';
@@ -87,7 +87,7 @@ function boot(){
  let lastSurvivalEvent='none';
  const token=(globalThis.crypto?.randomUUID?.()??Math.random().toString(36).slice(2)+Date.now().toString(36));
  let game:GameState|null=null,store:SaveStore|null=null,saver:Saver|null=null,storeError='',slotId:string|null=null;
- let holdMine=false,holdRefill=false,aimNode:string|null=null,aimReason='',mineRatio=0,nearDrop:string|null=null,slots:SlotRecord[]=[],actionKind='none',hudKey='';
+ let holdMine=false,holdRefill=false,aimNode:string|null=null,aimNear=Infinity,aimReason='',mineRatio=0,nearDrop:string|null=null,slots:SlotRecord[]=[],actionKind='none',hudKey='';
  let refillTanks=false;
  // S4 mining feel: the strike timeline of the current hold (strikes.ts) drives the swing, the reticle ring and every impact cue.
  let swingActive=false,swingStruck=false,swingNeed=0,swingPoseValue=0,kickT=1,kickPitch=0,kickYaw=0,lastHit='',strikesLanded=0,ringNeed=0,heldModel:string|null=null;
@@ -212,7 +212,7 @@ function boot(){
  function placeCell(){
   if(!game||!running)return;const r=interaction.placeCell(game);if(!r)return;
   if(r.error){if(!holdPlace||!placedInHold.size){toast('Строительство',r.error);audio.tone('warn');}return;}
-  placedInHold.add(r.key);lastPlace=performance.now();audio.tone('ui');afterEdit(r,!holdPlace);interaction.update(game,true);updateAimUI();
+  placedInHold.add(r.key);lastPlace=performance.now();audio.tone('ui');afterEdit(r,!holdPlace);updateTarget(0,true);updateAimUI();
  }
  function endHold(){if(holdPlace&&placedInHold.size)void saver?.save();holdPlace=false;placedInHold.clear();}
  /** Takes back the aimed block or airlock; a removal that lets air out asks for a second press within 3 s. */
@@ -223,7 +223,7 @@ function boot(){
   if(r.needConfirm){pendingRemove={key:s.key,until:performance.now()+3000,text:r.error};built.glass.tintRooms(game,s.key,3);audio.tone('warn');toast('Внимание',r.error);updateAimUI();return;}
   pendingRemove=null;built.glass.clearTint();
   if(r.error){toast('Не удалось забрать',r.error);audio.tone('warn');return;}
-  audio.tone('item');if(!r.breached)toast(s.door?'Шлюз в рюкзаке':'Стеклоблок в рюкзаке','Возвращено в рюкзак');afterEdit(r);interaction.update(game,true);updateAimUI();
+  audio.tone('item');if(!r.breached)toast(s.door?'Шлюз в рюкзаке':'Стеклоблок в рюкзаке','Возвращено в рюкзак');afterEdit(r);updateTarget(0,true);updateAimUI();
  }
  /** The room window of the aimed block or airlock; a leaking structure shows its leak path for 6 s. */
  function openStructure(id:string){
@@ -242,7 +242,7 @@ function boot(){
   if(actionKind==='room'&&interaction.target){openStructure(interaction.target);return;}
   const before=game.world.base.buildings.length,linksBefore=game.world.base.links.length;
   const result=interaction.action(game);if(result!==null){toast(result?'Действие в мире':'Готово',result||(game.world.base.links.length>linksBefore?'Соединено':'Установлено'));if(!result&&game.world.base.buildings.length>before)audio.tone('discover');
-   if(!result&&game.world.base.links.length>linksBefore)audio.tone('item');built.sync(game);world.invalidateShadows();hudKey='';updateHotbar();interaction.update(game,true);updateAimUI();void saver?.save();return;}
+   if(!result&&game.world.base.links.length>linksBefore)audio.tone('item');built.sync(game);world.invalidateShadows();hudKey='';updateHotbar();updateTarget(0,true);updateAimUI();void saver?.save();return;}
   if(actionKind==='capsule')production.open('capsule');
   else if(actionKind==='crate'&&interaction.target)production.open(interaction.target);
   else if(actionKind==='pickup'&&nearDrop){const moved=pickUp(game,nearDrop);audio.tone(moved?'item':'warn');toast(moved?'Поднято':'Рюкзак полон',moved?`${moved} предм.`:'Освободите ячейку');syncDrops();hudKey='';updateHotbar();}
@@ -398,18 +398,11 @@ function boot(){
   if(!game)return;
   world.syncVeins(game.world.veins,fresh);
   for(const n of NODES)world.setNodeAmount(n.id,game.world.nodes[n.id],n.amount);
-  // S4 (D33): new veins mine like deposits and get a collider that squats with them. The 'vein-' ids are not 'build-', so placement refuses them.
-  for(let i=boxes.length-1;i>=0;i--)if(boxes[i].id.startsWith('vein-'))boxes.splice(i,1);
-  for(const v of game.world.veins){const n=veinNode(v),[bw,bh,bd]=n.box!,{xz,y}=depositScale(v.amount,v.size),y0=heightAt(n.x,n.z)-.1;world.setNodeAmount(v.id,v.amount,v.size);boxes.push(box(v.id,n.x,y0+bh*y/2,n.z,bw*xz,bh*y,bd*xz));}
-  for(const [id,nodeId] of [['iron-outcrop','iron-a'],['copper-outcrop','copper-a'],['stone-outcrop','stone-a'],['ice-outcrop','ice-a'],...NODES.filter(n=>n.box).map(n=>['node-'+n.id,n.id])]){
-   const original=mineralBoxes.get(id);if(!original)continue;const i=boxes.findIndex(b=>b.id===id);if(i>=0)boxes.splice(i,1);
-   const n=NODE_BY_ID.get(nodeId)!,left=game.world.nodes[nodeId];if(left<=0)continue;
-   // S4: the collider squats with the model (depositScale): narrower by xz, lower by y.
-   const {xz,y}=depositScale(left,n.amount),cx=(original.minX+original.maxX)/2,cz=(original.minZ+original.maxZ)/2;
-   boxes.push({...original,minX:cx+(original.minX-cx)*xz,maxX:cx+(original.maxX-cx)*xz,minZ:cz+(original.minZ-cz)*xz,maxZ:cz+(original.maxZ-cz)*xz,maxY:original.minY+(original.maxY-original.minY)*y});
-  }
+  for(const v of game.world.veins)world.setNodeAmount(v.id,v.amount,v.size);
+  // S4: deposit colliders squat with their stock and vanish at zero; new veins (D33) get one too. The ids are not 'build-', so placement refuses them.
+  for(let i=boxes.length-1;i>=0;i--)if(!boxes[i].id.startsWith('build-'))boxes.splice(i,1);
+  boxes.push(...worldColliders(game.world.nodes,game.world.veins));
  }
- const mineralBoxes=new Map(boxes.filter(b=>b.id.endsWith('-outcrop')||b.id.startsWith('node-')).map(b=>[b.id,{...b}]));
  function snapshot():GameState{
   const g=game!;g.meta.activeTicks=clock.activeTicks;
   Object.assign(g.player,{x:actor.x,y:actor.y,z:actor.z,yaw:actor.yaw,pitch:actor.pitch});
@@ -533,16 +526,11 @@ function boot(){
   if(impacts===1)crackHit.copy(p);world.deposits.setCrack(id,crackStage(impacts,strikeCount(need)),crackHit);
  }
  // ---------- Aim: which deposit is under the reticle and within reach ----------
- const nodeCenter=new THREE.Vector3(),toNode=new THREE.Vector3();
  function computeAim(){
-  aimNode=null;if(!game||!started)return;let best=Infinity;
-  for(const n of allDeposits(game)){const left=depositLeft(game,n.id);if(left<=0)continue;const k=depositScale(left,n.amount),r=n.radius*k.xz;
-   nodeCenter.set(n.x,heightAt(n.x,n.z)+n.height*k.y*.5,n.z);toNode.copy(nodeCenter).sub(camera.position);
-   const along=toNode.dot(viewDirection),perp=Math.sqrt(Math.max(0,toNode.lengthSq()-along*along)),horiz=Math.hypot(actor.x-n.x,actor.z-n.z)-r;
-   // Ray hits the deposit's bounding sphere within reach, or the player stands right next to it facing it (easier on touch).
-   const hit=along>0&&perp<r+.25&&along-r<=REACH,close=horiz<1.3&&along>0&&perp<r+1.1;
-   if((hit||close)&&along<best){best=along;aimNode=n.id;}}
+  aimNode=null;aimNear=Infinity;if(!game||!started)return;const a=aimDeposit(game,camera.position,viewDirection,actor.x,actor.z);if(a){aimNode=a.id;aimNear=a.near;}
  }
+ /** World target after the deposit aim: a glass block or airlock nearer than the deposit takes the reticle (and stops mining through it). */
+ function updateTarget(dt=0,active=running){interaction.update(game,active,dt,aimNear);if(interaction.target?.startsWith('glass:')||interaction.target?.startsWith('door-'))aimNode=null;}
  /** Aim label under the reticle and the context action button (mine / pick up / scan / none). */
  function updateAimUI(){
   nearMachine=game&&interaction.target&&machine(game,interaction.target)?interaction.target:null;
@@ -808,7 +796,7 @@ function boot(){
   measured=diagnostics.stage('render-submit',measured);
   if(!frozen)audio.update(dt,started&&insideCapsule()?1:0,world.nightValue,world.wind.gust);
   if(dialog==='map-panel')mapUI.tick(now);
-  if(started){drawCompass(bearing(Math.sin(actor.yaw),Math.cos(actor.yaw)));updateMarker();interaction.update(game,running,dt);computeAim();updateAimUI();updateRing();feed.tick(running?dt:0,project);
+  if(started){drawCompass(bearing(Math.sin(actor.yaw),Math.cos(actor.yaw)));updateMarker();computeAim();updateTarget(dt);updateAimUI();updateRing();feed.tick(running?dt:0,project);
    // Held F: one more block every 0.25 s as the aim moves to a new cell resting on something that was there before the hold.
    if(holdPlace&&running&&game&&interaction.cellTool&&performance.now()-lastPlace>=250&&interaction.cell!==null&&!interaction.problem&&!placedInHold.has(interaction.cell)&&!placedInHold.has(interaction.support))placeCell();}
   if(game&&started){built.update(game,frozen?0:dt);if(built.animating||game.world.base.passage)world.invalidateShadows();}

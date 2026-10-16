@@ -7,6 +7,8 @@ import { heightAt, boxes } from './world';
 import type { GameState } from './game/state';
 import { createGhost } from './stationModels';
 import { rayCells } from './glass';
+import { allDeposits, depositLeft, depositScale } from './game/resources';
+import { REACH } from './game/mining';
 import { cellKey, cellOf, doorFront, doorProblem, glassProblem, groundCell, placeDoor, placeGlass, roomsView, type RoomEdit } from './game/rooms';
 
 const OPEN_REACH = 3.7, LINK_REACH = LINK_RANGE + 2;
@@ -17,6 +19,23 @@ const rotOf = (x: number, z: number) => Math.abs(x) > Math.abs(z) ? (x > 0 ? 1 :
 /** The block (or airlock) the reticle rests on: `key` its cell, `normal` the struck face. */
 export type Struck = { key: number; door: string | null; distance: number; normal: [number, number, number] };
 const CAPSULE_BOX = (h: number) => new THREE.Box3(new THREE.Vector3(37.4, h, 36.9), new THREE.Vector3(42.6, h + 4.4, 43.2));
+const toNode = new THREE.Vector3();
+/**
+ * The deposit under the reticle within reach and the distance to its near side (0 when the player stands at it):
+ * the ray meets its bounding sphere within REACH, or the player stands right next to it facing it (easier on touch).
+ * The nearer of it and a glass block wins (update's `nearer`), so a deposit walled into a room stays mineable.
+ */
+export function aimDeposit(g: GameState, from: THREE.Vector3, dir: THREE.Vector3, px: number, pz: number): { id: string; near: number } | null {
+ let best = Infinity, out: { id: string; near: number } | null = null;
+ for (const n of allDeposits(g)) {
+  const left = depositLeft(g, n.id); if (left <= 0) continue; const k = depositScale(left, n.amount), r = n.radius * k.xz;
+  toNode.set(n.x, heightAt(n.x, n.z) + n.height * k.y * .5, n.z).sub(from);
+  const along = toNode.dot(dir), perp = Math.sqrt(Math.max(0, toNode.lengthSq() - along * along)), horiz = Math.hypot(px - n.x, pz - n.z) - r;
+  const hit = along > 0 && perp < r + .25 && along - r <= REACH, close = horiz < 1.3 && along > 0 && perp < r + 1.1;
+  if ((hit || close) && along < best) { best = along; out = { id: n.id, near: Math.max(0, along - r) }; }
+ }
+ return out;
+}
 const portName = (g: GameState, id: string) => id === 'capsule' ? 'Капсула' : ITEMS[machine(g, id)?.kind ?? '']?.name ?? 'Порт';
 /**
  * World actions under the reticle: aim at stations (glass never hides the machines behind it),
@@ -104,7 +123,8 @@ export function createWorldInteraction(scene: THREE.Scene, camera: THREE.Camera)
   if (!reason && countItem(g.player.inventory, kind) < cost) reason = `Нужно ${cost} × ${ITEMS[kind].name}`;
   return { valid: !reason, cost, distance, reason };
  }
- function update(g: GameState | null, active: boolean, dt = 0) {
+ /** `nearer`: distance to the aimed deposit (aimDeposit); a block or airlock behind it is neither a target nor struck. */
+ function update(g: GameState | null, active: boolean, dt = 0, nearer = Infinity) {
   ghost.hide(); wire.visible = false; blockGhost.g.visible = doorGhost.g.visible = false;
   if (!g || !active) { target = null; struck = null; cell = null; return; }
   const id = g.player.inventory[g.player.hotbar]?.itemId ?? '';
@@ -112,8 +132,8 @@ export function createWorldInteraction(scene: THREE.Scene, camera: THREE.Camera)
   const linking = id === 'cable' || id === 'gas_pipe';
   aim(g, linking ? LINK_REACH : OPEN_REACH);
   if (isCell(id)) { aimCell(g, id); return; }
-  // Blocks under the reticle: removal (R) from 6 m, the room window from 4.5 m; a station seen through the glass wins.
-  strike(g, GLASS_AIM);
+  // Blocks under the reticle: removal (R) from 6 m, the room window from 4.5 m; a station seen through the glass wins, and so does a nearer deposit.
+  strike(g, GLASS_AIM); if (struck && struck.distance >= nearer) struck = null;
   if (!target && !linking && struck && struck.distance <= ROOM_REACH) target = struck.door ?? 'glass:' + struck.key;
   if (isBody(id)) {
    let hit: THREE.Vector3 | undefined;

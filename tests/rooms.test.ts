@@ -1,9 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import * as THREE from 'three';
 import { newGame, cloneState, sanitizeState, toGlassRooms, STATE_VERSION, type GameState } from '../src/game/state.ts';
 import { addItems, countItem, emptyInventory } from '../src/game/inventory.ts';
 import { makeBuilding, productionTick, connect, startJob } from '../src/game/production.ts';
-import { heightAt, stationY } from '../src/world.ts';
+import { heightAt, stationY, EYE, boxes, box, worldColliders } from '../src/world.ts';
+import { aimDeposit, createWorldInteraction } from '../src/worldInteraction.ts';
 import { placementProblem } from '../src/buildings.ts';
 import { survivalTick } from '../src/game/survival.ts';
 import { stationStatus, roomStatus, structureStatus } from '../src/game/stationStatus.ts';
@@ -13,7 +15,7 @@ import { spawnVein } from '../src/game/nature.ts';
 import {
  cellKey, cellOf, columnFloor, isGround, lowestAir, deriveRooms, roomsView, bumpRooms, allRooms, roomAt, roomAtCell, editRooms, predictRemove, leakAt,
  placeGlass, removeGlass, placeDoor, removeDoor, beginPassage, landingPoint, doorById, stationRoom, habitableRoom, breathingRoom, cyclingRoom,
- GLASS_LIMIT, DOOR_LIMIT, ROOM_LIMIT, shellOf, boxCells, groundRoom, bodyInSolid, groundCell, type Door,
+ GLASS_LIMIT, DOOR_LIMIT, ROOM_LIMIT, shellOf, boxCells, groundRoom, bodyInSolid, groundCell, landingCells, type Door,
 } from '../src/game/rooms.ts';
 
 const fresh = () => newGame('w-rooms', 7, 1, heightAt(40, 42));
@@ -351,6 +353,27 @@ test('Save v8 (merged S4): a v7 save, a rooms-lane v8 (no vein fields) and a vei
  for (const m of [a, b, c]) assert.deepEqual(sanitizeState(JSON.parse(JSON.stringify(m))), m);
 });
 
+test('Save v8 → glass: the airlock is checked against the migrated save\'s own deposits and veins, never the colliders of a world loaded before', () => {
+ // A veins-lane v8 file: a dome at X86/Z37 with a distributor on its old front; a live iron vein (spot iron-s5, X89.2/Z37.2) sits on the side-wall landing.
+ const g: any = JSON.parse(JSON.stringify(fresh())); g.meta.stateVersion = 8;
+ const zone = (q: number) => ({ q, temperature: 18, purity: .8, lossRemainder: 5, breachMs: 0, shell: Array(80).fill(180) });
+ const body = (id: string, kind: string, x: number, z: number) => ({ id, kind, level: 1, rot: 0, x, y: heightAt(x, z), z, input: [null, null, null, null], output: [null, null, null, null], job: null, queue: [], enabled: true, lowPriority: false, energy: 0, fuel: 0, water: 0, oxygen: 0, zone: zone(0) });
+ const b = g.world.base; delete b.glass; delete b.doors; delete b.zones;
+ b.buildings = [{ ...body('build-1', 'dome', 86, 37), y: heightAt(86, 37) + .12, zone: zone(300000) }, body('build-2', 'distributor', 86, 40)]; b.nextId = 3; b.passage = null;
+ const vein = { id: 'vein-1', spot: 'iron-s5', material: 'iron', amount: 16, size: 16, spawnedAt: 0 };
+ const run = (veins: unknown[]) => { const s = JSON.parse(JSON.stringify(g)); s.world.veins = veins; s.world.nextVeinId = 2; return sanitizeState(s); };
+ const hits = (m: GameState, d: Door) => worldColliders(m.world.nodes, m.world.veins).filter(c => (['front', 'back'] as const).some(side => { const l = cellOf(landingCells(d, side)[0]); return c.minX < l.i + 1 && c.maxX > l.i && c.minZ < l.j + 1 && c.maxZ > l.j && c.minY < l.k + 2 && c.maxY > l.k; })).map(c => c.id);
+ const bare = run([]).world.base.doors[0]; assert.equal(bare.rot, 1, 'without the vein the side wall is the first clear one'); assert.deepEqual(hits(run([vein]), bare), ['vein-1'], 'the vein stands on that landing');
+ const m = run([vein]), d = m.world.base.doors[0]; assert.notEqual(d.rot, 1); assert.deepEqual(hits(m, d), []);
+ // A collider left in `boxes` by a world loaded earlier (here on the landing the save chose) changes nothing.
+ const at = landingPoint(m, d, 'front'); boxes.push(box('vein-99', at.x, at.y + .5, at.z, 1.6, 1, 1.6));
+ try { assert.deepEqual(run([vein]).world.base.doors[0], d, 'same file, same airlock'); } finally { boxes.pop(); }
+ // Loaded (applyNodes lays the save's colliders into `boxes`): the passage starts from both sides.
+ const live = boxes.splice(0, boxes.length); boxes.push(...worldColliders(m.world.nodes, m.world.veins));
+ try { for (const side of ['back', 'front'] as const) { const k = cloneState(m); Object.assign(k.player, landingPoint(k, d, side)); assert.equal(beginPassage(k, d.id), '', `from the ${side} side`); } }
+ finally { boxes.length = 0; boxes.push(...live); }
+});
+
 test('Aim at the terrain: a block goes on top of the column\'s blocks and names the one it rests on (held F stacks only onto older blocks)', () => {
  const g = fresh(), k = lowestAir(57, 43); assert.deepEqual(groundCell(roomsView(g.world.base), 57, 43), { cell: cellKey(57, k, 43), support: -1 });
  lay(g, [cellKey(57, k, 43)]); assert.deepEqual(groundCell(roomsView(g.world.base), 57, 43), { cell: cellKey(57, k + 1, 43), support: cellKey(57, k, 43) });
@@ -381,4 +404,15 @@ test('Guide: «Стеклянное убежище» — blocks made (placed cou
  // The airlock goes into the front wall (two blocks return); the shelter milestone completes.
  near(g, 57.5, 47.2); stock(g, { airlock: 1 }); assert.equal(placeDoor(g, cellKey(57, 0, 45), 0).error, ''); assert.equal(nearestShelter(g)!.name, 'Шлюз');
  refreshQuestProgress(g); assert.ok(g.progress.quests.completed.includes('dome')); assert.ok(guideStep(g, 'dome').tasks.every(t => t.done));
+});
+
+test('Aim: the nearer of a deposit and a glass wall wins — a deposit walled into a room stays mineable from inside, not through the glass from outside', () => {
+ // sand-a (49, 59, r 1.4) inside a 4×3×4 box on the flat valley floor.
+ const g = fresh(); lay(g, shell(47, lowestAir(49, 59), 57, 4, 3, 4)); const cam = new THREE.PerspectiveCamera(), w = createWorldInteraction(new THREE.Scene(), cam), dir = new THREE.Vector3();
+ const look = (x: number, z: number, tz: number) => { near(g, x, z); cam.position.set(x, g.player.y + EYE, z); cam.lookAt(x, g.player.y + EYE - .2, tz); cam.updateMatrixWorld(); cam.getWorldDirection(dir); const a = aimDeposit(g, cam.position, dir, x, z); w.update(g, true, 0, a?.near ?? Infinity); return a; };
+ // Inside, 1.6 m from the deposit, looking level across it: the far wall (3.6 m) is within the room reach but the deposit is nearer.
+ let a = look(49, 57.4, 62); assert.equal(a?.id, 'sand-a'); w.update(g, true, 0); assert.match(w.target ?? '', /^glass:/, 'without the deposit distance the wall behind it took the reticle');
+ look(49, 57.4, 62); assert.equal(w.target, null); assert.equal(w.struck, null, 'R does not reach the wall behind the deposit');
+ // Outside behind the wall: the deposit is in reach, but the glass is nearer and keeps the room window.
+ a = look(49, 55.2, 62); assert.equal(a?.id, 'sand-a'); assert.match(w.target ?? '', /^glass:/); assert.ok(w.struck && w.struck.distance < a!.near);
 });

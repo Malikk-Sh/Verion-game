@@ -1,5 +1,5 @@
 import { electricPort } from './production';
-import { heightAt, stationY } from '../world';
+import { heightAt, stationY, worldColliders, type Box } from '../world';
 import { freshBase, RECIPE_BY_ID, LINK_RANGE, MAX_REPEAT, GEN_BUFFER, FIBER_EU, ELECTROLYZER_O2, PORT_O2, CAPSULE_CAPACITY, type BaseState, type Job, type Building, type Link } from './production';
 import { BASIC_SUIT, BUILDABLE, CONTENT_VERSION, GENERATOR_VERSION, ITEMS, LEGACY_CONTENT_VERSIONS, SUIT_PARTS, TANKS, TOOLS, type SuitPart } from './defs';
 import { emptyInventory, INVENTORY_SIZE, type Slot } from './inventory';
@@ -206,7 +206,7 @@ function toV7(r:Obj):Obj{
 export function toGlassRooms(r:Obj):Obj{
  const next=structuredClone(r),world=obj(next.world,'world'),base=obj(world.base,'world.base'),pl=obj(next.player,'player');
  for(const k of ['glass','doors','zones'])if(!(k in base))base[k]=[];
- domesToGlass(base,pl);
+ domesToGlass(base,pl,worldColliders(isObj(world.nodes)?world.nodes:{},Array.isArray(world.veins)?world.veins:[]));
  for(const b of arr(base.buildings,'buildings',64))if(isObj(b))delete b.zone;
  // The air never travels in a backpack: a packed dome becomes the legacy item, taken apart by the dismantle_dome recipe.
  const unpack=(slots:unknown)=>{if(Array.isArray(slots))for(const s of slots)if(isObj(s)&&isObj(s.packed)){if(s.itemId==='dome')delete s.packed;else delete s.packed.zone;}};
@@ -221,11 +221,12 @@ export function toGlassRooms(r:Obj):Obj{
  * terrain (stationY), and so does the player. Stations stay where they stand otherwise (overlaps are allowed here).
  * The airlock takes the two lowest wall cells in the middle of a wall, at the level of the highest of its three columns.
  * It keeps the old front (same `rot`, middle column x/z, then x−1/z−1) when both landings are clear by the rules of a new
- * door (glass, doors, ground, stations, rocks); else the other walls are tried in turn; if none is clear the old front
+ * door (glass, doors, ground, stations, rocks, deposits and veins of this save: worldColliders, never the live `boxes`
+ * of whatever world was loaded before); else the other walls are tried in turn; if none is clear the old front
  * stays. A passage through a dome ends at once, and a player left inside the new glass is set down on a landing: the
  * room side when the chest was inside the old dome, else the outer side.
  */
-export function domesToGlass(base:Obj,player:Obj){
+export function domesToGlass(base:Obj,player:Obj,colliders:readonly Box[]){
  const bodies=arr(base.buildings,'buildings',64),domes=bodies.filter((b):b is Obj=>isObj(b)&&b.kind==='dome'),rest=bodies.filter((b):b is Obj=>isObj(b)&&b.kind!=='dome');
  base.buildings=bodies.filter(b=>!(isObj(b)&&b.kind==='dome'));
  const glass=new Set((Array.isArray(base.glass)?base.glass:[]) as number[]),doors=(Array.isArray(base.doors)?base.doors:[]) as Door[];
@@ -246,7 +247,7 @@ export function domesToGlass(base:Obj,player:Obj){
  for(const m of shells){
   const own=(d:Door)=>new Set(doorKeys(d)),options=[0,1,2,3].flatMap(r=>{const rot=(m.rot+r)%4,f=doorFront(rot),i0=Math.floor(m.x+f.x*2.5),j0=Math.floor(m.z+f.z*2.5);
    return [0,-1].map(o=>{const i=i0+(f.x?0:o),j=j0+(f.z?0:o);return {id:'',x:i,y:Math.max(lowestAir(i,j),lowestAir(i-f.x,j-f.z),lowestAir(i+f.x,j+f.z)),z:j,rot} as Door;});});
-  const pick=options.find(d=>{const mine=own(d);return doorFits(k=>(glass.has(k)&&!mine.has(k))||taken.has(k),d,stations,reserved);})??options[0];
+  const pick=options.find(d=>{const mine=own(d);return doorFits(k=>(glass.has(k)&&!mine.has(k))||taken.has(k),d,stations,reserved,colliders);})??options[0];
   const door={...pick,id:'door-'+nextId++};claim(door);
   doors.push(door);made.push({id:String(m.d.id),door,inner:m.inner,interior:m.interior,x:m.x,z:m.z,zone:isObj(m.d.zone)?m.d.zone:{}});
  }
