@@ -111,7 +111,7 @@ export function guideStep(g: GameState, id: QuestId): GuideStep {
   dome: () => {
    // S4: the shelter is built, not placed — a closed glass box on the ground with an airlock in its wall.
    // Blocks already in the walls count as made.
-   const made = inv(g, 'window') + g.world.base.glass.length, closed = rooms.some(roomy), door = D || rooms.some(r => roomDoors(g, r).length > 0);
+   const made = inv(g, 'window') + g.world.base.glass.length, closed = rooms.some(roomy), door = D || rooms.some(r => roomy(r) && roomDoors(g, r).length > 0);
    return { chapter: 3, title: 'Стеклянное убежище', item: 'window', recipes: ['craft_window', 'craft_airlock'],
     why: 'Убежище строят сами: замкнутая коробка из стеклоблоков со шлюзом — дом, где можно дышать без баллонов. Убрали блок — воздух ушёл.',
     how: ['На верстаке: 1 стекло + 1 железо → 4 стеклоблока; шлюз — 4 железа, 2 стекла и 4 волокна.', 'Выберите стеклоблок, наведите на грунт или на блок и нажмите F (удержание ставит ряд). Стены и крыша — стекло, пол — грунт.', 'До крыши прицел достаёт сверху: сложите у стены ступеньку из блоков, встаньте на неё и ставьте блоки на верх стены, затем крышу от края.', 'Шлюз ставится прямо на два нижних блока стены: они вернутся в рюкзак, а вход — «Пройти шлюз» в его окне.'],

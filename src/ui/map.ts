@@ -3,7 +3,7 @@ import { NODES, GRASS_PATCHES, bodyHalf, depositById, depositLeft, isVeinId, vei
 import { stationStatus, type Tone } from '../game/stationStatus';
 import { endpoint } from '../game/production';
 import { stationName, stationRadius, nodeRadius, clampWaypoint, doorTarget, type Waypoint } from '../game/navigation';
-import { allRooms, cellOf, doorRooms, habitableQ, habitableRoom, roomsView, type RoomInfo } from '../game/rooms';
+import { allRooms, cellKey, cellOf, doorRooms, habitableQ, habitableRoom, roomsView, type RoomInfo } from '../game/rooms';
 import { reducedMotion } from '../motion';
 import { itemName } from '../game/mining';
 import type { GameState } from '../game/state';
@@ -18,28 +18,33 @@ export type MapFootprint = { x: number; z: number; w: number; d: number; rot: nu
 /** Extra outlines drawn under the stations layer (glass rooms register below). A print with an id opens a card. */
 export const mapFootprintSources: ((g: GameState) => MapFootprint[])[] = [];
 /** Glass structures (D31) as outlines: glass and airlock columns joined by sides or corners, one box per group with the
- *  rooms inside it. The geometry is cached per glass layout; the tone is read live (the air changes every tick). */
+ *  rooms its own blocks enclose (a face of one of its cells borders the room's air; a box merely overlapping another
+ *  shell's rooms does not borrow their air). The geometry is cached per glass layout; the tone is read live (the air changes every tick). */
+const FACES = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]] as const;
 const SHAPES = new WeakMap<object, { x: number; z: number; w: number; d: number; rooms: number[] }[]>();
 function glassShapes(g: GameState) {
  const v = roomsView(g.world.base), hit = SHAPES.get(v); if (hit) return hit;
- const cols = new Set<string>(), add = (i: number, j: number) => cols.add(i + ',' + j);
- for (const key of v.glass) { const c = cellOf(key); add(c.i, c.j); }
- for (const d of g.world.base.doors) add(d.x, d.z);
+ const cols = new Map<string, number[]>(), add = (key: number) => { const c = cellOf(key), k = c.i + ',' + c.j; let l = cols.get(k); if (!l) cols.set(k, l = []); l.push(key); };
+ for (const key of v.glass) add(key);
+ for (const key of v.doorAt.keys()) add(key);
  const out: { x: number; z: number; w: number; d: number; rooms: number[] }[] = [], seen = new Set<string>();
- for (const start of cols) {
-  if (seen.has(start)) continue; seen.add(start); const todo = [start]; let i0 = Infinity, i1 = -Infinity, j0 = Infinity, j1 = -Infinity;
-  while (todo.length) { const [i, j] = todo.pop()!.split(',').map(Number); i0 = Math.min(i0, i); i1 = Math.max(i1, i); j0 = Math.min(j0, j); j1 = Math.max(j1, j);
+ for (const start of cols.keys()) {
+  if (seen.has(start)) continue; seen.add(start); const todo = [start]; let i0 = Infinity, i1 = -Infinity, j0 = Infinity, j1 = -Infinity; const near = new Set<number>();
+  while (todo.length) { const col = todo.pop()!, [i, j] = col.split(',').map(Number);
+   for (const key of cols.get(col)!) { const c = cellOf(key); for (const [a, k, b] of FACES) { const r = v.tag.get(cellKey(c.i + a, c.k + k, c.j + b)); if (r !== undefined && r >= 0) near.add(r); } } i0 = Math.min(i0, i); i1 = Math.max(i1, i); j0 = Math.min(j0, j); j1 = Math.max(j1, j);
    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const k = (i + a) + ',' + (j + b); if (cols.has(k) && !seen.has(k)) { seen.add(k); todo.push(k); } } }
-  const rooms = v.rooms.filter(r => { const c = cellOf(r.cell); return c.i >= i0 && c.i <= i1 && c.j >= j0 && c.j <= j1; }).map(r => r.index);
+  const rooms = [...near].sort((a, b) => a - b);
   out.push({ x: (i0 + i1 + 1) / 2, z: (j0 + j1 + 1) / 2, w: i1 - i0 + 1, d: j1 - j0 + 1, rooms });
  }
  SHAPES.set(v, out); return out;
 }
 /** Habitable air → «работает», a closed room still short of air → «нужна помощь», open glass → «выключена». */
 const roomTone = (rooms: (RoomInfo | null | undefined)[]): Tone => rooms.some(r => r && habitableRoom(r)) ? 'ok' : rooms.some(r => r) ? 'warn' : 'off';
+/** A structure is «работает» only when every room it encloses is habitable: a new empty shell next to a full room shows «нужна помощь». */
+const groupTone = (rooms: (RoomInfo | null | undefined)[]): Tone => { const r = rooms.filter(Boolean) as RoomInfo[]; return !r.length ? 'off' : r.every(habitableRoom) ? 'ok' : 'warn'; };
 export function glassPrints(g: GameState): MapFootprint[] {
  const shapes = glassShapes(g); if (!shapes.length) return [];
- const info = allRooms(g), out: MapFootprint[] = shapes.map(s => ({ x: s.x, z: s.z, w: s.w, d: s.d, rot: 0, tone: roomTone(s.rooms.map(i => info[i])) }));
+ const info = allRooms(g), out: MapFootprint[] = shapes.map(s => ({ x: s.x, z: s.z, w: s.w, d: s.d, rot: 0, tone: groupTone(s.rooms.map(i => info[i])) }));
  for (const d of g.world.base.doors) { const r = doorRooms(g, d), t = doorTarget(d); out.push({ id: d.id, x: t.x, z: t.z, w: 1, d: 1, rot: 0, tone: roomTone([r.front, r.back]), label: t.name }); }
  return out;
 }
@@ -179,7 +184,9 @@ export function createMap(d: Deps) {
  const scaleStep = (z: number) => [10, 20, 50, 100, 200].find(m => m * z >= 48) ?? 200;
  function diamond(x: number, y: number, r: number, fill: string | null, stroke: string) { ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y); ctx.closePath(); if (fill) { ctx.fillStyle = fill; ctx.fill(); } ctx.strokeStyle = stroke; ctx.lineWidth = 1.5; ctx.stroke(); }
  function clusters(g: GameState): DepositCluster[] {
-  return clusterDeposits(NODES.map(n => ({ id: n.id, material: n.material, x: n.x, z: n.z, left: g.world.nodes[n.id] ?? 0, amount: n.amount })), Math.max(3, 18 / view.zoom));
+  // A worked-out finite deposit is gone from the world and never refills (a new vein replaces it, D33): it leaves the map too;
+  // grass stays, it grows back.
+  return clusterDeposits(NODES.map(n => ({ id: n.id, material: n.material, x: n.x, z: n.z, left: g.world.nodes[n.id] ?? 0, amount: n.amount })).filter(n => n.material === 'grass' || n.left > 0), Math.max(3, 18 / view.zoom));
  }
  function draw(now: number) {
   const g = d.game(); if (!g || !w) return;

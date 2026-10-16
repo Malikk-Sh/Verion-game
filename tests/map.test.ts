@@ -81,6 +81,15 @@ test('Glass rooms on the map: one outline per glass structure, the airlock opens
  const [shape,lock]=glassPrints(g);assert.deepEqual([shape.x,shape.z,shape.w,shape.d,shape.tone,shape.id],[57.5,43.5,5,5,'warn',undefined],'a closed room short of air needs help');
  assert.deepEqual([lock.id,lock.x,lock.z,lock.tone,lock.label],['door-1',57.5,45.5,'warn','Шлюз']);
  g.world.base.zones[0].q=216000;g.world.base.zones[0].purity=1;g.world.base.zones[0].temperature=18;assert.deepEqual(glassPrints(g).map(f=>f.tone),['ok','ok'],'habitable air tints like a working station');
+ // An open wall that merely wraps around the room (its box covers the room, none of its blocks touch it) borrows no air.
+ const {cellKey}=await import('../src/game/rooms');const base=[...g.world.base.glass],k0=lowestAir(53,39),wall:number[]=[];
+ for(let z=39;z<=48;z++)wall.push(cellKey(53,lowestAir(53,z),z));for(let x=54;x<=62;x++)wall.push(cellKey(x,lowestAir(x,39),39));
+ g.world.base.glass=[...new Set([...base,...wall])].sort((a,b)=>a-b);bumpRooms(g);assert.ok(Number.isFinite(k0));
+ assert.deepEqual(glassPrints(g).map(f=>f.tone).sort(),['off','ok','ok'],'the wrapping wall stays off, the room and its airlock stay ok');
+ // A new empty shell built against the room joins its structure: the structure needs help until both rooms are habitable.
+ g.world.base.glass=[...new Set([...base,...shellOf(groundRoom(60,42,3,3,3))])].sort((a,b)=>a-b);bumpRooms(g);assert.equal(allRooms(g).length,2);
+ assert.deepEqual(glassPrints(g).map(f=>f.tone),['warn','ok'],'one structure with an empty room is not shown as working');
+ g.world.base.glass=base;bumpRooms(g);
  const t=resolveNav(g,'door-1',null);assert.ok(t&&t!=='invalid');assert.deepEqual([t.x,t.z,t.radius,t.name],[57.5,45.5,3,'Шлюз']);
  assert.ok(arrived(t,57.5,47.9)&&!arrived(t,57.5,48.6),'arrival within 3 m of the airlock');
  g.world.base.doors=[];bumpRooms(g);assert.equal(resolveNav(g,'door-1',null),'invalid','a removed airlock falls back to the guide');

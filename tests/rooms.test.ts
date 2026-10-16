@@ -423,5 +423,9 @@ test('Quests: an airlock in a box smaller than 3×3×3 does not complete the she
  const door = (): Door[] => [{ id: 'door-1', x: 57, y: 0, z: 45, rot: 0 }], open = (k: number) => k !== cellKey(57, 0, 45) && k !== cellKey(57, 1, 45);
  const g = fresh(); lay(g, shell(56, 0, 42, 3, 2, 3).filter(open), door()); assert.equal(allRooms(g).length, 1);
  refreshQuestProgress(g); assert.equal(g.progress.quests.completed.includes('dome'), false, 'a 2-high box is not the journal shelter');
+ // The journal agrees: an airlock in a small box next to a doorless 3×3×3 room does not tick «Шлюз в стене».
+ { const h = fresh(), small = shell(62, 0, 42, 3, 2, 3).filter(k => k !== cellKey(63, 0, 45) && k !== cellKey(63, 1, 45));
+  lay(h, [...CUBE(), ...small], [{ id: 'door-1', x: 63, y: 0, z: 45, rot: 0 }]); assert.equal(allRooms(h).length, 2);
+  refreshQuestProgress(h); assert.equal(h.progress.quests.completed.includes('dome'), false); assert.deepEqual(guideStep(h, 'dome').tasks.map(t => t.done).slice(1), [true, false]); }
  g.world.base.glass = []; g.world.base.doors = []; lay(g, CUBE().filter(open), door()); refreshQuestProgress(g); assert.ok(g.progress.quests.completed.includes('dome'));
 });
