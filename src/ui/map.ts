@@ -1,5 +1,5 @@
 import { LANDMARKS, MIN, MAX, SIZE } from '../world';
-import { NODES, GRASS_PATCHES, bodyHalf, depositById, depositLeft, isVeinId, veinNode } from '../game/resources';
+import { GRASS_PATCHES, allDeposits, bodyHalf, depositById, depositLeft, isVeinId } from '../game/resources';
 import { stationStatus, type Tone } from '../game/stationStatus';
 import { endpoint } from '../game/production';
 import { stationName, stationRadius, nodeRadius, clampWaypoint, doorTarget, type Waypoint } from '../game/navigation';
@@ -49,6 +49,14 @@ export function glassPrints(g: GameState): MapFootprint[] {
  return out;
 }
 mapFootprintSources.push(glassPrints);
+/** S5: the glass columns themselves (one 1 m square per occupied column), drawn when zoomed in so single blocks show. */
+const COLUMNS = new WeakMap<object, { i: number; j: number }[]>();
+export function glassColumns(g: GameState) {
+ const v = roomsView(g.world.base), hit = COLUMNS.get(v); if (hit) return hit;
+ const seen = new Set<string>(), out: { i: number; j: number }[] = [];
+ for (const key of [...v.glass, ...v.doorAt.keys()]) { const c = cellOf(key), k = c.i + ',' + c.j; if (!seen.has(k)) { seen.add(k); out.push({ i: c.i, j: c.j }); } }
+ COLUMNS.set(v, out); return out;
+}
 type Layer = 'places' | 'resources' | 'stations';
 type Card = { kind: 'landmark' | 'node' | 'station' | 'drop' | 'point'; id: string; ids?: string[] };
 type Deps = {
@@ -136,7 +144,7 @@ export function createMap(d: Deps) {
    data.push(['Состояние', d.visited.has(l.id) ? 'Просканировано' : d.discovered.has(l.id) ? 'Найдено' : 'Не найдено']);
   } else if (card.kind === 'node') {
    const ids = card.ids ?? [card.id], n = depositById(g, card.id)!, left = ids.reduce((s, id) => s + depositLeft(g, id), 0), amount = ids.reduce((s, id) => s + (depositById(g, id)?.amount ?? 0), 0);
-   kind = (isVeinId(n.id) ? 'Новая жила · ' : 'Залежь · ') + MAT[n.material].name.toLowerCase(); text = left > 0 ? `Осталось ${left} / ${amount}${ids.length > 1 ? ` · ${ids.length} выхода рядом` : ''}` : n.regrowSeconds ? 'Всё собрано — растения отрастают в активное время.' : 'Запас исчерпан.';
+   kind = 'Залежь · ' + MAT[n.material].name.toLowerCase(); text = left > 0 ? `Осталось ${left} / ${amount}${ids.length > 1 ? ` · ${ids.length} выхода рядом` : ''}` : n.regrowSeconds ? 'Всё собрано — растения отрастают в активное время.' : 'Запас исчерпан.';
    if (n.regrowSeconds) data.push(['Отрастает', `1 растение за ${n.regrowSeconds} с`]);
    data.push(['Добыча', itemName(n.itemId)]); canGo = left > 0;
   } else if (card.kind === 'station' && card.id.startsWith('door-')) {
@@ -185,8 +193,8 @@ export function createMap(d: Deps) {
  function diamond(x: number, y: number, r: number, fill: string | null, stroke: string) { ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y); ctx.closePath(); if (fill) { ctx.fillStyle = fill; ctx.fill(); } ctx.strokeStyle = stroke; ctx.lineWidth = 1.5; ctx.stroke(); }
  function clusters(g: GameState): DepositCluster[] {
   // A worked-out finite deposit is gone from the world and never refills (a new vein replaces it, D33): it leaves the map too;
-  // grass stays, it grows back.
-  return clusterDeposits(NODES.map(n => ({ id: n.id, material: n.material, x: n.x, z: n.z, left: g.world.nodes[n.id] ?? 0, amount: n.amount })).filter(n => n.material === 'grass' || n.left > 0), Math.max(3, 18 / view.zoom));
+  // grass stays, it grows back. S5 (D38): a new vein is drawn like any deposit — no halo, no «Новая жила» label.
+  return clusterDeposits(allDeposits(g).map(n => ({ id: n.id, material: n.material, x: n.x, z: n.z, left: depositLeft(g, n.id), amount: n.amount })).filter(n => n.material === 'grass' || n.left > 0), Math.max(3, 18 / view.zoom));
  }
  function draw(now: number) {
   const g = d.game(); if (!g || !w) return;
@@ -194,7 +202,13 @@ export function createMap(d: Deps) {
   draws++; dirty = false; lastDraw = now; hits = []; veinMarks = 0; glassMarks = []; const labels: Lbl[] = [];
   const S = (x: number, z: number) => toScreen(view, w, h, x, z), z = view.zoom, p = d.player(), pp = S(p.x, p.z);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = '#061518'; ctx.fillRect(0, 0, w, h);
-  const tl = S(MAX, MAX); ctx.imageSmoothingEnabled = true; ctx.drawImage(raster, tl.x, tl.y, SIZE * z, SIZE * z);
+  const tl = S(MAX, MAX); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(raster, tl.x, tl.y, SIZE * z, SIZE * z);
+  // S5: zoomed in, a faint 1 m grid (stronger every 4 m) over the softened 1 m relief gives blocks and bodies a scale.
+  if (z >= 8) { const a = toWorld(view, w, h, w, h), b = toWorld(view, w, h, 0, 0), k = Math.min(1, (z - 8) / 6);
+   for (const [step, alpha] of [[1, .07], [4, .14]] as const) { ctx.strokeStyle = `rgba(127,230,218,${alpha * k})`; ctx.beginPath();
+    for (let x = Math.ceil(Math.max(MIN, a.x) / step) * step; x <= Math.min(MAX, b.x); x += step) { const s = S(x, MIN), e = S(x, MAX); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); }
+    for (let q = Math.ceil(Math.max(MIN, a.z) / step) * step; q <= Math.min(MAX, b.z); q += step) { const s = S(MIN, q), e = S(MAX, q); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); }
+    ctx.stroke(); } }
   ctx.strokeStyle = 'rgba(127,230,218,.12)'; ctx.lineWidth = 1; ctx.beginPath();
   for (let v = MIN; v <= MAX; v += 80) { const a = S(v, MIN), b = S(v, MAX), c = S(MIN, v), e = S(MAX, v); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.moveTo(c.x, c.y); ctx.lineTo(e.x, e.y); }
   ctx.stroke();
@@ -206,6 +220,7 @@ export function createMap(d: Deps) {
    for (const l of base.links) { const a = endpoint(g, l.from), b = endpoint(g, l.to); if (!a || !b) continue; const s = S(a.x, a.z), e = S(b.x, b.z); ctx.strokeStyle = l.kind === 'cable' ? 'rgba(255,196,110,.75)' : 'rgba(127,230,218,.8)'; ctx.lineWidth = 1.5; ctx.setLineDash(l.kind === 'cable' ? [] : [4, 3]); ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke(); }
    ctx.setLineDash([]);
    const prints: MapFootprint[] = [...mapFootprintSources.flatMap(f => f(g))]; glassMarks = prints.map(f => f.tone);
+   if (z >= 5) { ctx.fillStyle = 'rgba(166,226,236,.30)'; ctx.strokeStyle = 'rgba(214,246,250,.55)'; ctx.lineWidth = 1; for (const c of glassColumns(g)) { const s = S(c.i + 1, c.j + 1); ctx.fillRect(s.x, s.y, z, z); ctx.strokeRect(s.x + .5, s.y + .5, z - 1, z - 1); } }
    for (const b of base.buildings) { const half = bodyHalf(b.kind); prints.push({ id: b.id, x: b.x, z: b.z, w: half * 2, d: half * 2, rot: b.rot, tone: stationStatus(g, b).tone, label: stationName(b) }); }
    for (const f of prints) {
     const s = S(f.x, f.z), fw = Math.max(10, f.w * z), fd = Math.max(10, f.d * z), c = TONE[f.tone]; markers++;
@@ -218,23 +233,13 @@ export function createMap(d: Deps) {
    for (const gp of GRASS_PATCHES) { const s = S(gp.x, gp.z); ctx.beginPath(); ctx.ellipse(s.x, s.y, Math.max(3, gp.rx * z), Math.max(3, gp.rz * z), 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
    for (const c of clusters(g)) {
-    const s = S(c.x, c.z), m = MAT[c.material], empty = c.left <= 0, r = 8; markers++;
+    const s = S(c.x, c.z), m = MAT[c.material], empty = c.left <= 0, r = 8; markers++; veinMarks += c.ids.filter(isVeinId).length;
     if (s.x < -20 || s.y < -20 || s.x > w + 20 || s.y > h + 20) continue;
     ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI * 2); ctx.fillStyle = empty ? 'rgba(6,21,24,.85)' : m.color; ctx.fill(); ctx.strokeStyle = empty ? 'rgba(170,185,182,.8)' : 'rgba(6,21,24,.9)'; ctx.lineWidth = 1.5; ctx.stroke();
     ctx.font = '700 9px system-ui,sans-serif'; ctx.fillStyle = empty ? 'rgba(170,185,182,.9)' : '#0a1a1c'; ctx.fillText(m.glyph, s.x, s.y + .5);
     const lead = c.ids.slice().sort((a, b) => (g.world.nodes[b] ?? 0) - (g.world.nodes[a] ?? 0))[0];
     hits.push({ id: lead, x: s.x, y: s.y, priority: 20, card: { kind: 'node', id: lead, ids: c.ids } });
     if (z >= 2.2) labels.push({ id: lead, text: empty ? 'пусто' : String(c.left), color: empty ? '#9aa9a6' : m.color, priority: 20, cx: s.x, y: s.y + r + 2, small: true });
-   }
-   // S4 (D33): new veins stand apart from the clusters, with a halo and the «Новая жила» label.
-   for (const v of g.world.veins) {
-    const n = veinNode(v), s = S(n.x, n.z), m = MAT[v.material], r = 8; markers++; veinMarks++;
-    if (s.x < -20 || s.y < -20 || s.x > w + 20 || s.y > h + 20) continue;
-    ctx.beginPath(); ctx.arc(s.x, s.y, r + 4, 0, Math.PI * 2); ctx.strokeStyle = m.color; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]); ctx.stroke(); ctx.setLineDash([]);
-    ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI * 2); ctx.fillStyle = m.color; ctx.fill(); ctx.strokeStyle = 'rgba(6,21,24,.9)'; ctx.stroke();
-    ctx.font = '700 9px system-ui,sans-serif'; ctx.fillStyle = '#0a1a1c'; ctx.fillText(m.glyph, s.x, s.y + .5);
-    hits.push({ id: v.id, x: s.x, y: s.y, priority: 30, card: { kind: 'node', id: v.id } });
-    labels.push({ id: v.id, text: 'Новая жила', sub: z >= 2.2 ? String(v.amount) : undefined, color: m.color, priority: 30, cx: s.x, y: s.y + r + 6 });
    }
    ctx.textBaseline = 'alphabetic';
   }

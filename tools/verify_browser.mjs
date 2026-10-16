@@ -63,6 +63,8 @@ try {
  const z0=m.zoom;await page.click('#map-zoom-in');assert.ok(near((await state()).map.zoom,z0*1.6,1e-6));await page.click('#map-zoom-out');assert.ok(near((await state()).map.zoom,z0,1e-6));
  await page.keyboard.press('ArrowLeft');m=(await state()).map;assert.ok(near(m.center.x,pos.x+60/z0,1e-6),'arrow keys pan');await page.click('#map-center');m=(await state()).map;assert.ok(near(m.center.x,pos.x)&&near(m.center.z,pos.z),'«Ко мне» recentres');
  const box=await page.locator('#map').boundingBox();await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.wheel(0,-400);assert.ok((await state()).map.zoom>z0*1.5,'the wheel zooms in');
+ // S5: «+» goes on to 24 px per metre (single glass blocks and station bodies), each click ×1.6 up to the cap, then stays.
+ {let zk=(await state()).map.zoom;while(zk<24){await page.click('#map-zoom-in');zk=Math.min(24,zk*1.6);assert.ok(near((await state()).map.zoom,zk,1e-6),'zoom step '+zk);}await page.click('#map-zoom-in');m=(await state()).map;assert.equal(m.zoom,24,'the maximum zoom is 24 px/m');const d0=m.draws;await page.waitForFunction(k=>window.__vireon.getState().map.draws>k,d0);await page.screenshot({path:'artifacts/s5-map-max.png'});}
  await page.click('#map-fit');m=(await state()).map;assert.ok(near(m.center.x,80)&&near(m.center.z,80)&&near(m.zoom,Math.min(m.size.w,m.size.h)/(560*1.04),1e-6),'«Весь участок» shows the whole square');
  const draws=async()=>(await state()).map.draws,nextDraw=async n=>page.waitForFunction(k=>window.__vireon.getState().map.draws>k,n);
  await nextDraw(await draws());const allMarkers=(await state()).map.markers;

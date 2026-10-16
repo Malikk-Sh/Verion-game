@@ -16,7 +16,8 @@ test('Map projection: north is up, east (−x) is right, and screen ↔ world ro
  assert.equal(direction(-10,0),'В');assert.equal(direction(0,10),'С');assert.equal(direction(10,-10),'ЮЗ');
 });
 
-test('Zoom about a point keeps that world point under the finger and is clamped to the whole-area … 6 px/m range',()=>{
+test('Zoom about a point keeps that world point under the finger and is clamped to the whole-area … 24 px/m range',()=>{
+ assert.equal(MAX_ZOOM,24,'S5: zoomed in, a 1 m glass block is 24 CSS px wide');
  const v={cx:60,cz:50,zoom:2},before=toWorld(v,W,H,123,77),z=zoomAt(v,W,H,123,77,1.7),after=toWorld(z,W,H,123,77);
  assert.ok(Math.abs(before.x-after.x)<1e-9&&Math.abs(before.z-after.z)<1e-9);assert.equal(z.zoom,3.4);
  assert.equal(zoomAt(v,W,H,0,0,100).zoom,MAX_ZOOM);assert.equal(zoomAt(v,W,H,0,0,1e-4).zoom,fitZoom(W,H));assert.equal(clampZoom(.001,W,H),fitZoom(W,H));
@@ -79,6 +80,9 @@ test('Glass rooms on the map: one outline per glass structure, the airlock opens
  const door={id:'door-1',x:57,y:lowestAir(57,45),z:45,rot:0};g.world.base.glass=[...shellOf(groundRoom(56,42,3,3,3))].filter(k=>!doorKeys(door).includes(k)).sort((a,b)=>a-b);g.world.base.doors=[door];g.world.base.nextId=2;bumpRooms(g);
  assert.equal(allRooms(g).length,1);
  const [shape,lock]=glassPrints(g);assert.deepEqual([shape.x,shape.z,shape.w,shape.d,shape.tone,shape.id],[57.5,43.5,5,5,'warn',undefined],'a closed room short of air needs help');
+ // S5: zoomed in, every occupied glass or airlock column is drawn as its own 1 m square, inside the structure's outline.
+ {const {glassColumns}=await import('../src/ui/map');const {cellOf}=await import('../src/game/rooms');const cols=glassColumns(g),want=new Set([...g.world.base.glass,...doorKeys(door)].map(k=>{const c=cellOf(k);return c.i+','+c.j;}));
+  assert.equal(cols.length,want.size);assert.deepEqual(new Set(cols.map(c=>c.i+','+c.j)),want);for(const c of cols)assert.ok(c.i>=shape.x-shape.w/2&&c.i+1<=shape.x+shape.w/2&&c.j>=shape.z-shape.d/2&&c.j+1<=shape.z+shape.d/2);assert.equal(glassColumns(g),cols,'cached per glass layout');}
  assert.deepEqual([lock.id,lock.x,lock.z,lock.tone,lock.label],['door-1',57.5,45.5,'warn','Шлюз']);
  g.world.base.zones[0].q=216000;g.world.base.zones[0].purity=1;g.world.base.zones[0].temperature=18;assert.deepEqual(glassPrints(g).map(f=>f.tone),['ok','ok'],'habitable air tints like a working station');
  // An open wall that merely wraps around the room (its box covers the room, none of its blocks touch it) borrows no air.
