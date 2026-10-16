@@ -132,7 +132,7 @@ export function createWorldInteraction(scene: THREE.Scene, camera: THREE.Camera)
   const linking = id === 'cable' || id === 'gas_pipe';
   aim(g, linking ? LINK_REACH : OPEN_REACH);
   if (isCell(id)) { aimCell(g, id); return; }
-  // Blocks under the reticle: removal (R) from 6 m, the room window from 4.5 m; a station seen through the glass wins, and so does a nearer deposit.
+  // Blocks under the reticle: removal («Забрать», key R) from 6 m, the room window from 4.5 m; a station seen through the glass wins, and so does a nearer deposit.
   strike(g, GLASS_AIM); if (struck && struck.distance >= nearer) struck = null;
   if (!target && !linking && struck && struck.distance <= ROOM_REACH) target = struck.door ?? 'glass:' + struck.key;
   if (isBody(id)) {
@@ -191,7 +191,7 @@ export function createWorldInteraction(scene: THREE.Scene, camera: THREE.Camera)
   get target() { return target; }, get building() { return isBody(selection); }, get linking() { return selection === 'cable' || selection === 'gas_pipe'; },
   get source() { return source; },
   get linkOk() { return !source || link.valid; },
-  get hint() { return !source ? 'Наведите на первую станцию · F' : link.reason ? link.reason : `${link.distance.toFixed(1)} м · ${link.cost} × ${ITEMS[selection]?.name ?? ''} · F`; },
+  get hint() { return !source ? 'Наведите на первую станцию и нажмите кнопку действия' : link.reason ? link.reason : `${link.distance.toFixed(1)} м · ${link.cost} × ${ITEMS[selection]?.name ?? ''}`; },
   get sourceName() { return source ? '' : ''; },
   portName,
   get problem() { return problem; },

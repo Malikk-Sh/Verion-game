@@ -106,7 +106,7 @@ function boot(){
  let captureRequested:((data:string)=>void)|null=null;
  let sceneReady=false,lastRender=-Infinity,renderElapsed=0,lastRenderedDialog='',renderCalls=0,renderTriangles=0;
  let exported=false,frames:number[]=[],showMetrics=false,wake=0,bob=0,stride=0,fov=70,titleTime=0,lastObjective='',settingsReturn='welcome';
- const visited=new Set<string>(),discovered=new Set<string>();let dialog='welcome';const ALL_DIALOGS=['welcome','paused','settings','hud-settings-panel','visor-settings-panel','quest-panel','map-panel','info-panel','inventory-panel','suit-panel','saves-panel','lease-panel','death-panel','production-panel','diagnostics-panel'];
+ const visited=new Set<string>(),discovered=new Set<string>();let dialog='welcome';const ALL_DIALOGS=['welcome','paused','settings','hud-settings-panel','visor-settings-panel','keys-settings-panel','quest-panel','map-panel','info-panel','inventory-panel','suit-panel','saves-panel','lease-panel','death-panel','production-panel','diagnostics-panel'];
  const insideCapsule=(x=actor.x,z=actor.z)=>x>37.5&&x<42.5&&z>37&&z<43.1;
 
  // ---------- Settings ----------
@@ -137,7 +137,7 @@ function boot(){
   el('objective').setAttribute('aria-expanded',String(which==='quest-panel'));
   if(which==='quest-panel')questBook.draw();
   if(which==='production-panel')production.draw();if(which==='map-panel')mapUI.open();else mapUI.close();if(which==='inventory-panel')panels.drawInventory();if(which==='suit-panel')panels.drawSuit();if(which==='saves-panel')void refreshSlots();if(which==='paused')updatePauseInfo();
-  if(running)audio.resume();else if(started&&(which==='paused'||which==='settings'||which==='hud-settings-panel'||which==='visor-settings-panel'))audio.suspend();
+  if(running)audio.resume();else if(started&&(which==='paused'||which==='settings'||which==='hud-settings-panel'||which==='visor-settings-panel'||which==='keys-settings-panel'))audio.suspend();
  }
  function pause(reason='Пауза'){if(!started)return;el('pause-title').textContent=reason;setDialog('paused');void saver?.save();}
  function bootSequence(){
@@ -296,6 +296,7 @@ function boot(){
  el('hud-reset').onclick=()=>{settings.hud=defaultHudSettings();for(const [key,{input,output}] of hudRanges){input.value=String(settings.hud[key]);output.value=`${settings.hud[key]}%`;}saveSettings(settings);refreshHud();};
  el('hud-preview').onclick=resume;
  el('visor-settings-button').onclick=()=>{audio.tone('ui');setDialog('visor-settings-panel');};
+ el('keys-settings-button').onclick=()=>{audio.tone('ui');setDialog('keys-settings-panel');};el('keys-settings-back').onclick=()=>{audio.tone('ui');setDialog('settings');};
  el('visor-settings-back').onclick=()=>{audio.tone('ui');setDialog('settings');};
  const visorRanges=new Map<VisorGroup,{input:HTMLInputElement;output:HTMLOutputElement}>();
  for(const [key,{label,min,max}] of Object.entries(VISOR_CONTROLS) as [VisorGroup,{label:string;min:number;max:number}][]) {
@@ -357,7 +358,7 @@ function boot(){
   setDialog('info-panel');updateUI();
  }
  addEventListener('keydown',event=>{
-  if(event.code==='Escape'){event.preventDefault();if(dialog==='quest-panel'){questBook.escape();return;}if((dialog==='hud-settings-panel'||dialog==='visor-settings-panel'||dialog==='diagnostics-panel')){setDialog('settings');return;}if(dialog==='settings'){setDialog(settingsReturn);return;}if(dialog==='production-panel'){el('close-production').click();return;}if(started){if(running)pause();else resume();}return;}
+  if(event.code==='Escape'){event.preventDefault();if(dialog==='quest-panel'){questBook.escape();return;}if((dialog==='hud-settings-panel'||dialog==='visor-settings-panel'||dialog==='keys-settings-panel'||dialog==='diagnostics-panel')){setDialog('settings');return;}if(dialog==='settings'){setDialog(settingsReturn);return;}if(dialog==='production-panel'){el('close-production').click();return;}if(started){if(running)pause();else resume();}return;}
   if(event.target instanceof HTMLElement && (event.target.isContentEditable || event.target.closest('input,textarea,select')))return;
   if(event.code==='KeyJ'&&started&&!event.repeat){event.preventDefault();openQuests();return;}
   if(event.code==='KeyM'&&started&&!event.repeat){event.preventDefault();if(dialog==='map-panel')resume();else openMap();return;}
@@ -558,18 +559,18 @@ function boot(){
    (el('aim-bar').firstElementChild as HTMLElement).style.transform=`scaleX(${mineRatio})`;
    kind='mine';label='Добыть';iconId='i-pick';
   }else if(nearDrop){kind='pickup';label='Поднять';iconId='i-pack';}
-  else if(kind!=='eat'&&nearMachine){kind='machine';label='Открыть станцию';iconId='i-plug';const b=game&&machine(game,nearMachine);if(b){if(selected?.itemId==='wrench'&&b.kind==='workbench'&&b.level===1){kind='upgrade';label='Улучшить';iconId='i-gear';}box.hidden=!running;const st=stationStatus(game!,b);el('aim-name').textContent=b.kind==='workbench'?'Верстак '+(b.level===2?'II':'I'):ITEMS[b.kind].name;el('aim-meta').textContent=kind==='upgrade'?'Ключ · улучшение до II · F':st.title+' · F';box.classList.toggle('blocked',st.tone==='warn');(el('aim-bar').firstElementChild as HTMLElement).style.transform='scaleX(0)';document.body.dataset.aim='true';}}
+  else if(kind!=='eat'&&nearMachine){kind='machine';label='Открыть станцию';iconId='i-plug';const b=game&&machine(game,nearMachine);if(b){if(selected?.itemId==='wrench'&&b.kind==='workbench'&&b.level===1){kind='upgrade';label='Улучшить';iconId='i-gear';}box.hidden=!running;const st=stationStatus(game!,b);el('aim-name').textContent=b.kind==='workbench'?'Верстак '+(b.level===2?'II':'I'):ITEMS[b.kind].name;el('aim-meta').textContent=kind==='upgrade'?'Ключ · улучшение до II':st.title;box.classList.toggle('blocked',st.tone==='warn');(el('aim-bar').firstElementChild as HTMLElement).style.transform='scaleX(0)';document.body.dataset.aim='true';}}
   else if(kind==='eat'){blocked=game!.player.survival.foodCooldownMs>0?'Подождите перед следующей порцией':'';}
-  if(game&&interaction.cellTool){const id=selected?.itemId;kind='cell';label=id==='airlock'?'Встроить шлюз':'Поставить';iconId='i-pack';el('aim-name').textContent=(selected?ITEMS[selected.itemId].name:'')+(id==='airlock'?' · Q — поворот':'');el('aim-meta').textContent=interaction.problem||(id==='window'?'Поставить · F, удерживать — ряд':'Встроить · F');blocked=interaction.problem;box.classList.toggle('blocked',!!blocked);}
+  if(game&&interaction.cellTool){const id=selected?.itemId;kind='cell';label=id==='airlock'?'Встроить шлюз':'Поставить';iconId='i-pack';el('aim-name').textContent=selected?ITEMS[selected.itemId].name:'';el('aim-meta').textContent=interaction.problem||(id==='window'?'Удерживайте кнопку — ряд блоков':'Встроить в стену');blocked=interaction.problem;box.classList.toggle('blocked',!!blocked);}
   else if(game&&!nearMachine&&(interaction.target?.startsWith('glass:')||interaction.target?.startsWith('door-'))){
    const door=interaction.target.startsWith('door-')?doorById(game,interaction.target):undefined,key=door?doorKeys(door)[0]:Number(interaction.target.slice(6));
    // Cheap caption (no leak search every frame): the room beside the block or the box it belongs to (≤ 64 blocks).
    const room=around(key).map(n=>roomAtCell(game!,n)).find(Boolean)??structureRoom(game,key,64);kind='room';label=door?'Открыть шлюз':'Открыть помещение';iconId='i-plug';
-   el('aim-name').textContent=door?'Шлюз':room?`Помещение · ${room.volume} м³`:'Стеклоблок';el('aim-meta').textContent=(room?(habitableRoom(room)?'Воздух пригоден':`Воздух ${Math.floor(room.zone.q/1000)} GU · непригоден`):'Не замкнуто')+' · F · R — забрать';box.classList.toggle('blocked',!room||!habitableRoom(room));(el('aim-bar').firstElementChild as HTMLElement).style.transform='scaleX(0)';}
-  else if(game&&interaction.building){kind='place';label='Установить';iconId='i-pack';el('aim-name').textContent=selected?ITEMS[selected.itemId].name:'';el('aim-meta').textContent=interaction.problem||'Установить · F';blocked=interaction.problem;}
+   el('aim-name').textContent=door?'Шлюз':room?`Помещение · ${room.volume} м³`:'Стеклоблок';el('aim-meta').textContent=(room?(habitableRoom(room)?'Воздух пригоден':`Воздух ${Math.floor(room.zone.q/1000)} GU · непригоден`):'Не замкнуто');box.classList.toggle('blocked',!room||!habitableRoom(room));(el('aim-bar').firstElementChild as HTMLElement).style.transform='scaleX(0)';}
+  else if(game&&interaction.building){kind='place';label='Установить';iconId='i-pack';el('aim-name').textContent=selected?ITEMS[selected.itemId].name:'';el('aim-meta').textContent=interaction.problem||'Можно установить';blocked=interaction.problem;}
   else if(game&&interaction.linking){kind='link';label='Соединить';iconId='i-plug';el('aim-name').textContent=selected?ITEMS[selected.itemId].name:'';el('aim-meta').textContent=interaction.hint;box.classList.toggle('blocked',!interaction.linkOk);}
-  else if(game&&interaction.target?.startsWith('crate-')){kind='crate';label='Открыть ящик';iconId='i-pack';el('aim-name').textContent='Ящик';el('aim-meta').textContent='Открыть · F';}
-  else if(game&&interaction.target==='capsule'&&kind!=='eat'){kind='capsule';label='Открыть заправку';iconId='i-plug';el('aim-name').textContent='Капсула · кислородный порт';el('aim-meta').textContent='Заправить баллоны · F';}
+  else if(game&&interaction.target?.startsWith('crate-')){kind='crate';label='Открыть ящик';iconId='i-pack';el('aim-name').textContent='Ящик снабжения';el('aim-meta').textContent='';}
+  else if(game&&interaction.target==='capsule'&&kind!=='eat'){kind='capsule';label='Открыть заправку';iconId='i-plug';el('aim-name').textContent='Капсула · кислородный порт';el('aim-meta').textContent='Заправка баллонов';}
   if(pendingRemove&&performance.now()<pendingRemove.until&&interaction.struck?.key===pendingRemove.key){if(!el('aim-name').textContent)el('aim-name').textContent=interaction.struck.door?'Шлюз':'Стеклоблок';el('aim-meta').textContent=pendingRemove.text;box.classList.add('blocked');}
   // S5 (D37): with the scanner selected the action reads the aimed deposit, station or structure, else the nearby place;
   // without it there is no scan action at all (and the scanner never mines).
@@ -669,7 +670,7 @@ function boot(){
   lastCompleted=done.length;
   const id=currentStep(game);
   if(id!==lastStep){lastStep=id;guideOverride=null;guideCache.at=-1;}
-  if(!id){el('objective-kicker').textContent='Глава завершена';el('objective-task').textContent='Исследуйте Вердану';el('objective-icon').replaceChildren(itemArt('window'));return 'База работает';}
+  if(!id){el('objective-kicker').textContent='Глава завершена';el('objective-task').textContent='Исследуйте Вердану со сканером';el('objective-icon').replaceChildren(itemArt('window'));return 'База работает';}
   const step=guideStep(game,id),task=step.tasks.find(t=>!t.done),{done:n,total}=progressCount(game);
   // The optional chapter has no place in the main count (18 steps): it is labelled instead of showing 19 / 18.
   el('objective-kicker').textContent=(game.progress.quests.tracked===id?'Выбрано · ':step.optional?'':'Цель ')+(step.optional?'Дополнительно':Math.min(n+1,total)+' / '+total);
@@ -790,7 +791,7 @@ function boot(){
    const targetFov=settings.fov+(Math.hypot(actor.vx,actor.vz)>4&&running&&settings.bob?6:0);fov+=(targetFov-fov)*Math.min(1,dt*6);if(Math.abs(camera.fov-fov)>.01){camera.fov=fov;camera.updateProjectionMatrix();}
   }
   // Explicit pause (and settings opened from it) freezes the whole scene, not only the controller.
-  const frozen=started&&(dialog==='paused'||dialog==='settings'||(dialog==='hud-settings-panel'||dialog==='visor-settings-panel'||dialog==='diagnostics-panel'));
+  const frozen=started&&(dialog==='paused'||dialog==='settings'||(dialog==='hud-settings-panel'||dialog==='visor-settings-panel'||dialog==='keys-settings-panel'||dialog==='diagnostics-panel'));
   if(game&&started)world.setTime(dayPhase());
   // Swing from the strike timeline: the head meets the face on each impact. Bare hands gather with the glove; with a tool, grass is picked without a swing.
   if(game&&started){

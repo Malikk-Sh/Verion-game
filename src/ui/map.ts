@@ -151,7 +151,7 @@ export function createMap(d: Deps) {
    // An airlock stands for its glass room: the room behind it (or in front), its volume and air.
    const door = g.world.base.doors.find(v => v.id === card!.id)!, sides = doorRooms(g, door), r = sides.back ?? sides.front;
    kind = 'Помещение · ' + (r ? habitableRoom(r) ? 'пригодно для дыхания' : 'мало воздуха' : 'не замкнуто');
-   text = r ? `Стеклянное помещение со шлюзом. Пройти: наведите на шлюз и нажмите F.` : 'Шлюз стоит в стене, но помещение за ним не замкнуто.';
+   text = r ? `Стеклянное помещение со шлюзом. Пройти: наведите на шлюз и нажмите кнопку действия.` : 'Шлюз стоит в стене, но помещение за ним не замкнуто.';
    if (r) data.push(['Объём', `${r.volume} м³`], ['Воздух', `${Math.floor(r.zone.q / 1000)} / ${habitableQ(r.volume) / 1000} GU`]);
   } else if (card.kind === 'station') {
    const b = g.world.base.buildings.find(v => v.id === card!.id)!, st = stationStatus(g, b); kind = 'Станция · ' + TONE_NAME[st.tone]; text = `${st.title}. ${st.hint}`;

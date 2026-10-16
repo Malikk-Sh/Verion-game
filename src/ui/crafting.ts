@@ -166,7 +166,7 @@ export function createCraftingView() {
     row.title = here ? (can > 0 ? `Можно собрать: ${can}` : 'Не хватает материалов') : 'Делается: ' + (STATION_NAME[r.station] ?? r.station);
     list.append(row);
    }
-   if (!list.children.length) list.append(h('p', onlyReady ? 'Пока нечего собрать — проверьте журнал (J)' : 'Ничего не найдено', 'cr-empty'));
+   if (!list.children.length) list.append(h('p', onlyReady ? 'Пока нечего собрать — проверьте журнал' : 'Ничего не найдено', 'cr-empty'));
   }
   fill();
   // ---------- Recipe card ----------
@@ -184,7 +184,7 @@ export function createCraftingView() {
   if (here) req.append(h('span', '✓', 'cr-req-mark ok'), h('span', b && craftOwner(b, r) !== 'hand' ? (b.level === 2 ? 'Верстак II: очередь до 5 партий, работает без вас при питании' : near ? 'Верстак рядом: работает, пока вы рядом' : 'Подойдите к верстаку ближе 3 м') : 'Собирается в кармане, где угодно'));
   else {
    const st = r.station === 'hand' ? null : nearestStation(g, r.station);
-   req.classList.add('warn'); req.append(h('span', '!', 'cr-req-mark'), h('span', r.station === 'hand' ? 'Это карманный рецепт: откройте крафт без станции (B вдали от верстака)' : st ? `Делается: ${STATION_NAME[r.station]} — ${Math.round(Math.hypot(st.x - g.player.x, st.z - g.player.z))} м` : `Нужна станция: ${STATION_NAME[r.station]}. Сначала создайте и установите её`));
+   req.classList.add('warn'); req.append(h('span', '!', 'cr-req-mark'), h('span', r.station === 'hand' ? 'Это карманный рецепт: откройте мастерскую вдали от верстака' : st ? `Делается: ${STATION_NAME[r.station]} — ${Math.round(Math.hypot(st.x - g.player.x, st.z - g.player.z))} м` : `Нужна станция: ${STATION_NAME[r.station]}. Сначала создайте и установите её`));
    if (st) req.append(button('Показать', () => navigate?.(st), 'cr-go'));
   }
   scroll.append(req);

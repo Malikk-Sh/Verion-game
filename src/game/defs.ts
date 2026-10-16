@@ -41,7 +41,7 @@ const SPECIAL: Record<string, string> = {
  gas_pipe: 'Выберите «Соединить» и отметьте два порта станций. Дальность одного участка — до 4 м.',
  window: 'Прозрачный герметичный блок 1 м. Стены и крыша помещений.',
  airlock: 'Дверь 1×2 клетки: встраивается в стену помещения. Ручной цикл 6 с расходует 4 GU воздуха.',
- dome: 'Купол прежней версии. Его больше не ставят: разберите в кармане (B) на 64 стеклоблока и шлюз.',
+ dome: 'Купол прежней версии. Его больше не ставят: разберите в мастерской (карман) на 64 стеклоблока и шлюз.',
 };
 for (const id of ['water','wrench','scanner','grass', 'fiber', 'sand', 'iron', 'copper', 'glass', 'wire', 'circuit', ...BUILDABLE, 'window', 'airlock', 'dome', 'cable', 'gas_pipe']) {
  const d = catalog.items[id as keyof typeof catalog.items];
