@@ -476,7 +476,7 @@ function boot(){
   if(id&&store){saver=new Saver(store,id,token,revision,state.meta.activeTicks,snapshot,setSaveStatus,baseRevision,(name,ms)=>diagnostics.span(name,ms));saver.startHeartbeat();setSaveStatus(saver.status);}else{saver=null;setSaveStatus({kind:'none'});}
   updateUI();
   // S5 (D37): an expedition started before the scanner existed gets one, once.
-  if(scannerGrant!=='none'){toast(scannerGrant==='backpack'?'Сканер в рюкзаке':'Сканер у капсулы',scannerGrant==='backpack'?'Выберите его в быстром доступе, чтобы сканировать':'Рюкзак полон — заберите сканер у люка капсулы');syncDrops();void saver?.save();}
+  if(scannerGrant!=='none'){toast(scannerGrant==='quick'?'Сканер в быстром доступе':scannerGrant==='backpack'?'Сканер в рюкзаке':'Сканер у капсулы',scannerGrant==='quick'?'Выберите его, чтобы сканировать':scannerGrant==='backpack'?'Перетащите его в быстрый доступ, чтобы сканировать':'Рюкзак полон — заберите сканер у люка капсулы');syncDrops();void saver?.save();}
  }
  async function newExpedition():Promise<boolean>{
   await closeCurrent();
