@@ -9,7 +9,7 @@ import { createGhost } from './stationModels';
 import { rayCells } from './glass';
 import { allDeposits, depositLeft, depositScale } from './game/resources';
 import { REACH } from './game/mining';
-import { cellKey, cellOf, doorFront, doorProblem, glassProblem, groundCell, placeDoor, placeGlass, roomsView, type RoomEdit } from './game/rooms';
+import { cellKey, cellOf, cellY, doorFront, doorProblem, glassProblem, groundCell, placeDoor, placeGlass, roomsView, type RoomEdit } from './game/rooms';
 
 const OPEN_REACH = 3.7, LINK_REACH = LINK_RANGE + 2;
 /** Glass building: the aim ray walks the block grid up to 6 m; a room window opens from up to 4.5 m. */
@@ -59,7 +59,7 @@ export function createWorldInteraction(scene: THREE.Scene, camera: THREE.Camera)
  function showCell(id: string, key: number, valid: boolean) {
   const gh = id === 'airlock' ? doorGhost : blockGhost, { i, k, j } = cellOf(key);
   gh.fill.material = valid ? okMat : badMat; gh.edges.material = valid ? okLine : badLine; doorArrow.material = valid ? okMat : badMat;
-  gh.g.position.set(i + .5, k + (id === 'airlock' ? 1 : .5), j + .5); gh.g.rotation.y = id === 'airlock' ? cellRot * Math.PI / 2 : 0; gh.g.visible = true;
+  gh.g.position.set(i + .5, cellY(k) + (id === 'airlock' ? 1 : .5), j + .5); gh.g.rotation.y = id === 'airlock' ? cellRot * Math.PI / 2 : 0; gh.g.visible = true;
  }
  /** DDA over glass/door cells and the terrain ray-march; the nearer hit wins. */
  function strike(g: GameState, max: number) {

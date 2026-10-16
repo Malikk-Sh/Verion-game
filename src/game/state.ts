@@ -5,14 +5,16 @@ import { BASIC_SUIT, BUILDABLE, CONTENT_VERSION, GENERATOR_VERSION, ITEMS, LEGAC
 import { emptyInventory, INVENTORY_SIZE, type Slot } from './inventory';
 import { NODES, NODE_BY_ID, LATER_NODES, S3_NODES, nodeCovered, bodyHalf, VEIN_MATERIALS, VEIN_SPOT_BY_ID, veinSizeRange, type Vein, type Respawn, type VeinMaterial } from './resources';
 import { covers, veinDelay, VEIN_CAP, VEIN_TOTAL, RESPAWN_MAX, VEIN_DELAY_RANGE } from './nature';
-import { CYCLE_TICKS, START_OFFSET_TICKS } from './daycycle';
+import { CYCLE_TICKS, START_OFFSET_TICKS, isDay, phaseSeconds } from './daycycle';
 import { freshQuestProgress, QUEST_FACTS, type QuestProgress } from './questFacts';
 import { QUEST_IDS, type QuestId } from './questCatalog';
-import { bodyInSolid, doorFits, landingCells, stationBox, cellKey, cellOf, capacityOf, deriveRooms, doorFront, doorKeys, groundRoom, landingAt, lowestAir, storable, STORE_MARGIN, shellOf, CELL_MAX, CELL_MIN, DOOR_LIMIT, GLASS_LIMIT, LEVEL_MAX, LEVEL_MIN, PASSAGE_MS, ROOM_LIMIT, ROOM_MAX, type Door, type Zone } from './rooms';
+import { bodyInSolid, carry, groundV8, levelAt, doorFits, landingCells, stationBox, cellKey, cellOf, capacityOf, deriveRooms, doorFront, doorKeys, groundRoom, landingAt, lowestAir, storable, STORE_MARGIN, shellOf, CELL_MAX, CELL_MIN, DOOR_LIMIT, GLASS_LIMIT, LEVEL_MAX, LEVEL_MIN, PASSAGE_MS, ROOM_LIMIT, ROOM_MAX, type Door, type Zone } from './rooms';
 /**
  * Complete persistent game state. Plain JSON only: no class instances, GPU objects or
  * functions (TECHNICAL §2). Revision numbers live in save manifests.
  *
+ * State version 9 (S5, D35) raises the vertical cell lattice by 0.5 m (level k spans y ∈ [k + 0.5, k + 1.5)) so blocks
+ * rest flush on the build pad; keys stay, rooms are re-derived and their air carried over (toShiftedLevels).
  * State version 8 (S4) has two parts, each added by a field-based step so that every S4 preview file loads:
  * - glass rooms (D31) replace the prefab dome: `base.glass`, `base.doors`, `base.zones` and a passage through a door;
  *   buildings lose their per-body zone/shell (toGlassRooms);
@@ -25,9 +27,9 @@ import { bodyInSolid, doorFits, landingCells, stationBox, cellKey, cellOf, capac
  * the first inventory row — not a separate container), display-only vitals and the day-phase
  * offset. Version 1/2 saves (including content 1.0.0) are migrated by sanitizeState() without loss.
  */
-export const STATE_VERSION = 8;
-/** Last version produced by the pre-S3 migration chain, and the S3 version. */
-const V6 = 6, V7 = 7;
+export const STATE_VERSION = 9;
+/** Last version produced by the pre-S3 migration chain, the S3 version and the S4 version (integer levels). */
+const V6 = 6, V7 = 7, V8 = 8;
 export const HOTBAR_SIZE = 6;
 export type ItemStack = NonNullable<Slot>;
 export type Drop = { id: string; x: number; z: number; items: ItemStack[] };
@@ -148,7 +150,30 @@ export function migrateRaw(raw:unknown):unknown{
  // S4 steps key on the fields, not on the number: a v7 save, a rooms preview v8 file (no vein fields) and a veins
  // preview v8 file (still a dome, no glass fields) all reach the same v8 before strict validation.
  const rooms=isObj(v7)&&isObj(v7.meta)&&needsGlass(v7)?toGlassRooms(v7):v7;
- return isObj(rooms)&&isObj(rooms.meta)&&(rooms.meta.stateVersion===V7||lacksVeins(rooms))?toVeins(rooms):rooms;
+ // The glass step builds on the raised levels and lifts the version past 8: only glass saved by S4 still needs the shift.
+ const levels=isObj(rooms)&&isObj(rooms.meta)&&needsShift(rooms)?toShiftedLevels(rooms):rooms;
+ return isObj(levels)&&isObj(levels.meta)&&(levels.meta.stateVersion===V7||lacksVeins(levels))?toVeins(levels):levels;
+}
+/** The level step: a v8 save that already holds the room fields (its keys are on the old integer levels). */
+const needsShift=(r:Obj)=>{const b=isObj(r.world)&&isObj(r.world.base)?r.world.base:null;return Number(obj(r.meta,'meta').stateVersion)===V8&&!!b&&['glass','doors','zones'].every(k=>k in b);};
+/**
+ * v8 → v9 (S5, D35): the levels rise 0.5 m (cellY). Every key stays, so a structure on the flat 0.5 m pad keeps its rooms
+ * exactly and now rests flush on it; the rooms are re-derived with the new ground rule (groundV8 → isGround). On a slope
+ * a cell that was ground under the old rule may become air: the gas of every old zone is carried by cell overlap in whole
+ * milli-GU like an edit (carry): a share reaching a room stays, only a share whose cells became outside leaves. A player
+ * whose body now meets the raised glass (standing on a roof) rises with it. Idempotent on the version; never lowers it.
+ */
+export function toShiftedLevels(r:Obj):Obj{
+ const next=structuredClone(r),world=obj(next.world,'world'),base=obj(world.base,'world.base'),pl=obj(next.player,'player'),m=obj(next.meta,'meta');
+ const glass=base.glass,doors=base.doors,zones=base.zones,num=(v:unknown)=>typeof v==='number'&&Number.isInteger(v);
+ // Malformed fields are left to strict validation (which rejects them); a well-formed layout is carried over.
+ if(Array.isArray(glass)&&glass.every(num)&&Array.isArray(doors)&&doors.every(d=>isObj(d)&&['x','y','z','rot'].every(k=>num(d[k])))&&Array.isArray(zones)&&zones.every(z=>isObj(z)&&['cell','q'].every(k=>num(z[k])))){
+  const list=doors as Door[],before=deriveRooms(glass as number[],list,groundV8),after=deriveRooms(glass as number[],list);
+  const day=isDay(phaseSeconds(Number(m.activeTicks)||0,Number(world.dayOffsetTicks)||0));
+  base.zones=carry(before,zones as Zone[],after,day?10:-10).zones;
+  const x=Number(pl.x),y=Number(pl.y),z=Number(pl.z);if(bodyInSolid(after,x,y,z)&&!bodyInSolid(after,x,y+.5,z))pl.y=y+.5;
+ }
+ m.stateVersion=Math.max(Number(m.stateVersion),STATE_VERSION);return next;
 }
 /** The glass step: a v7 save, or any later save still without the room fields (a v8 file from a preview that kept the
  *  dome) converts; a save that has them is never touched again. */
@@ -266,7 +291,7 @@ export function domesToGlass(base:Obj,player:Obj,colliders:readonly Box[]){
  // The shell reaches 1 m past the old walls: a player saved beside the dome (often right at its airlock) would stand in glass.
  else if(made.length&&bodyInSolid(view,px,py,pz)){
   const m=made.reduce((a,b)=>Math.hypot(b.x-px,b.z-pz)<Math.hypot(a.x-px,a.z-pz)?b:a);
-  Object.assign(player,landingAt(view,m.door,m.interior.has(cellKey(Math.floor(px),Math.floor(py+1),Math.floor(pz)))?'back':'front'));
+  Object.assign(player,landingAt(view,m.door,m.interior.has(cellKey(Math.floor(px),levelAt(py+1),Math.floor(pz)))?'back':'front'));
  }
 }
 function toV6(r:Obj):Obj{

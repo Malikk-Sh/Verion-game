@@ -1,9 +1,9 @@
 // Dev-only: renders the glass block and the airlock inventory sprites from their in-game models (tools/render_room_sprites.mjs).
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { chunkFaces, frameTexture, glassMaterial } from '../src/glass';
+import { chunkFaces, glassMaterial, joinChunks } from '../src/glass';
 import { buildDoor } from '../src/stationModels';
-import { cellKey } from '../src/game/rooms';
+import { cellKey, cellY } from '../src/game/rooms';
 /** One 512×512 transparent WebP data URL of `kind`, three-quarter view, light from the upper left (the sprite style). */
 export async function render(kind: 'window' | 'airlock', size = 512): Promise<string> {
  const canvas = document.createElement('canvas'); canvas.width = canvas.height = size;
@@ -13,10 +13,9 @@ export async function render(kind: 'window' | 'airlock', size = 512): Promise<st
  scene.add(new THREE.HemisphereLight('#f4fbff', '#5a4a3c', 1.1)); const sun = new THREE.DirectionalLight('#fff4e6', 2.6); sun.position.set(-3, 5, 4); scene.add(sun);
  const root = new THREE.Group(); scene.add(root);
  if (kind === 'window') {
-  // The very mesh the game draws for a lone block: six framed faces of the glass material.
-  const one = new Set([cellKey(0, 0, 0)]), f = chunkFaces(one, k => one.has(k)), g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(f.position, 3)); g.setAttribute('normal', new THREE.BufferAttribute(f.normal, 3)); g.setAttribute('uv', new THREE.BufferAttribute(f.uv, 2)); g.setIndex(new THREE.BufferAttribute(f.index, 1));
-  const tex = frameTexture(); await new Promise(r => setTimeout(r, 0)); const mesh = new THREE.Mesh(g, glassMaterial(tex)); mesh.position.set(-.5, -.5, -.5); root.add(mesh);
+  // The very mesh the game draws for a lone block (D35): six clear faces and the edge trim of the glass material.
+  const one = new Set([cellKey(0, 0, 0)]), f = chunkFaces(one, k => one.has(k), undefined, { solid: k => one.has(k), door: () => false });
+  const mesh = new THREE.Mesh(joinChunks([f]), glassMaterial()); mesh.position.set(-.5, -cellY(0) - .5, -.5); root.add(mesh);
  } else { const d = buildDoor(); d.update(0, { status: 'work', outer: 0, inner: 0 }, true); d.group.position.y = -1; root.add(d.group); }
  const camera = new THREE.PerspectiveCamera(24, 1, .1, 50), dir = new THREE.Vector3(1.05, .78, 1.35).normalize();
  // Three-quarter view from the front right, framed so the model fills about 80% of the square.

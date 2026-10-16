@@ -1,27 +1,29 @@
 import * as THREE from 'three';
 import { reducedMotion } from './motion';
 import { heightAt, type Box } from './world';
-import { allRooms, around, cellCenter, roomCenter, cellKey, cellOf, columnFloor, doorFront, habitableRoom, isGround, roomAtCell, roomsRevision, roomsView, type Door } from './game/rooms';
+import { allRooms, around, cellCenter, cellY, levelAt, roomCenter, cellKey, cellOf, columnFloor, doorFront, habitableRoom, isGround, roomAtCell, roomsRevision, roomsView, type Door } from './game/rooms';
 import type { GameState } from './game/state';
 import { buildDoor, type DoorVisual } from './stationModels';
 import type { Fx } from './fx';
 /**
- * S4 glass rooms on screen (D31): merged face meshes per 16 m chunk (only faces between glass and air are drawn, a
- * skirt hides the gap down to the terrain), airlock door models, one lamp per room, the red tint of a room about to
- * vent, the leak path and the breach jet. Collision boxes live in a 4 m spatial hash, so the controller asks only
+ * S4 glass rooms on screen (D31), frameless since S5 (D35): faces are built per 16 m chunk (only faces between glass and
+ * air are drawn, a skirt hides the gap down to the terrain, a thin dark trim marks the structure's edges) and all chunks
+ * are joined into ONE mesh with one material (one draw call, never in the shadow map); airlock door models, one lamp per
+ * room, the red tint of a room about to vent, the leak path and the breach jet. Collision boxes live in a 4 m spatial hash, so the controller asks only
  * the blocks around the player. Purely visual apart from those boxes; the rooms themselves are game/rooms.ts.
  */
 export const CHUNK = 16, HASH_CELL = 4;
 // ---------- Ray through the 1 m grid ----------
 export type CellHit = { i: number; k: number; j: number; distance: number; normal: [number, number, number] };
-/** Amanatides–Woo walk from `o` along `d` (any length) up to `max` m: the first cell where `solid` holds, skipping the
- *  start cell. `normal` is the face entered, pointing back towards the origin (where a new block would go). */
+/** Amanatides–Woo walk from `o` along `d` (any length) up to `max` m over the cell lattice (levels from cellY): the first
+ *  cell where `solid` holds, skipping the start cell. `normal` is the face entered, pointing back towards the origin
+ *  (where a new block would go). */
 export function rayCells(o: { x: number; y: number; z: number }, d: { x: number; y: number; z: number }, max: number, solid: (i: number, k: number, j: number) => boolean): CellHit | null {
  const l = Math.hypot(d.x, d.y, d.z); if (!(l > 0)) return null;
  const dx = d.x / l, dy = d.y / l, dz = d.z / l, si = Math.sign(dx), sk = Math.sign(dy), sj = Math.sign(dz);
- let i = Math.floor(o.x), k = Math.floor(o.y), j = Math.floor(o.z);
+ let i = Math.floor(o.x), k = levelAt(o.y), j = Math.floor(o.z);
  const ti = si ? Math.abs(1 / dx) : Infinity, tk = sk ? Math.abs(1 / dy) : Infinity, tj = sj ? Math.abs(1 / dz) : Infinity;
- let ni = si > 0 ? (i + 1 - o.x) / dx : si < 0 ? (o.x - i) / -dx : Infinity, nk = sk > 0 ? (k + 1 - o.y) / dy : sk < 0 ? (o.y - k) / -dy : Infinity, nj = sj > 0 ? (j + 1 - o.z) / dz : sj < 0 ? (o.z - j) / -dz : Infinity;
+ let ni = si > 0 ? (i + 1 - o.x) / dx : si < 0 ? (o.x - i) / -dx : Infinity, nk = sk > 0 ? (cellY(k + 1) - o.y) / dy : sk < 0 ? (o.y - cellY(k)) / -dy : Infinity, nj = sj > 0 ? (j + 1 - o.z) / dz : sj < 0 ? (o.z - j) / -dz : Infinity;
  for (let guard = 0; guard < 4096; guard++) {
   let t: number, n: [number, number, number];
   if (ni <= nk && ni <= nj) { i += si; t = ni; ni += ti; n = [-si, 0, 0]; } else if (nk <= nj) { k += sk; t = nk; nk += tk; n = [0, -sk, 0]; } else { j += sj; t = nj; nj += tj; n = [0, 0, -sj]; }
@@ -55,73 +57,123 @@ const FACES: { d: [number, number, number]; o: [number, number, number]; u: [num
  { d: [0, 0, 1], o: [0, 0, 1], u: [1, 0, 0], v: [0, 1, 0] }, { d: [0, 0, -1], o: [0, 0, 0], u: [0, 1, 0], v: [1, 0, 0] },
 ];
 export const chunkOf = (key: number) => { const c = cellOf(key); return ((Math.floor(c.i / CHUNK) + 64) * 128 + (Math.floor(c.j / CHUNK) + 64)) * 16 + (Math.floor(c.k / CHUNK) + 8); };
-export type ChunkGeometry = { position: Float32Array; normal: Float32Array; uv: Float32Array; index: Uint32Array; faces: number; skirts: number };
+/** `trim` per vertex: 0 = clear glass, 1 = dark metal (edge trim and skirt), read by the one glass material. */
+export type ChunkGeometry = { position: Float32Array; normal: Float32Array; trim: Float32Array; index: Uint32Array; faces: number; skirts: number; trims: number };
 /** Skirt input: is a cell ground, and the terrain height at a grid corner. */
 export type Skirt = { ground: (i: number, k: number, j: number) => boolean; height: (x: number, z: number) => number };
+/** Trim input: glass or door cells (`solid`) and door cells alone; ground and air are neither. */
+export type Edges = { solid: (key: number) => boolean; door: (key: number) => boolean };
+/** Half width of the edge trim (6 cm square bars on the edge lines). */
+export const TRIM = .03;
+const AXES: [number, number, number][] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+/** Continuous inverse of cellY for vertex heights given in world metres (quad() takes levels). */
+const levelOfY = (y: number) => y - cellY(0);
 /**
- * Faces of one chunk's glass cells: a quad wherever the neighbour is not `closed` (glass or door), so a wall shows
- * only its two surfaces and blocks never draw faces against each other. With `skirt`, every block resting on ground
- * gets side strips down to the terrain on its open sides (visual only: the honest ground rule does not change).
+ * Faces of one chunk's glass cells: a quad wherever the neighbour is not `closed`, so a wall shows only its two surfaces
+ * and blocks never draw faces against each other. With `skirt`, every block resting on ground gets side strips down to
+ * the terrain on its open sides (visual only: the honest ground rule does not change). With `edges`, a thin bar marks
+ * each edge of a drawn face where the structure ends (D35): the cell beside it in the face's plane is not solid (outer
+ * corners, the top rim, wall ends, the line on the ground) or is an airlock (its frame). Between two blocks of one wall
+ * and along inner corners (where the glass folds inwards) there is no line. Edges are deduplicated within the chunk.
  */
-export function chunkFaces(cells: Iterable<number>, closed: (key: number) => boolean, skirt?: Skirt): ChunkGeometry {
- const pos: number[] = [], nor: number[] = [], uv: number[] = [], idx: number[] = []; let faces = 0, skirts = 0;
- const quad = (p: number[][], n: readonly number[], t: number[][]) => { const b = pos.length / 3; for (let q = 0; q < 4; q++) { pos.push(...p[q]); nor.push(...n); uv.push(...t[q]); } idx.push(b, b + 1, b + 2, b, b + 2, b + 3); };
- const T = [[0, 0], [1, 0], [1, 1], [0, 1]];
+export function chunkFaces(cells: Iterable<number>, closed: (key: number) => boolean, skirt?: Skirt, edges?: Edges): ChunkGeometry {
+ const pos: number[] = [], nor: number[] = [], tr: number[] = [], idx: number[] = []; let faces = 0, skirts = 0, trims = 0;
+ // Corners in (x, level, z); the level coordinate becomes world y through cellY.
+ const quad = (p: number[][], n: readonly number[], t: number) => { const b = pos.length / 3; for (let q = 0; q < 4; q++) { pos.push(p[q][0], cellY(p[q][1]), p[q][2]); nor.push(n[0], n[1], n[2]); tr.push(t); } idx.push(b, b + 1, b + 2, b, b + 2, b + 3); };
+ const seen = new Set<number>();
+ // One bar along `axis` from lattice point p, 1 m long plus the half width at both ends (corners overlap, no caps).
+ const bar = (p: number[], axis: number) => {
+  const id = (((p[0] + 300) * 1024 + (p[2] + 300)) * 256 + (p[1] + 64)) * 3 + axis; if (seen.has(id)) return; seen.add(id); trims++;
+  const a = AXES[axis], L = 1 + 2 * TRIM;
+  for (const n of AXES.filter((_, m) => m !== axis).flatMap(v => [v, v.map(x => -x)])) {
+   // U = a·L, V = t·2w with t = n × a, so U × V points along n (outwards).
+   const t = [n[1] * a[2] - n[2] * a[1], n[2] * a[0] - n[0] * a[2], n[0] * a[1] - n[1] * a[0]], q0 = [0, 1, 2].map(m => p[m] - a[m] * TRIM + n[m] * TRIM - t[m] * TRIM);
+   const q1 = q0.map((v, m) => v + a[m] * L), q3 = q0.map((v, m) => v + t[m] * 2 * TRIM), q2 = q1.map((v, m) => v + t[m] * 2 * TRIM);
+   quad([q0, q1, q2, q3], n, 1);
+  }
+ };
  for (const key of cells) {
   const c = cellOf(key), sides: number[] = [];
   for (let f = 0; f < 6; f++) {
    const F = FACES[f], n = cellKey(c.i + F.d[0], c.k + F.d[1], c.j + F.d[2]); if (closed(n)) continue;
    const p0 = [c.i + F.o[0], c.k + F.o[1], c.j + F.o[2]], p1 = p0.map((v, a) => v + F.u[a]), p3 = p0.map((v, a) => v + F.v[a]), p2 = p1.map((v, a) => v + F.v[a]);
-   quad([p0, p1, p2, p3], F.d, T); faces++; if (F.d[1] === 0) sides.push(f);
+   quad([p0, p1, p2, p3], F.d, 0); faces++; if (F.d[1] === 0) sides.push(f);
+   if (!edges) continue;
+   // The four edges of this face: the in-plane step e that crosses it, the edge's start corner and its direction.
+   for (const [e, along] of [[F.u, F.v], [F.u.map(x => -x), F.v], [F.v, F.u], [F.v.map(x => -x), F.u]] as number[][][]) {
+    const side = cellKey(c.i + e[0], c.k + e[1], c.j + e[2]); if (edges.solid(side) && !edges.door(side)) continue;
+    bar(e.some(x => x > 0) ? p0.map((v, m) => v + e[m]) : p0, along.findIndex(x => x !== 0));
+   }
   }
   if (!skirt || !skirt.ground(c.i, c.k - 1, c.j)) continue;
   // Bottom edge of each open side, down to the terrain at its two corners (only where the terrain is below the block).
+  const bottom = cellY(c.k);
   for (const f of sides) {
    const F = FACES[f], a = [c.i + F.o[0], c.j + F.o[2]], b = F.d[0] ? [a[0], a[1] + 1] : [a[0] + 1, a[1]];
-   const ha = skirt.height(a[0], a[1]), hb = skirt.height(b[0], b[1]); if (ha >= c.k - .001 && hb >= c.k - .001) continue;
-   const lo = (h: number) => Math.min(c.k, h) - .04, top = c.k;
+   const ha = skirt.height(a[0], a[1]), hb = skirt.height(b[0], b[1]); if (ha >= bottom - .001 && hb >= bottom - .001) continue;
+   // The strip reaches 4 cm under the terrain and up to the block's bottom; dark metal like the trim (a plinth).
+   const lo = (h: number) => levelOfY(Math.min(bottom, h) - .04), top = c.k;
    // Corners ordered so the strip faces outwards like the side above it.
    const flip = F.d[0] > 0 || F.d[2] < 0, A = flip ? b : a, B = flip ? a : b, hA = flip ? hb : ha, hB = flip ? ha : hb;
-   quad([[A[0], lo(hA), A[1]], [B[0], lo(hB), B[1]], [B[0], top, B[1]], [A[0], top, A[1]]], F.d, [[0, .5], [1, .5], [1, .5], [0, .5]]); skirts++;
+   quad([[A[0], lo(hA), A[1]], [B[0], lo(hB), B[1]], [B[0], top, B[1]], [A[0], top, A[1]]], F.d, 1); skirts++;
   }
  }
- return { position: new Float32Array(pos), normal: new Float32Array(nor), uv: new Float32Array(uv), index: new Uint32Array(idx), faces, skirts };
+ return { position: new Float32Array(pos), normal: new Float32Array(nor), trim: new Float32Array(tr), index: new Uint32Array(idx), faces, skirts, trims };
 }
 // ---------- Renderer ----------
-/** 6 cm dark frame round each block face over clear blue-tinted glass (alpha in the texture, mipmapped). */
-export function frameTexture() {
- const n = 128, b = Math.round(n * .06), c = document.createElement('canvas'); c.width = c.height = n; const x = c.getContext('2d')!;
- x.fillStyle = 'rgba(30,38,42,.88)'; x.fillRect(0, 0, n, n); x.clearRect(b, b, n - 2 * b, n - 2 * b);
- x.fillStyle = 'rgba(196,232,240,.13)'; x.fillRect(b, b, n - 2 * b, n - 2 * b);
- x.strokeStyle = 'rgba(235,252,255,.42)'; x.lineWidth = 1.5; x.strokeRect(b + 1, b + 1, n - 2 * b - 2, n - 2 * b - 2);
- const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
+/**
+ * Frameless glass (D35): one transparent material for every pane, trim and skirt. Clear glass with a light blue-green
+ * tint; alpha rises with the fresnel term at grazing angles and with the reflected sky/sun light, so the surface reads as
+ * glass without frames; very faint large smudges vary roughness and alpha. Vertices with `trim` = 1 are dark metal and
+ * opaque. FrontSide: from inside a room only the inner surface of a wall is drawn (one layer of glass, half the fill of
+ * the old double-sided panes). No depth writes, never in the shadow map; one program ('vireon-glass-s5').
+ */
+export function glassMaterial() {
+ const m = new THREE.MeshStandardMaterial({ color: 0xcdeee8, transparent: true, opacity: .13, roughness: .05, metalness: .1, depthWrite: false, side: THREE.FrontSide, envMapIntensity: 1.35 });
+ m.onBeforeCompile = s => {
+  s.vertexShader = s.vertexShader.replace('#include <common>', '#include <common>\nattribute float trim;\nvarying float vTrim;\nvarying vec3 vGlassW;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvTrim = trim;\nvGlassW = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
+  s.fragmentShader = s.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vTrim;\nvarying vec3 vGlassW;\nfloat glassHash( vec3 p ) { return fract( sin( dot( p, vec3( 127.1, 311.7, 74.7 ) ) ) * 43758.5453 ); }\nfloat glassNoise( vec3 p ) { vec3 i = floor( p ), f = fract( p ); f = f * f * ( 3.0 - 2.0 * f ); return mix( mix( mix( glassHash( i ), glassHash( i + vec3( 1, 0, 0 ) ), f.x ), mix( glassHash( i + vec3( 0, 1, 0 ) ), glassHash( i + vec3( 1, 1, 0 ) ), f.x ), f.y ), mix( mix( glassHash( i + vec3( 0, 0, 1 ) ), glassHash( i + vec3( 1, 0, 1 ) ), f.x ), mix( glassHash( i + vec3( 0, 1, 1 ) ), glassHash( i + vec3( 1, 1, 1 ) ), f.x ), f.y ), f.z ); }')
+   .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = mix( diffuseColor.rgb, vec3( .05, .06, .065 ), vTrim );')
+   .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nfloat glassSmudge = smoothstep( .58, .95, glassNoise( vGlassW * .55 ) * .7 + glassNoise( vGlassW * 2.1 ) * .3 ) * ( 1.0 - vTrim );\nroughnessFactor = mix( roughnessFactor + glassSmudge * .2, .42, vTrim );')
+   .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = mix( metalnessFactor, .7, vTrim );')
+   .replace('#include <opaque_fragment>', 'float vFres = pow( 1.0 - clamp( abs( dot( normalize( vViewPosition ), normal ) ), 0.0, 1.0 ), 3.0 );\nfloat glassSpec = dot( reflectedLight.directSpecular + reflectedLight.indirectSpecular, vec3( .3333 ) );\ndiffuseColor.a = mix( clamp( diffuseColor.a + vFres * .45 + glassSpec * .5 + glassSmudge * .035, 0.0, .9 ), 1.0, vTrim );\n#include <opaque_fragment>');
+ };
+ m.customProgramCacheKey = () => 'vireon-glass-s5'; return m;
 }
-/** Transparent glass: no depth writes, slightly blue, the frame from the texture and a fresnel rim at grazing angles. */
-export function glassMaterial(map: THREE.Texture | null = null) {
- const m = new THREE.MeshStandardMaterial({ color: 0xdcf4f8, map, transparent: true, opacity: 1, roughness: .06, metalness: .15, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 1.2 });
- m.onBeforeCompile = s => { s.fragmentShader = s.fragmentShader.replace('#include <opaque_fragment>', 'float vFres = pow( 1.0 - clamp( abs( dot( normalize( vViewPosition ), normal ) ), 0.0, 1.0 ), 3.0 );\ndiffuseColor.a = clamp( diffuseColor.a + vFres * 0.5, 0.0, 0.92 );\n#include <opaque_fragment>'); };
- m.customProgramCacheKey = () => 'vireon-glass'; return m;
+/** The glass geometry of several chunks: one buffer, one draw call. */
+export function joinChunks(parts: Iterable<ChunkGeometry>) {
+ const list = [...parts], n = list.reduce((a, f) => a + f.position.length, 0), m = list.reduce((a, f) => a + f.index.length, 0);
+ const position = new Float32Array(n), normal = new Float32Array(n), trim = new Float32Array(n / 3), index = new Uint32Array(m); let v = 0, t = 0;
+ for (const f of list) { position.set(f.position, v * 3); normal.set(f.normal, v * 3); trim.set(f.trim, v); for (let q = 0; q < f.index.length; q++) index[t + q] = f.index[q] + v; v += f.position.length / 3; t += f.index.length; }
+ const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(position, 3)); g.setAttribute('normal', new THREE.BufferAttribute(normal, 3)); g.setAttribute('trim', new THREE.BufferAttribute(trim, 1)); g.setIndex(new THREE.BufferAttribute(index, 1)); g.computeBoundingSphere(); return g;
 }
 const ROOM_LIGHT = '#cdf7f0';
 export function createGlassView(root: THREE.Group, fx?: Fx) {
  const group = new THREE.Group(); group.name = 'glass'; root.add(group);
- const mat = glassMaterial(frameTexture());
+ const mat = glassMaterial();
  // An empty mesh puts the glass program into the boot-time compile, then hides itself after the first frame (a draw of
  // zero vertices still counts as a call).
- const warm = new THREE.Mesh(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([0, -999, 0, 0, -999, 0, 0, -999, 0], 3)).setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0], 3)).setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 0, 0, 0, 0], 2)), mat);
+ const warm = new THREE.Mesh(joinChunks([{ position: new Float32Array([0, -999, 0, 0, -999, 0, 0, -999, 0]), normal: new Float32Array([0, 1, 0, 0, 1, 0, 0, 1, 0]), trim: new Float32Array(3), index: new Uint32Array([0, 1, 2]), faces: 0, skirts: 0, trims: 0 }]), mat);
  warm.geometry.setDrawRange(0, 0); warm.frustumCulled = false; warm.onAfterRender = () => { warm.visible = false; }; group.add(warm);
- const chunks = new Map<number, { cells: Set<number>; mesh: THREE.Mesh | null }>();
+ // Chunks keep their cells and built faces; the one drawn mesh joins every chunk (rebuilt only after an edit).
+ const chunks = new Map<number, { cells: Set<number>; faces: ChunkGeometry | null }>();
+ let mesh: THREE.Mesh | null = null;
  const hash = new SpatialHash(), solids = new Map<number, Box>(), doors = new Map<string, { d: Door; v: DoorVisual; box: Box }>();
  const skirt: Skirt = { ground: isGround, height: heightAt };
  let rev = -1, glass = new Set<number>(), doorCells = new Set<number>();
- const cube = (id: string, x0: number, y0: number, z0: number, h = 1): Box => ({ id, minX: x0, maxX: x0 + 1, minY: y0, maxY: y0 + h, minZ: z0, maxZ: z0 + 1 });
+ const groundAt = (k: number) => { const c = cellOf(k); return isGround(c.i, c.k, c.j); };
+ const edges: Edges = { solid: k => glass.has(k) || doorCells.has(k), door: k => doorCells.has(k) };
+ const cube = (id: string, x0: number, k: number, z0: number, h = 1): Box => ({ id, minX: x0, maxX: x0 + 1, minY: cellY(k), maxY: cellY(k) + h, minZ: z0, maxZ: z0 + 1 });
  function rebuild(id: number) {
   const c = chunks.get(id); if (!c) return;
-  if (c.mesh) { group.remove(c.mesh); c.mesh.geometry.dispose(); c.mesh = null; }
   if (!c.cells.size) { chunks.delete(id); return; }
-  const f = chunkFaces(c.cells, k => glass.has(k) || doorCells.has(k), skirt);
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(f.position, 3)); g.setAttribute('normal', new THREE.BufferAttribute(f.normal, 3)); g.setAttribute('uv', new THREE.BufferAttribute(f.uv, 2)); g.setIndex(new THREE.BufferAttribute(f.index, 1)); g.computeBoundingSphere();
-  const mesh = new THREE.Mesh(g, mat); mesh.renderOrder = 2; mesh.name = 'glass-chunk'; c.mesh = mesh; group.add(mesh);
+  // Faces against glass, doors and ground are never seen (a face lying on the terrain would also flicker with it).
+  c.faces = chunkFaces(c.cells, k => glass.has(k) || doorCells.has(k) || groundAt(k), skirt, edges);
+ }
+ function join() {
+  if (mesh) { group.remove(mesh); mesh.geometry.dispose(); mesh = null; }
+  const parts = [...chunks.values()].map(c => c.faces).filter((f): f is ChunkGeometry => !!f && f.index.length > 0); if (!parts.length) return;
+  mesh = new THREE.Mesh(joinChunks(parts), mat); mesh.renderOrder = 2; mesh.name = 'glass'; mesh.castShadow = mesh.receiveShadow = false; group.add(mesh);
  }
  // ---------- Room lamps: one emissive ceiling plate per room (one draw call) and one pooled point light each ----------
  const lampMat = new THREE.MeshBasicMaterial({ color: '#ffffff' }), lampOn = new THREE.Color('#d6fff8'), lampOff = new THREE.Color('#2c3638'), lampColor = new THREE.Color();
@@ -138,7 +190,7 @@ export function createGlassView(root: THREE.Group, fx?: Fx) {
    let x = 0, z = 0; for (const c of r.cells) { const p = cellCenter(c); x += p.x; z += p.z; } x /= r.volume; z /= r.volume;
    let best = r.cells[0], d = Infinity; for (const c of r.cells) { const p = cellCenter(c), e = Math.hypot(p.x - x, p.z - z) - p.y * 1e-3; if (e < d - 1e-6) { d = e; best = c; } }
    const top = cellOf(best); let k = top.k; for (const c of r.cells) { const q = cellOf(c); if (q.i === top.i && q.j === top.j) k = Math.max(k, q.k); }
-   const px = top.i + .5, py = k + 1 - .03, pz = top.j + .5; m.makeTranslation(px, py, pz); lamps!.setMatrixAt(n, m);
+   const px = top.i + .5, py = cellY(k + 1) - .03, pz = top.j + .5; m.makeTranslation(px, py, pz); lamps!.setMatrixAt(n, m);
    const light = lights[n] ?? new THREE.PointLight(ROOM_LIGHT, 0, 6, 1.6); light.userData.emitter = 'room'; light.distance = Math.min(12, 4 + Math.sqrt(r.volume)); light.position.set(px, py - .25, pz); if (!lights[n]) { lights[n] = light; group.add(light); }
   });
   group.add(lamps);
@@ -175,24 +227,26 @@ export function createGlassView(root: THREE.Group, fx?: Fx) {
  function sync(g: GameState) {
   const r = roomsRevision(g); if (r === rev) return false; rev = r;
   const view = roomsView(g.world.base), nextDoors = new Map(g.world.base.doors.map(d => [d.id, d])), nextDoorCells = new Set(view.doorAt.keys()), dirty = new Set<number>();
-  const touch = (key: number) => { dirty.add(chunkOf(key)); for (const n of around(key)) dirty.add(chunkOf(n)); };
+  // A block changes the faces and edge trim of the blocks around it, diagonal ones included (inner corners).
+  const touch = (key: number) => { const c = cellOf(key); for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let e = -1; e <= 1; e++) dirty.add(chunkOf(cellKey(c.i + a, c.k + b, c.j + e))); };
   for (const k of glass) if (!view.glass.has(k)) { touch(k); chunks.get(chunkOf(k))?.cells.delete(k); const b = solids.get(k); if (b) { hash.remove(b); solids.delete(k); } }
-  for (const k of view.glass) if (!glass.has(k)) { touch(k); const id = chunkOf(k); let c = chunks.get(id); if (!c) chunks.set(id, c = { cells: new Set(), mesh: null }); c.cells.add(k); const p = cellOf(k), b = cube('glass-' + k, p.i, p.k, p.j); solids.set(k, b); hash.insert(b); }
+  for (const k of view.glass) if (!glass.has(k)) { touch(k); const id = chunkOf(k); let c = chunks.get(id); if (!c) chunks.set(id, c = { cells: new Set(), faces: null }); c.cells.add(k); const p = cellOf(k), b = cube('glass-' + k, p.i, p.k, p.j); solids.set(k, b); hash.insert(b); }
   for (const k of doorCells) if (!nextDoorCells.has(k)) touch(k);
   for (const k of nextDoorCells) if (!doorCells.has(k)) touch(k);
   glass = new Set(view.glass); doorCells = nextDoorCells;
   for (const [id, s] of doors) { const d = nextDoors.get(id); if (!d || d.x !== s.d.x || d.y !== s.d.y || d.z !== s.d.z || d.rot !== s.d.rot) { group.remove(s.v.group); s.v.dispose(); hash.remove(s.box); doors.delete(id); } }
   for (const d of g.world.base.doors) if (!doors.has(d.id)) {
-   const v = buildDoor(); v.group.position.set(d.x + .5, d.y, d.z + .5); v.group.rotation.y = d.rot * Math.PI / 2; v.group.name = d.id;
+   const v = buildDoor(); v.group.position.set(d.x + .5, cellY(d.y), d.z + .5); v.group.rotation.y = d.rot * Math.PI / 2; v.group.name = d.id;
    // A plinth under the threshold down to the lowest terrain corner (visual only, like the glass skirt).
-   const drop = d.y - columnFloor(d.x, d.z); if (drop > .02) { const base = v.group.children[0] as THREE.Mesh, plinth = new THREE.Mesh(new THREE.BoxGeometry(.96, drop + .06, .96), base.material); plinth.position.y = -(drop + .06) / 2 + .02; plinth.receiveShadow = true; v.group.add(plinth); }
+   const drop = cellY(d.y) - columnFloor(d.x, d.z); if (drop > .02) { const base = v.group.children[0] as THREE.Mesh, plinth = new THREE.Mesh(new THREE.BoxGeometry(.96, drop + .06, .96), base.material); plinth.position.y = -(drop + .06) / 2 + .02; plinth.receiveShadow = true; v.group.add(plinth); }
    const box = cube('build-' + d.id, d.x, d.y, d.z, 2); hash.insert(box); doors.set(d.id, { d: { ...d }, v, box }); group.add(v.group);
   }
   for (const id of dirty) if (chunks.has(id)) rebuild(id);
+  if (dirty.size) join();
   syncLamps(g);
   return true;
  }
- function reset() { for (const c of chunks.values()) if (c.mesh) { group.remove(c.mesh); c.mesh.geometry.dispose(); } chunks.clear(); for (const s of doors.values()) { group.remove(s.v.group); s.v.dispose(); } doors.clear(); hash.clear(); solids.clear(); glass = new Set(); doorCells = new Set(); rev = -1; clearTint(); showLeak([]); vent = null; }
+ function reset() { chunks.clear(); join(); for (const s of doors.values()) { group.remove(s.v.group); s.v.dispose(); } doors.clear(); hash.clear(); solids.clear(); glass = new Set(); doorCells = new Set(); rev = -1; clearTint(); showLeak([]); vent = null; }
  /** `dt` is real frame time (0 while frozen). */
  function update(g: GameState, dt: number) {
   const still = reducedMotion(), p = g.world.base.passage;
@@ -217,7 +271,7 @@ export function createGlassView(root: THREE.Group, fx?: Fx) {
   query: (minX: number, minZ: number, maxX: number, maxZ: number, out: Box[]) => hash.query(minX, minZ, maxX, maxZ, out),
   /** A breach jet is playing. */
   get venting() { return !!vent; },
-  stats: () => ({ chunks: [...chunks.values()].filter(c => c.mesh).length, faces: [...chunks.values()].reduce((a, c) => a + ((c.mesh?.geometry.index?.count ?? 0) / 6), 0), doors: doors.size, lamps: lamps?.count ?? 0, boxes: hash.count, leak: leak?.mesh.count ?? 0, tint: !!tint }),
+  stats: () => ({ chunks: [...chunks.values()].filter(c => c.faces).length, meshes: mesh ? 1 : 0, castShadow: !!mesh?.castShadow, faces: [...chunks.values()].reduce((a, c) => a + (c.faces?.faces ?? 0), 0), trims: [...chunks.values()].reduce((a, c) => a + (c.faces?.trims ?? 0), 0), doors: doors.size, lamps: lamps?.count ?? 0, boxes: hash.count, leak: leak?.mesh.count ?? 0, tint: !!tint }),
   };
 }
 export type GlassView = ReturnType<typeof createGlassView>;

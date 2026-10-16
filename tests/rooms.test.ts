@@ -13,7 +13,7 @@ import { refreshQuestProgress } from '../src/game/quests.ts';
 import { guideStep, nearestShelter, roomy, stepTarget } from '../src/game/guide.ts';
 import { spawnVein } from '../src/game/nature.ts';
 import {
- cellKey, cellOf, columnFloor, isGround, lowestAir, deriveRooms, roomsView, bumpRooms, allRooms, roomAt, roomAtCell, editRooms, predictRemove, leakAt,
+ cellKey, cellOf, cellY, levelAt, columnFloor, isGround, lowestAir, deriveRooms, roomsView, bumpRooms, allRooms, roomAt, roomAtCell, editRooms, predictRemove, leakAt,
  placeGlass, removeGlass, placeDoor, removeDoor, beginPassage, landingPoint, doorById, stationRoom, habitableRoom, breathingRoom, cyclingRoom,
  GLASS_LIMIT, DOOR_LIMIT, ROOM_LIMIT, shellOf, boxCells, groundRoom, bodyInSolid, groundCell, landingCells, type Door,
 } from '../src/game/rooms.ts';
@@ -35,8 +35,8 @@ test('Rooms: the honest ground rule on a slope — a cell is ground only when al
   const c = [heightAt(i, j), heightAt(i + 1, j), heightAt(i, j + 1), heightAt(i + 1, j + 1)], lo = Math.min(...c), hi = Math.max(...c);
   if (hi - lo < 1.2) continue; found = true;
   assert.equal(columnFloor(i, j), lo);
-  for (let k = Math.floor(lo) - 2; k <= Math.ceil(hi) + 1; k++) assert.equal(isGround(i, k, j), lo > k + .5, `k ${k}`);
-  const buried = Math.ceil(lo - .5); assert.ok(buried + .5 < hi, 'the lowest air cell is partly under the slope') ; assert.equal(isGround(i, buried, j), false); assert.equal(isGround(i, buried - 1, j), true); assert.equal(lowestAir(i, j), buried);
+  for (let k = Math.floor(lo) - 2; k <= Math.ceil(hi) + 1; k++) assert.equal(isGround(i, k, j), lo > cellY(k) + .5, `k ${k}`);
+  const buried = Math.ceil(lo - cellY(0) - .5); assert.ok(cellY(buried) + .5 < hi, 'the lowest air cell is partly under the slope') ; assert.equal(isGround(i, buried, j), false); assert.equal(isGround(i, buried - 1, j), true); assert.equal(lowestAir(i, j), buried);
  }
  assert.ok(found, 'a steep column exists on the east hillside');
  // Air under a wall leaks: a pillar whose interior starts one level above the ground has open air below it.
@@ -93,7 +93,7 @@ test('Rooms: a breach empties only the opened part; expanding behind a second wa
  near(g, 53, 43); const outer = cellKey(55, 1, 43), before = structuredClone(g);
  assert.equal(predictRemove(g, outer), 70.001); assert.deepEqual(g, before, 'prediction changes nothing');
  const ask = removeGlass(g, outer); assert.equal(ask.needConfirm, true); assert.match(ask.error, /Воздух уйдёт: 71 GU/); assert.deepEqual(g, before);
- const done = removeGlass(g, outer, true); assert.equal(done.error, ''); assert.equal(done.ventGU, 70.001); assert.equal(done.breached, true); assert.deepEqual(done.at, { x: 55.5, y: 1.5, z: 43.5 });
+ const done = removeGlass(g, outer, true); assert.equal(done.error, ''); assert.equal(done.ventGU, 70.001); assert.equal(done.breached, true); assert.deepEqual(done.at, { x: 55.5, y: 2, z: 43.5 });
  assert.equal(roomAt(g, 56.5, 1.5, 43.5), null); assert.equal(roomAt(g, 58.5, 1.5, 43.5)!.zone.q, 90000); assert.equal(countItem(g.player.inventory, 'window'), 1);
  assert.equal(structureStatus(g, cellKey(55, 2, 43)).title, 'Утечка'); assert.deepEqual(cellOf(leakAt(g, cellKey(55, 2, 43))!.path.at(-1)!).i <= 55, true);
  // The prediction follows the air, not a stale first answer: an empty room asks nothing, a filled one asks again.
@@ -331,14 +331,14 @@ test('Save v8 without the glass fields (a preview that kept the dome) still conv
  assert.ok(m.world.base.buildings.every(b => b.kind !== 'dome')); assert.equal(m.world.base.doors.length, 1);
  assert.deepEqual(sanitizeState(JSON.parse(JSON.stringify(m))), m, 'idempotent');
  const again = toGlassRooms(JSON.parse(JSON.stringify(m))); assert.deepEqual(again.world, JSON.parse(JSON.stringify(m.world)), 'running the step twice changes nothing');
- const newer: any = JSON.parse(JSON.stringify(old)); newer.meta.stateVersion = 9; assert.equal((toGlassRooms(newer).meta as any).stateVersion, 9, 'the version is never lowered');
+ const newer: any = JSON.parse(JSON.stringify(old)); newer.meta.stateVersion = 10; assert.equal((toGlassRooms(newer).meta as any).stateVersion, 10, 'the version is never lowered');
 });
 
 test('Save v8 (merged S4): a v7 save, a rooms-lane v8 (no vein fields) and a veins-lane v8 (dome, no glass fields) all load as one v8', () => {
  const strip = (o: any) => { delete o.world.veins; delete o.world.respawn; delete o.world.nextVeinId; return o; };
  // 1. A real S3 file: a dome and no vein fields; an exhausted iron deposit queues its vein.
  const s3 = strip(v7(fresh(), { x: 58, z: 44, rot: 0, q: 500000 })); s3.world.nodes['iron-a'] = 0;
- const a = sanitizeState(s3); assert.equal(a.meta.stateVersion, STATE_VERSION); assert.equal(STATE_VERSION, 8);
+ const a = sanitizeState(s3); assert.equal(a.meta.stateVersion, STATE_VERSION); assert.equal(STATE_VERSION, 9);
  assert.deepEqual(allRooms(a).map(r => [r.volume, r.zone.q]), [[48, 500000]]); assert.equal(a.world.base.doors.length, 1);
  assert.deepEqual(a.world.veins, []); assert.equal(a.world.nextVeinId, 1); assert.deepEqual(a.world.respawn.map(e => e.material), ['iron']);
  // 2. A rooms-lane v8 file: glass, doors and zones, but no vein fields; the room stays as it was.
@@ -348,7 +348,7 @@ test('Save v8 (merged S4): a v7 save, a rooms-lane v8 (no vein fields) and a vei
  // 3. A veins-lane v8 file: a live vein and a queue, but still the prefab dome and no glass fields.
  const g = fresh(); g.player.x = -120; g.player.z = -120; const vein = spawnVein(g, 'stone', 0)!; assert.ok(vein); g.world.respawn = [{ material: 'iron', ms: 1234 }];
  const worldLane = v7(g, { x: 58, z: 44, rot: 0, q: 400000 }); worldLane.meta.stateVersion = 8;
- const c = sanitizeState(worldLane); assert.equal(c.meta.stateVersion, 8);
+ const c = sanitizeState(worldLane); assert.equal(c.meta.stateVersion, 9);
  assert.deepEqual(c.world.veins, [vein]); assert.deepEqual(c.world.respawn, [{ material: 'iron', ms: 1234 }]); assert.equal(c.world.nextVeinId, 2, 'the vein fields are kept as they were');
  assert.ok(c.world.base.buildings.every(b => b.kind !== 'dome')); assert.deepEqual(allRooms(c).map(r => [r.volume, r.zone.q]), [[48, 400000]]);
  // A full merged v8 save is never migrated again.

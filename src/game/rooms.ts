@@ -6,7 +6,7 @@ import { dropItems } from './mining';
 import type { BaseState, Building } from './production';
 import type { GameState } from './state';
 /**
- * S4 glass rooms (D31). One orthogonal 1 m grid: cell (i, k, j) spans x∈[i, i+1], y∈[k, k+1], z∈[j, j+1]. Glass
+ * S4 glass rooms (D31). One orthogonal 1 m grid: cell (i, k, j) spans x∈[i, i+1], y∈[cellY(k), cellY(k) + 1], z∈[j, j+1]. Glass
  * blocks, the two cells of each airlock door and ground cells are solid; air cells joined by faces (6 neighbours, never
  * edges or corners) and closed on every side form a room. A new room is born empty; air leaves at once when a room opens
  * (D32). No DOM and no three.js: the simulation, quests, station windows and tests share this module.
@@ -32,11 +32,14 @@ export const capacityOf = (volume: number) => 20000 * volume;
 export const habitableQ = (volume: number) => 8000 * volume;
 // ---------- Cells ----------
 /** X = i+256, Z = j+256 (0…1023), Y = k+32 (0…127); key = (X·1024 + Z)·128 + Y < 2^27. */
+/** S5 (D35): levels sit 0.5 m up, so level k spans y ∈ [k + 0.5, k + 1.5) and level 0 rests flush on the 0.5 m build
+ *  pad. The only conversions between a level and world y: cellY (bottom of level k) and levelAt (level holding y). */
+export const LEVEL_BASE = .5, cellY = (k: number) => k + LEVEL_BASE, levelAt = (y: number) => Math.floor(y - LEVEL_BASE);
 export const cellKey = (i: number, k: number, j: number) => ((i + 256) * 1024 + (j + 256)) * 128 + (k + 32);
 export function cellOf(key: number) { const y = key % 128, r = (key - y) / 128, z = r % 1024; return { i: (r - z) / 1024 - 256, k: y - 32, j: z - 256 }; }
 /** A shelter large enough for the journal: at least 3×3×3 cells of air inside (the guide and the quest share it). */
 export function roomy(r: Room) { const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]; for (const key of r.cells) { const c = cellOf(key), v = [c.i, c.k, c.j]; for (let n = 0; n < 3; n++) { lo[n] = Math.min(lo[n], v[n]); hi[n] = Math.max(hi[n], v[n]); } } return hi.every((h, n) => h - lo[n] >= 2); }
-export const cellCenter = (key: number) => { const c = cellOf(key); return { x: c.i + .5, y: c.k + .5, z: c.j + .5 }; };
+export const cellCenter = (key: number) => { const c = cellOf(key); return { x: c.i + .5, y: cellY(c.k) + .5, z: c.j + .5 }; };
 export const placeable = (i: number, k: number, j: number) => [i, k, j].every(Number.isInteger) && i >= CELL_MIN && i <= CELL_MAX && j >= CELL_MIN && j <= CELL_MAX && k >= LEVEL_MIN && k <= LEVEL_MAX;
 /** Saved cells may lie a little past the building area: a v7 dome on its edge became a shell 3 cells wide. */
 export const STORE_MARGIN = 5, storable = (i: number, k: number, j: number) => [i, k, j].every(Number.isInteger) && i >= CELL_MIN - STORE_MARGIN && i <= CELL_MAX + STORE_MARGIN && j >= CELL_MIN - STORE_MARGIN && j <= CELL_MAX + STORE_MARGIN && k >= LEVEL_MIN && k <= LEVEL_MAX;
@@ -52,10 +55,12 @@ export function columnFloor(i: number, j: number) {
  return h;
 }
 /** Honest ground rule: a cell is ground only when the terrain is above its middle at all four corners of its base. */
-export const isGround = (i: number, k: number, j: number) => columnFloor(i, j) > k + .5;
-/** Lowest air level of a column. */
-export const lowestAir = (i: number, j: number) => Math.ceil(columnFloor(i, j) - .5);
+export const isGround = (i: number, k: number, j: number) => columnFloor(i, j) > cellY(k) + .5;
+/** Lowest air level of a column (`| 0` turns a −0 into 0). */
+export const lowestAir = (i: number, j: number) => Math.ceil(columnFloor(i, j) - cellY(0) - .5) | 0;
 const groundKey = (key: number) => { const c = cellOf(key); return isGround(c.i, c.k, c.j); };
+/** The v8 ground rule on the old integer levels (y ∈ [k, k+1]): only the v8 → v9 migration derives rooms with it. */
+export const groundV8 = (key: number) => { const c = cellOf(key); return columnFloor(c.i, c.j) > c.k + .5; };
 /** Cells of a box (w × h × d from its lowest corner cell). */
 export function boxCells(i0: number, k0: number, j0: number, w: number, h: number, d: number) { const out: number[] = []; for (let i = i0; i < i0 + w; i++) for (let k = k0; k < k0 + h; k++) for (let j = j0; j < j0 + d; j++) out.push(cellKey(i, k, j)); return out; }
 /** A room footprint w × d standing on the ground: each column from its lowest air level up to one common top `h` levels
@@ -87,8 +92,8 @@ export function shellOf(interior: Iterable<number>) {
 }
 const OPEN = -1, BIG = -2;
 /** Rooms of one glass/door layout. `tag`: cell → room index (≥ 0) or an explored non-room region (OPEN / BIG). */
-export type RoomsView = { glass: Set<number>; doorAt: Map<number, Door>; rooms: Room[]; tag: Map<number, number>; colTop: Map<number, number>; box: number[] };
-const solidIn = (v: RoomsView, key: number) => v.glass.has(key) || v.doorAt.has(key) || groundKey(key);
+export type RoomsView = { glass: Set<number>; doorAt: Map<number, Door>; rooms: Room[]; tag: Map<number, number>; colTop: Map<number, number>; box: number[]; ground: (key: number) => boolean };
+const solidIn = (v: RoomsView, key: number) => v.glass.has(key) || v.doorAt.has(key) || v.ground(key);
 /** Outside: beyond the glass/door bounding box grown by 1, or open to the sky (no glass or door above in its column).
  *  Terrain is a heightfield, so an air cell with nothing above can always rise past the box: the same verdict, sooner. */
 function outsideIn(v: RoomsView, key: number) {
@@ -113,11 +118,12 @@ function explore(v: RoomsView, start: number) {
  for (const c of seen) { v.tag.set(c, index); if (c < cell) cell = c; }
  v.rooms.push({ index, cell, cells: seen, volume: seen.length });
 }
-/** Pure: rooms of a hypothetical layout (validation, prediction and migration use it without touching a game). */
-export function deriveRooms(glassKeys: Iterable<number>, doors: readonly Door[]): RoomsView {
+/** Pure: rooms of a hypothetical layout (validation, prediction and migration use it without touching a game). `ground`:
+ *  the ground rule (the v8 → v9 migration passes groundV8 for the layout as it was saved). */
+export function deriveRooms(glassKeys: Iterable<number>, doors: readonly Door[], ground: (key: number) => boolean = groundKey): RoomsView {
  const glass = new Set(glassKeys), doorAt = new Map<number, Door>(), colTop = new Map<number, number>(), box = [Infinity, -Infinity, Infinity, -Infinity, Infinity, -Infinity];
  for (const d of doors) for (const key of doorKeys(d)) doorAt.set(key, d);
- const v: RoomsView = { glass, doorAt, rooms: [], tag: new Map(), colTop, box };
+ const v: RoomsView = { glass, doorAt, rooms: [], tag: new Map(), colTop, box, ground };
  const sources = [...glass, ...doorAt.keys()];
  for (const key of sources) {
   const c = cellOf(key), col = column(c.i, c.j);
@@ -155,10 +161,10 @@ const info = (g: GameState, r: Room): RoomInfo => ({ ...r, zone: zoneOf(g.world.
 export const allRooms = (g: GameState) => roomsView(g.world.base).rooms.map(r => info(g, r));
 export function roomAtCell(g: GameState, key: number): RoomInfo | null { const v = roomsView(g.world.base), t = v.tag.get(key); return t !== undefined && t >= 0 ? info(g, v.rooms[t]) : null; }
 /** Room containing a point (the player: the chest cell, y + 1.0). */
-export const roomAt = (g: GameState, x: number, y: number, z: number) => roomAtCell(g, cellKey(Math.floor(x), Math.floor(y), Math.floor(z)));
+export const roomAt = (g: GameState, x: number, y: number, z: number) => roomAtCell(g, cellKey(Math.floor(x), levelAt(y), Math.floor(z)));
 export const playerRoom = (g: GameState) => roomAt(g, g.player.x, g.player.y + 1, g.player.z);
-/** A station stands in the cell of its centre (floor(x), floor(y + 0.5), floor(z)); stations never affect sealing. */
-export const stationCell = (b: { x: number; y: number; z: number }) => cellKey(Math.floor(b.x), Math.floor(b.y + .5), Math.floor(b.z));
+/** A station stands in the cell of its centre (floor(x), levelAt(y + 0.5), floor(z)); stations never affect sealing. */
+export const stationCell = (b: { x: number; y: number; z: number }) => cellKey(Math.floor(b.x), levelAt(b.y + .5), Math.floor(b.z));
 export const stationRoom = (g: GameState, b: { x: number; y: number; z: number }) => roomAtCell(g, stationCell(b));
 export const habitableRoom = (r: RoomInfo) => r.zone.q >= habitableQ(r.volume) && r.zone.purity >= .5 && r.zone.temperature >= -5 && r.zone.temperature <= 40;
 export const anyHabitable = (g: GameState) => allRooms(g).some(habitableRoom);
@@ -190,7 +196,7 @@ export function structureRoom(g: GameState, key: number, limit = 256): RoomInfo 
 }
 /** Where a body stands in a cell column: on the first glass/door below, else on the terrain. */
 function standY(view: RoomsView, i: number, k: number, j: number, x: number, z: number) {
- for (let kk = k - 1; kk >= LEVEL_MIN - 1; kk--) { const key = cellKey(i, kk, j); if (view.glass.has(key) || view.doorAt.has(key)) return Math.max(kk + 1, heightAt(x, z)); if (isGround(i, kk, j)) break; }
+ for (let kk = k - 1; kk >= LEVEL_MIN - 1; kk--) { const key = cellKey(i, kk, j); if (view.glass.has(key) || view.doorAt.has(key)) return Math.max(cellY(kk + 1), heightAt(x, z)); if (isGround(i, kk, j)) break; }
  return heightAt(x, z);
 }
 /** Landing point on one side: the centre of the landing cell, 1 m from the door axis — 1.5 m from the door's inner face,
@@ -232,7 +238,7 @@ export type RoomChange = { add?: number[]; remove?: number[]; door?: Door; undoo
  * clamp to 20·V vents a squeezed room. T and purity are volume averages; new empty volume brings 0 GU, outside T and
  * purity 0. Nothing is created or lost on rounding. An unchanged room keeps its zone as it was.
  */
-function carry(before: RoomsView, zones: Zone[], after: RoomsView, outside: number) {
+export function carry(before: RoomsView, zones: Zone[], after: RoomsView, outside: number) {
  const old = new Map(zones.map(z => [z.cell, z])), acc = after.rooms.map(() => ({ q: 0, t: 0, p: 0, from: 0, same: undefined as Zone | undefined, only: undefined as Zone | null | undefined }));
  let vented = 0, breached = false;
  for (const a of before.rooms) {
@@ -285,7 +291,7 @@ export function predictRemove(g: GameState, key: number): number {
 // ---------- Placement rules ----------
 const overlaps = (a: number[], b: number[]) => a[0] < b[1] - 1e-6 && a[1] > b[0] + 1e-6 && a[2] < b[3] - 1e-6 && a[3] > b[2] + 1e-6 && a[4] < b[5] - 1e-6 && a[5] > b[4] + 1e-6;
 /** [minX, maxX, minY, maxY, minZ, maxZ] of `n` stacked cells from `key` up. */
-const cellBox = (key: number, n = 1) => { const c = cellOf(key); return [c.i, c.i + 1, c.k, c.k + n, c.j, c.j + 1]; };
+const cellBox = (key: number, n = 1) => { const c = cellOf(key); return [c.i, c.i + 1, cellY(c.k), cellY(c.k) + n, c.j, c.j + 1]; };
 const playerBox = (x: number, y: number, z: number) => [x - .3, x + .3, y, y + 1.8, z - .3, z + .3];
 /** Station body heights (buildings.ts colliders): a footprint of ±0.48 m around the integer centre. */
 export const STATION_HEIGHT: Record<string, number> = { workbench: 1.1, kiln: 1.35, biogenerator: 1.25, electrolyzer: 1.25, refill: 1.45, distributor: .95 };
@@ -356,13 +362,13 @@ export const doorFits = (solid: (key: number) => boolean, d: Door, stations: rea
 /** A standing body (feet at y) meets glass or a door. */
 export function bodyInSolid(view: RoomsView, x: number, y: number, z: number) {
  const body = playerBox(x, y, z);
- for (let i = Math.floor(body[0]); i < body[1]; i++) for (let j = Math.floor(body[4]); j < body[5]; j++) for (let k = Math.floor(body[2]); k < body[3]; k++) { const key = cellKey(i, k, j); if (view.glass.has(key) || view.doorAt.has(key)) return true; }
+ for (let i = Math.floor(body[0]); i < body[1]; i++) for (let j = Math.floor(body[4]); j < body[5]; j++) for (let k = levelAt(body[2]); cellY(k) < body[3]; k++) { const key = cellKey(i, k, j); if (view.glass.has(key) || view.doorAt.has(key)) return true; }
  return false;
 }
 /** Why a station footprint cannot stand here ('' = it can): glass, doors, airlock landings, a generator inside a room. */
 export function stationProblem(g: GameState, kind: string, x: number, y: number, z: number): string {
  const v = roomsView(g.world.base), box = stationBox({ kind, x, y, z }), reserved = reservedCells(g);
- for (let i = Math.floor(box[0]); i < box[1]; i++) for (let j = Math.floor(box[4]); j < box[5]; j++) for (let k = Math.floor(box[2]); k < box[3]; k++) {
+ for (let i = Math.floor(box[0]); i < box[1]; i++) for (let j = Math.floor(box[4]); j < box[5]; j++) for (let k = levelAt(box[2]); cellY(k) < box[3]; k++) {
   const key = cellKey(i, k, j);
   if (v.glass.has(key) || v.doorAt.has(key)) return 'Место занято стеклом';
   if (reserved.has(key)) return 'Здесь проход шлюза — оставьте его свободным';
