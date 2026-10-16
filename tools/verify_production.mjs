@@ -127,7 +127,8 @@ try{
  await openRoom(door,[57.5,44.2],[57.5,1.5,45]);await passAirlock(false);assert.ok(!inBox((await state()).position));check('From inside the airlock is the target; one click leads back outside');
  // Taking an outer block out vents the room: the first R asks, the second (within 3 s) confirms and the air is gone.
  await slot(0);const outer=ck(61,1,43);await look([62.9,43.5],[62,1.5,43.5]);await aimed(k=>window.__vireon.getState().struck?.key===k,outer,'Not aimed at the outer block');
- await page.keyboard.press('r');const ask=await state();assert.match(ask.pendingRemove,/Воздух уйдёт: \d+ GU/);assert.ok(ask.base.glass.includes(outer));assert.equal(ask.rooms.length,1);assert.equal(ask.glass.tint,true);await shot('room-confirm');
+ await page.keyboard.press('r');const ask=await state();assert.match(ask.pendingRemove,/Воздух уйдёт: \d+ GU/);assert.ok(ask.base.glass.includes(outer));assert.equal(ask.rooms.length,1);assert.equal(ask.glass.tint,true);
+ // The confirmation lasts 3 s of page time: a screenshot here can outlast it on a loaded software renderer, so R comes first.
  await page.keyboard.press('r');await page.waitForFunction(k=>!window.__vireon.snapshot().world.base.glass.includes(k),outer,{timeout:5000});assert.deepEqual(await rooms(),[]);await shot('room-breach');
  check('Removing an outer block asks first («Воздух уйдёт: N GU»), the second R vents the room: no room and no air remain');
  // Quick load takes one kind per press; packing from the window closes it.
