@@ -47,9 +47,10 @@ try{
  // Walking redraws the shadow map only every few metres or after the sun turns, not on every frame.
  for(const q of ['standard','high'])assert.ok(report[q+'Walk'].shadowRedraws<=Math.ceil(report[q+'Walk'].metres/3)+2,`Shadow redraws while walking in ${q}: ${report[q+'Walk'].shadowRedraws}`);
  check('Shadow map is redrawn about once per 3 m of walking, not per frame');
- {// S5 (D35): a 3×3×3 glass room with an airlock on the pad. Inside, the glass adds at most 15 draw calls over the same view
-  // without it (all glass is one mesh; the rest is the airlock model and the room lamp), the glass program is compiled at
-  // boot (walking in compiles nothing), the glass never casts a shadow, and Low stays within 150 calls looking every way.
+ {// S5 (D35): a 3×3×3 glass room with an airlock on the pad. Standing inside, the glass adds at most 15 draw calls over the
+  // same views without it (all glass is one mesh; the rest is the airlock model and the room lamp), building and entering it
+  // compiles no shader (the glass program is compiled at boot), the glass never casts a shadow, and Low stays within 150
+  // calls looking every way. Each view is measured after the terrain around it settled.
   const room=on=>page.evaluate(async on=>{const R=await import('/src/game/rooms.ts');const s=window.__vireon.snapshot(),door={id:'door-'+s.world.base.nextId,x:57,y:0,z:45,rot:0},keys=R.doorKeys(door);
    s.world.base.glass=on?R.shellOf(R.boxCells(56,0,42,3,3,3)).filter(k=>!keys.includes(k)).sort((a,b)=>a-b):[];s.world.base.doors=on?[door]:[];s.world.base.zones=[];s.world.base.nextId++;window.__vireon.setState(s);
    if(on){const t=window.__vireon.snapshot();for(const z of t.world.base.zones)Object.assign(z,{q:540000,purity:1,temperature:20});window.__vireon.setState(t);}},on);
@@ -58,15 +59,16 @@ try{
   const yaws=[0,Math.PI/2,Math.PI,-Math.PI/2],inside=async()=>{const out=[];for(const yaw of yaws){await page.evaluate(yaw=>window.__vireon.teleport(57.5,43.2,yaw,-.05),yaw);await settle();out.push(await drawn());}return out;};
   for(const quality of ['low','high']){
    if((await state()).running)await click('#pause-button');await click('#settings-button');while((await state()).quality!==quality)await click('#quality-toggle');await click('#settings-back');await click('#resume');
-   await room(true);await page.evaluate(()=>window.__vireon.teleport(61.8,49.6,Math.atan2(57.5-61.8,43.5-49.6),-.18));await settle();const outside=await drawn();await shot('room-outside-'+quality);
-   const glass=await inside();await shot('room-inside-'+quality);await room(false);const bare=await inside();
-   report[quality+'Room']={outside:outside.drawCalls,inside:glass.map(v=>v.drawCalls),bare:bare.map(v=>v.drawCalls),programs:[outside.programs,...glass.map(v=>v.programs)],glass:glass[0].glass};
+   await room(false);const bare=await inside(),compiled=Math.max(...bare.map(v=>v.programs));
+   await room(true);const glass=await inside();await shot('room-inside-'+quality);
+   await page.evaluate(()=>window.__vireon.teleport(61.8,49.6,Math.atan2(57.5-61.8,43.5-49.6),-.18));await settle();const outside=await drawn();await shot('room-outside-'+quality);await room(false);
+   report[quality+'Room']={inside:glass.map(v=>v.drawCalls),bare:bare.map(v=>v.drawCalls),outside:outside.drawCalls,programs:{bare:compiled,inside:glass.map(v=>v.programs)},glass:glass[0].glass};
    assert.equal(glass[0].rooms.length,1);assert.equal(glass[0].glass.meshes,1,'all glass is one mesh');assert.equal(glass[0].glass.castShadow,false,'glass never casts a shadow');
    glass.forEach((v,i)=>assert.ok(v.drawCalls-bare[i].drawCalls<=15,`${quality}: glass adds ${v.drawCalls-bare[i].drawCalls} draw calls looking ${i*90}°`));
-   assert.ok(glass.every(v=>v.programs===outside.programs),`${quality}: walking into the room compiled a shader (${report[quality+'Room'].programs})`);
+   assert.ok(glass.every(v=>v.programs<=compiled),`${quality}: building and entering the room compiled a shader (${JSON.stringify(report[quality+'Room'].programs)})`);
    if(quality==='low')glass.forEach((v,i)=>assert.ok(v.drawCalls<=150,`Low draw calls inside the room ${v.drawCalls} > 150 looking ${i*90}°`));
   }
-  await click('#pause-button');check('A 3×3×3 glass room with an airlock: inside, the glass adds ≤15 draw calls in every direction, one mesh, no shadow, no shader compile on entering; Low ≤150');}
+  await click('#pause-button');check('A 3×3×3 glass room with an airlock: inside, the glass adds ≤15 draw calls in every direction, one mesh, no shadow, no shader compile on building or entering; Low ≤150');}
  await click('#settings-button');await click('#diagnostics-button');await page.setViewportSize({width:568,height:320});await shot('diagnostics-compact');const small=await page.locator('#diagnostics-panel button:visible').evaluateAll(es=>es.filter(e=>e.getBoundingClientRect().width<32||e.getBoundingClientRect().height<32).map(e=>e.id));assert.deepEqual(small,[]);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);check('Diagnostic controls fit 568x320 and retain 32px touch targets');
  await click('#diagnostics-toggle');assert.equal((await state()).diagnostics,false);const [download]=await Promise.all([page.waitForEvent('download'),click('#diagnostics-export')]);await download.saveAs('artifacts/s27-device-log.json');const log=JSON.parse(await readFile('artifacts/s27-device-log.json','utf8'));assert.equal(log.format,'vireon-performance');assert.ok(log.summary.frames>0);assert.ok(log.stages['production:draw'].count>0);assert.ok(log.stages['save:encode'].count>0);assert.ok(log.events.some(e=>e.name==='input:click'));assert.ok(log.samples.some(e=>e.context.dialog==='production-panel'));assert.ok(log.samples.length<=600&&log.spikes.length<=240&&log.events.length<=240);assert.equal(JSON.stringify(log).includes('inventory'),false);report.summary=log.summary;report.stages=log.stages;check('Actual JSON download contains bounded frame, crafting, save, input and quality data without world inventory');
  const stable=await page.evaluate(()=>window.__vireon.diagnostics().summary.frames);await page.waitForTimeout(500);assert.equal(await page.evaluate(()=>window.__vireon.diagnostics().summary.frames),stable);await click('#diagnostics-clear');assert.equal(await page.evaluate(()=>window.__vireon.diagnostics().summary.frames),0);check('Stop freezes the recording; Clear removes its data');
