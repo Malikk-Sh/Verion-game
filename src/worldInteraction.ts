@@ -7,7 +7,7 @@ import { heightAt, boxes } from './world';
 import type { GameState } from './game/state';
 import { createGhost } from './stationModels';
 import { rayCells } from './glass';
-import { cellKey, cellOf, doorFront, doorProblem, glassProblem, lowestAir, placeDoor, placeGlass, roomsView, type RoomEdit } from './game/rooms';
+import { cellKey, cellOf, doorFront, doorProblem, glassProblem, groundCell, placeDoor, placeGlass, roomsView, type RoomEdit } from './game/rooms';
 
 const OPEN_REACH = 3.7, LINK_REACH = LINK_RANGE + 2;
 /** Glass building: the aim ray walks the block grid up to 6 m; a room window opens from up to 4.5 m. */
@@ -51,7 +51,7 @@ export function createWorldInteraction(scene: THREE.Scene, camera: THREE.Camera)
   return ground;
  }
  function aimCell(g: GameState, id: string) {
-  const ground = strike(g, GLASS_AIM), v = roomsView(g.world.base), solid = (key: number) => v.glass.has(key) || v.doorAt.has(key);
+  const ground = strike(g, GLASS_AIM), v = roomsView(g.world.base);
   cell = null; support = -1;
   // Facing the struck face (side faces), else facing the viewer; Q adds quarter turns.
   const face = struck && struck.normal[1] === 0 ? rotOf(struck.normal[0], struck.normal[2]) : rotOf(-direction.x, -direction.z); cellRot = (face + rot) % 4;
@@ -61,7 +61,7 @@ export function createWorldInteraction(scene: THREE.Scene, camera: THREE.Camera)
    if (id === 'airlock' && !struck.door && n[1] === 0) cell = v.glass.has(struck.key - 1) ? struck.key - 1 : struck.key;
    else { const c = cellOf(struck.key); cell = cellKey(c.i + n[0], c.k + n[1], c.j + n[2]); }
   } else if (ground) {
-   const i = Math.floor(ground.x), j = Math.floor(ground.z); let k = lowestAir(i, j); while (solid(cellKey(i, k, j)) && k < 94) k++; cell = cellKey(i, k, j);
+   const at = groundCell(v, Math.floor(ground.x), Math.floor(ground.z)); cell = at.cell; support = at.support;
   }
   if (cell === null) { problem = 'Наведите на грунт или стеклоблок в пределах 6 м'; return; }
   problem = id === 'window' ? glassProblem(g, cell) : doorProblem(g, cell, cellRot);

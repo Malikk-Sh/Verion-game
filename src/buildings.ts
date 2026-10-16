@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { reducedMotion } from './motion';
-import { boxes, box, heightAt } from './world';
+import { boxes, box, heightAt, stationY } from './world';
 import { BUILDABLE, ITEMS, TANKS, type BuildingKind } from './game/defs';
 import { makeBuilding, telemetry, RECIPE_BY_ID, nearby, poweredComponent, type Building } from './game/production';
 import { stationProblem, stationRoom } from './game/rooms';
@@ -9,8 +9,7 @@ import { countItem } from './game/inventory';
 import type { GameState } from './game/state';
 import { buildStation, PORT_HEIGHT, type StationLook, type StationVisual } from './stationModels';
 import type { Fx } from './fx';
-/** Stations stand on the terrain under their 3×3 footprint samples (S4: glass blocks are not bodies). */
-export const stationY = (x: number, z: number) => Math.max(...[-.5, 0, .5].flatMap(dx => [-.5, 0, .5].map(dz => heightAt(x + dx, z + dz)))) + .12;
+export { stationY };
 export function placementProblem(g: GameState, kind: BuildingKind, x: number, z: number, _rot = 0): string {
  if(!(BUILDABLE as readonly string[]).includes(kind)||!Number.isInteger(x)||!Number.isInteger(z))return 'Выберите корпус и клетку';
  if(g.world.base.buildings.length>=64)return 'Достигнут предел 64 корпусов';

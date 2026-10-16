@@ -63,6 +63,13 @@ export function groundRoom(i0: number, j0: number, w: number, d: number, h: numb
  const out: number[] = []; for (let i = i0; i < i0 + w; i++) for (let j = j0; j < j0 + d; j++) for (let k = lowestAir(i, j); k <= top; k++) out.push(cellKey(i, k, j));
  return out;
 }
+/** Where a block aimed at the terrain of column (i, j) goes: the first free cell from the lowest air level up. `support`
+ *  is the block it then rests on (−1 = the ground): a held F stacks only onto blocks that were there before the hold. */
+export function groundCell(view: { glass: Set<number>; doorAt: Map<number, unknown> }, i: number, j: number) {
+ let k = lowestAir(i, j), support = -1;
+ while ((view.glass.has(cellKey(i, k, j)) || view.doorAt.has(cellKey(i, k, j))) && k < LEVEL_MAX) support = cellKey(i, k++, j);
+ return { cell: cellKey(i, k, j), support };
+}
 // ---------- Doors ----------
 export const doorFront = (rot: number) => ({ x: Math.round(Math.sin(rot * Math.PI / 2)), z: Math.round(Math.cos(rot * Math.PI / 2)) });
 export const doorKeys = (d: { x: number; y: number; z: number }) => [cellKey(d.x, d.y, d.z), cellKey(d.x, d.y + 1, d.z)];
@@ -320,17 +327,32 @@ export function doorProblem(g: GameState, key: number, rot: number, except?: str
  if (overlaps(box, playerBox(g.player.x, g.player.y, g.player.z))) return 'Место занято персонажем';
  if (g.world.base.buildings.some(b => overlaps(box, stationBox(b)))) return 'Место занято станцией';
  const reserved = reservedCells(g, except); if (cells.some(k => reserved.has(k))) return 'Здесь проход другого шлюза';
- const d: Door = { id: '', x: c.i, y: c.k, z: c.j, rot: ((rot % 4) + 4) % 4 };
- for (const side of ['front', 'back'] as const) {
-  const land = landingCells(d, side), low = cellOf(land[0]);
-  if (land.some(k => v.glass.has(k) || v.doorAt.has(k))) return side === 'front' ? 'Перед шлюзом стекло — освободите проход' : 'За шлюзом стекло — освободите проход';
-  if (isGround(low.i, low.k, low.j)) return 'Шлюз упирается в грунт — поставьте его выше';
-  if (land.some(k => areaProblem(k))) return 'Шлюзу нужен проход с обеих сторон';
-  if (g.world.base.buildings.some(b => overlaps(cellBox(land[0], 2), stationBox(b)))) return 'У шлюза стоит станция — оставьте проход свободным';
- }
- // Rocks, deposits and the capsule (static colliders) would trap the player set down on either side.
- for (const side of ['front', 'back'] as const) { const land = cellBox(landingCells(d, side)[0], 2); if (boxes.some(b => !b.id.startsWith('build-') && overlaps(land, [b.minX, b.maxX, b.minY, b.maxY, b.minZ, b.maxZ]))) return side === 'front' ? 'Перед шлюзом препятствие — поверните шлюз' : 'За шлюзом препятствие — поверните шлюз'; }
+ const d: Door = { id: '', x: c.i, y: c.k, z: c.j, rot: ((rot % 4) + 4) % 4 }, solid = (k: number) => v.glass.has(k) || v.doorAt.has(k), stations = g.world.base.buildings.map(stationBox);
+ for (const side of ['front', 'back'] as const) { const p = landingProblem(solid, d, side, stations, false); if (p) return p; }
+ for (const side of ['front', 'back'] as const) { const p = landingProblem(solid, d, side, stations, true); if (p) return p; }
  return '';
+}
+/** Rocks, deposits and the capsule (static colliders; stations are 'build-' boxes) meeting a box. */
+const staticHit = (box: number[]) => boxes.some(b => !b.id.startsWith('build-') && overlaps(box, [b.minX, b.maxX, b.minY, b.maxY, b.minZ, b.maxZ]));
+/** Why one landing of a door would trap the player set down there ('' = clear). Pure on the given layout (`solid` cells,
+ *  station boxes): new doors and the v7 → v8 migration share it. `statics`: only the rock/deposit/capsule check. */
+export function landingProblem(solid: (key: number) => boolean, d: Door, side: Side, stations: readonly number[][], statics: boolean): string {
+ const land = landingCells(d, side), low = cellOf(land[0]), box = cellBox(land[0], 2), front = side === 'front';
+ if (statics) return staticHit(box) ? front ? 'Перед шлюзом препятствие — поверните шлюз' : 'За шлюзом препятствие — поверните шлюз' : '';
+ if (land.some(solid)) return front ? 'Перед шлюзом стекло — освободите проход' : 'За шлюзом стекло — освободите проход';
+ if (isGround(low.i, low.k, low.j)) return 'Шлюз упирается в грунт — поставьте его выше';
+ if (land.some(k => areaProblem(k))) return 'Шлюзу нужен проход с обеих сторон';
+ if (stations.some(b => overlaps(box, b))) return 'У шлюза стоит станция — оставьте проход свободным';
+ return '';
+}
+/** Both landings clear and the two door cells free of stations and of other doors' landings (`reserved`). */
+export const doorFits = (solid: (key: number) => boolean, d: Door, stations: readonly number[][], reserved: ReadonlySet<number>) =>
+ !doorKeys(d).some(k => reserved.has(k)) && !stations.some(b => overlaps(cellBox(doorKeys(d)[0], 2), b)) && (['front', 'back'] as const).every(s => !landingProblem(solid, d, s, stations, false) && !landingProblem(solid, d, s, stations, true));
+/** A standing body (feet at y) meets glass or a door. */
+export function bodyInSolid(view: RoomsView, x: number, y: number, z: number) {
+ const body = playerBox(x, y, z);
+ for (let i = Math.floor(body[0]); i < body[1]; i++) for (let j = Math.floor(body[4]); j < body[5]; j++) for (let k = Math.floor(body[2]); k < body[3]; k++) { const key = cellKey(i, k, j); if (view.glass.has(key) || view.doorAt.has(key)) return true; }
+ return false;
 }
 /** Why a station footprint cannot stand here ('' = it can): glass, doors, airlock landings, a generator inside a room. */
 export function stationProblem(g: GameState, kind: string, x: number, y: number, z: number): string {
@@ -392,11 +414,10 @@ export function removeDoor(g: GameState, id: string, confirmed = false): RoomEdi
  giveBack(g, 'airlock', 1, key); return { error: '', needConfirm: false, ventGU: r.vented, breached: r.breached, at: r.at };
 }
 // ---------- Airlock passage ----------
-/** Clear landing: the standing body there meets no glass, door or station. */
+/** Clear landing: the standing body there meets no glass, door, station or static collider (rock, deposit, capsule). */
 function landingClear(g: GameState, d: Door, side: Side) {
- const p = landingPoint(g, d, side), body = playerBox(p.x, p.y, p.z), v = roomsView(g.world.base);
- for (let i = Math.floor(body[0]); i < body[1]; i++) for (let j = Math.floor(body[4]); j < body[5]; j++) for (let k = Math.floor(body[2]); k < body[3]; k++) { const key = cellKey(i, k, j); if (v.glass.has(key) || v.doorAt.has(key)) return false; }
- return !g.world.base.buildings.some(b => overlaps(body, stationBox(b)));
+ const p = landingPoint(g, d, side), body = playerBox(p.x, p.y, p.z);
+ return !bodyInSolid(roomsView(g.world.base), p.x, p.y, p.z) && !g.world.base.buildings.some(b => overlaps(body, stationBox(b))) && !staticHit(body);
 }
 /**
  * Starts a passage through door `id` from the player's side. From a room: anywhere in it within 2.5 m of the door. From

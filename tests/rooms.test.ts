@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { newGame, cloneState, sanitizeState, STATE_VERSION, type GameState } from '../src/game/state.ts';
+import { newGame, cloneState, sanitizeState, toGlassRooms, STATE_VERSION, type GameState } from '../src/game/state.ts';
 import { addItems, countItem, emptyInventory } from '../src/game/inventory.ts';
 import { makeBuilding, productionTick, connect, startJob } from '../src/game/production.ts';
-import { heightAt } from '../src/world.ts';
+import { heightAt, stationY } from '../src/world.ts';
 import { placementProblem } from '../src/buildings.ts';
 import { survivalTick } from '../src/game/survival.ts';
 import { stationStatus, roomStatus, structureStatus } from '../src/game/stationStatus.ts';
@@ -12,7 +12,7 @@ import { guideStep, nearestShelter, roomy, stepTarget } from '../src/game/guide.
 import {
  cellKey, cellOf, columnFloor, isGround, lowestAir, deriveRooms, roomsView, bumpRooms, allRooms, roomAt, roomAtCell, editRooms, predictRemove, leakAt,
  placeGlass, removeGlass, placeDoor, removeDoor, beginPassage, landingPoint, doorById, stationRoom, habitableRoom, breathingRoom, cyclingRoom,
- GLASS_LIMIT, DOOR_LIMIT, ROOM_LIMIT, shellOf, boxCells, groundRoom, type Door,
+ GLASS_LIMIT, DOOR_LIMIT, ROOM_LIMIT, shellOf, boxCells, groundRoom, bodyInSolid, groundCell, type Door,
 } from '../src/game/rooms.ts';
 
 const fresh = () => newGame('w-rooms', 7, 1, heightAt(40, 42));
@@ -256,8 +256,11 @@ test('Save v7 → v8: a dome becomes a 4×4×3 glass room with its air, airlock 
  assert.deepEqual([landingPoint(m, m.world.base.doors[0], 'front').x, landingPoint(m, m.world.base.doors[0], 'front').z], [61.5, 44.5]);
  // A dome on the very edge of the old building area keeps its shell, 3 cells past it.
  const corner = v7(fresh(), { x: -195, z: -195, rot: 3, q: 1000 }); corner.world.base.buildings = corner.world.base.buildings.slice(0, 1); const edge = sanitizeState(corner); assert.equal(cellOf(edge.world.base.glass[0]).i, -198); assert.deepEqual(sanitizeState(JSON.parse(JSON.stringify(edge))), edge);
- // Every rotation keeps the airlock on its turned side.
- for (const [rot, door] of [[0, { x: 58, z: 46 }], [2, { x: 58, z: 41 }], [3, { x: 55, z: 44 }]] as const) { const r = sanitizeState(v7(fresh(), { x: 58, z: 44, rot, q: 0 })); assert.deepEqual([r.world.base.doors[0].x, r.world.base.doors[0].z, r.world.base.doors[0].rot], [door.x, door.z, rot]); assert.equal(allRooms(r)[0].volume, 48); }
+ // Every rotation keeps the airlock on its turned side (the fixture's distributor at dome − 1 x stands aside here)…
+ const without = (o: any) => { o.world.base.buildings = o.world.base.buildings.filter((b: any) => b.kind !== 'distributor'); return o; };
+ for (const [rot, door] of [[0, { x: 58, z: 46 }], [2, { x: 58, z: 41 }], [3, { x: 55, z: 44 }]] as const) { const r = sanitizeState(without(v7(fresh(), { x: 58, z: 44, rot, q: 0 }))); assert.deepEqual([r.world.base.doors[0].x, r.world.base.doors[0].z, r.world.base.doors[0].rot], [door.x, door.z, rot]); assert.equal(allRooms(r)[0].volume, 48); }
+ // …while a station on the inner landing of the old front (here the distributor, for a west front) moves the door to the next clear wall.
+ const west = sanitizeState(v7(fresh(), { x: 58, z: 44, rot: 3, q: 0 })).world.base.doors[0]; assert.deepEqual([west.x, west.z, west.rot], [58, 46, 0]);
 });
 
 test('Save v7 → v8: a passage through a dome ends at once at its landing point; the pocket recipe takes an old dome apart', () => {
@@ -269,6 +272,66 @@ test('Save v7 → v8: a passage through a dome ends at once at its landing point
  }
  const g = fresh(); stock(g, { dome: 1 }); assert.equal(startJob(g, 'dismantle_dome'), ''); tick(g, 2000); assert.equal(countItem(g.player.inventory, 'window'), 64); assert.equal(countItem(g.player.inventory, 'airlock'), 1); assert.equal(countItem(g.player.inventory, 'dome'), 0);
  void cloneState; void roomAtCell;
+});
+
+test('Save v7 → v8: a player saved beside the old dome wall (the shell is 1 m wider) is set down on a landing, never in glass', () => {
+ // Outside, right at the old airlock (the old cycle started up to 3 m from dome + front × 2.8): the outer landing.
+ for (const at of [{ x: 57.4, z: 46.6 }, { x: 58, z: 46.6 }, { x: 60.2, z: 41 }]) {
+  const old = v7(fresh(), { x: 58, z: 44, rot: 0, q: 500000 }); Object.assign(old.player, { ...at, y: heightAt(at.x, at.z) });
+  const m = sanitizeState(old), door = m.world.base.doors[0], p = m.player;
+  assert.equal(bodyInSolid(roomsView(m.world.base), p.x, p.y, p.z), false, `${at.x}/${at.z} is free to move`);
+  const front = landingPoint(m, door, 'front'); assert.deepEqual([p.x, p.y, p.z], [front.x, front.y, front.z]); assert.equal(roomAt(m, p.x, p.y + 1, p.z), null);
+  assert.equal(beginPassage(m, door.id), '', 'and can walk in');
+ }
+ // Inside, leaning on the old wall (chest inside the old dome): the room side, on the terrain (the platform is gone).
+ const old = v7(fresh(), { x: 58, z: 44, rot: 0, q: 500000 }); Object.assign(old.player, { x: 59.85, y: .62, z: 43 });
+ const m = sanitizeState(old), back = landingPoint(m, m.world.base.doors[0], 'back');
+ assert.deepEqual([m.player.x, m.player.y, m.player.z], [back.x, back.y, back.z]); assert.equal(roomAt(m, m.player.x, m.player.y + 1, m.player.z)?.volume, 48);
+ // A player clear of the new glass stays exactly where the save left them.
+ const far = v7(fresh(), { x: 58, z: 44, rot: 0, q: 500000 }); Object.assign(far.player, { x: 58, y: heightAt(58, 49), z: 49 }); const f = sanitizeState(far); assert.deepEqual([f.player.x, f.player.z], [58, 49]);
+});
+
+test('Save v7 → v8: a migrated airlock never opens onto glass, a station or a rock — the next clear middle column or wall is used', () => {
+ // Two domes 6 m apart, the first facing the second: its old front lands in the other shell, so the door turns.
+ const pair = v7(fresh(), { x: 58, z: 44, rot: 1, q: 500000 }); pair.world.base.buildings = [pair.world.base.buildings[0], { ...structuredClone(pair.world.base.buildings[0]), id: 'build-3', x: 64, rot: 0 }];
+ const two = sanitizeState(pair); assert.deepEqual(allRooms(two).map(r => [r.volume, r.zone.q]), [[48, 500000], [48, 500000]]);
+ for (const d of two.world.base.doors) for (const side of ['back', 'front'] as const) {
+  const g = cloneState(two), at = landingPoint(g, d, side); Object.assign(g.player, at); assert.equal(beginPassage(g, d.id), '', `${d.id} from its ${side} side`);
+ }
+ assert.notEqual(two.world.base.doors[0].rot, 1, 'the first dome no longer opens into the second');
+ // Stations the old spot checks allowed at dome + (1, 1) and in front of the old exit: the door takes the other middle column.
+ const st = v7(fresh(), { x: 58, z: 44, rot: 0, q: 500000 }), body = st.world.base.buildings[1];
+ st.world.base.buildings = [st.world.base.buildings[0], { ...structuredClone(body), id: 'build-2', x: 59, z: 45 }, { ...structuredClone(body), id: 'build-3', kind: 'refill', x: 59, z: 48, y: heightAt(59, 48) }];
+ const s2 = sanitizeState(st), d = s2.world.base.doors[0]; assert.deepEqual([d.x, d.z, d.rot], [57, 46, 0]);
+ for (const side of ['back', 'front'] as const) { const g = cloneState(s2); Object.assign(g.player, landingPoint(g, d, side)); assert.equal(beginPassage(g, d.id), '', `enter/exit from ${side}`); }
+ // A door with a rock (here the stone outcrop at X30/Z52) on its far landing does not start a cycle that would end inside it.
+ const g = fresh(), y = lowestAir(30, 50); lay(g, [], [{ id: 'door-r', x: 30, y, z: 50, rot: 0 }]); Object.assign(g.player, landingPoint(g, doorById(g, 'door-r')!, 'back'));
+ assert.match(beginPassage(g, 'door-r'), /Проход загорожен/);
+});
+
+test('Save v7 → v8: stations that stood on the dome platform go down to the terrain; others keep their height', () => {
+ // A v7-legal dome site with relief: the platform stood at the highest terrain over ±2.5 m + 0.12.
+ let site: { x: number; z: number; y: number } | null = null;
+ for (let x = 240; x < 300 && !site; x += 3) for (let z = -160; z < -100 && !site; z += 3) { const hs = [-2.5, 0, 2.5].flatMap(dx => [-2.5, 0, 2.5].map(dz => heightAt(x + dx, z + dz))), rel = Math.max(...hs) - Math.min(...hs); if (rel > .3 && rel <= .5) site = { x, z, y: Math.max(...hs) + .12 }; }
+ assert.ok(site, 'a sloped dome site exists'); const { x, z, y } = site!;
+ const old = v7(fresh(), { x, z, rot: 0, q: 0 }), [dome, inner, outer] = old.world.base.buildings; dome.y = y; Object.assign(inner, { x: x + 1, z: z - 1, y }); Object.assign(outer, { x: x - 7, z, y: y + .3 });
+ const m = sanitizeState(old), [a, b] = m.world.base.buildings;
+ assert.equal(a.y, stationY(x + 1, z - 1)); assert.ok(a.y < y, 'no longer floating at the platform height'); assert.equal(stationRoom(m, a)?.volume, allRooms(m)[0].volume);
+ assert.equal(b.y, y + .3, 'a station outside the dome is not moved');
+});
+
+test('Save v8 without the glass fields (a preview that kept the dome) still converts; a converted save is never converted again', () => {
+ const old = v7(fresh(), { x: 58, z: 44, rot: 0, q: 500000 }); old.meta.stateVersion = 8;
+ const m = sanitizeState(old); assert.equal(m.meta.stateVersion, STATE_VERSION); assert.deepEqual(allRooms(m).map(r => [r.volume, r.zone.q]), [[48, 500000]]);
+ assert.ok(m.world.base.buildings.every(b => b.kind !== 'dome')); assert.equal(m.world.base.doors.length, 1);
+ assert.deepEqual(sanitizeState(JSON.parse(JSON.stringify(m))), m, 'idempotent');
+ const again = toGlassRooms(JSON.parse(JSON.stringify(m))); assert.deepEqual(again.world, JSON.parse(JSON.stringify(m.world)), 'running the step twice changes nothing');
+ const newer: any = JSON.parse(JSON.stringify(old)); newer.meta.stateVersion = 9; assert.equal((toGlassRooms(newer).meta as any).stateVersion, 9, 'the version is never lowered');
+});
+
+test('Aim at the terrain: a block goes on top of the column\'s blocks and names the one it rests on (held F stacks only onto older blocks)', () => {
+ const g = fresh(), k = lowestAir(57, 43); assert.deepEqual(groundCell(roomsView(g.world.base), 57, 43), { cell: cellKey(57, k, 43), support: -1 });
+ lay(g, [cellKey(57, k, 43)]); assert.deepEqual(groundCell(roomsView(g.world.base), 57, 43), { cell: cellKey(57, k + 1, 43), support: cellKey(57, k, 43) });
 });
 
 test('Rooms: a block that faces only the outside belongs to the box it is joined to; a leaking box still reports its leak', () => {

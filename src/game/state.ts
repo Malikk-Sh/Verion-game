@@ -1,5 +1,5 @@
 import { electricPort } from './production';
-import { heightAt } from '../world';
+import { heightAt, stationY } from '../world';
 import { freshBase, RECIPE_BY_ID, LINK_RANGE, MAX_REPEAT, GEN_BUFFER, FIBER_EU, ELECTROLYZER_O2, PORT_O2, CAPSULE_CAPACITY, type BaseState, type Job, type Building, type Link } from './production';
 import { BASIC_SUIT, BUILDABLE, CONTENT_VERSION, GENERATOR_VERSION, ITEMS, LEGACY_CONTENT_VERSIONS, SUIT_PARTS, TANKS, TOOLS, type SuitPart } from './defs';
 import { emptyInventory, INVENTORY_SIZE, type Slot } from './inventory';
@@ -8,7 +8,7 @@ import { covers } from './nature';
 import { CYCLE_TICKS, START_OFFSET_TICKS } from './daycycle';
 import { freshQuestProgress, QUEST_FACTS, type QuestProgress } from './questFacts';
 import { QUEST_IDS, type QuestId } from './questCatalog';
-import { cellKey, cellOf, capacityOf, deriveRooms, doorFront, doorKeys, groundRoom, landingAt, lowestAir, storable, STORE_MARGIN, shellOf, CELL_MAX, CELL_MIN, DOOR_LIMIT, GLASS_LIMIT, LEVEL_MAX, LEVEL_MIN, PASSAGE_MS, ROOM_LIMIT, ROOM_MAX, type Door, type Zone } from './rooms';
+import { bodyInSolid, doorFits, landingCells, stationBox, cellKey, cellOf, capacityOf, deriveRooms, doorFront, doorKeys, groundRoom, landingAt, lowestAir, storable, STORE_MARGIN, shellOf, CELL_MAX, CELL_MIN, DOOR_LIMIT, GLASS_LIMIT, LEVEL_MAX, LEVEL_MIN, PASSAGE_MS, ROOM_LIMIT, ROOM_MAX, type Door, type Zone } from './rooms';
 /**
  * Complete persistent game state. Plain JSON only: no class instances, GPU objects or
  * functions (TECHNICAL §2). Revision numbers live in save manifests.
@@ -141,7 +141,13 @@ export function migrateRaw(raw:unknown):unknown{
  const rawVersion=isObj(raw)&&isObj(raw.meta)?Number(raw.meta.stateVersion):NaN;
  const v6=rawVersion===V6||rawVersion===V7||rawVersion===STATE_VERSION||![5,6].includes(Number(r.meta.stateVersion))?r:toV6(r);
  const v7=isObj(v6)&&isObj(v6.meta)&&v6.meta.stateVersion===V6?toV7(v6):v6;
- return isObj(v7)&&isObj(v7.meta)&&v7.meta.stateVersion===V7?toV8(v7):v7;
+ return isObj(v7)&&isObj(v7.meta)&&needsGlass(v7)?toGlassRooms(v7):v7;
+}
+/** The glass step is field-based: a v7 save, or any later save still without the room fields (a v8 file from a preview
+ *  that kept the dome) converts; a save that has them is never touched again. */
+function needsGlass(r:Obj){
+ const v=Number(obj(r.meta,'meta').stateVersion),base=isObj(r.world)&&isObj(r.world.base)?r.world.base:null;
+ return v===V7||v>V7&&!!base&&!('glass' in base&&'doors' in base&&'zones' in base);
 }
 /** S3 halves kiln fuel: a paid batch keeps one fiber, the other returns to the fuel slot (or a spare slot / a pile). */
 function kilnFuelFix(b:Obj,world:Obj,at?:{x:number;z:number}){
@@ -178,8 +184,9 @@ function toV7(r:Obj):Obj{
  for(const d of [...drops])if(isObj(d))packed(d.items);
  obj(next.meta,'meta').stateVersion=V7;return next;
 }
-/** v7 → v8 (S4): domes become glass rooms (domesToGlass); per-body zones retire; a packed dome is a plain dome item. */
-function toV8(r:Obj):Obj{
+/** v7 → v8 (S4): domes become glass rooms (domesToGlass); per-body zones retire; a packed dome is a plain dome item.
+ *  Idempotent; the version only ever rises (a newer save keeps its own number). */
+export function toGlassRooms(r:Obj):Obj{
  const next=structuredClone(r),world=obj(next.world,'world'),base=obj(world.base,'world.base'),pl=obj(next.player,'player');
  for(const k of ['glass','doors','zones'])if(!(k in base))base[k]=[];
  domesToGlass(base,pl);
@@ -188,26 +195,43 @@ function toV8(r:Obj):Obj{
  const unpack=(slots:unknown)=>{if(Array.isArray(slots))for(const s of slots)if(isObj(s)&&isObj(s.packed)){if(s.itemId==='dome')delete s.packed;else delete s.packed.zone;}};
  unpack(pl.inventory);if(isObj(world.crates))for(const c of Object.values(world.crates))unpack(c);
  if(Array.isArray(world.drops))for(const d of world.drops)if(isObj(d))unpack(d.items);
- obj(next.meta,'meta').stateVersion=STATE_VERSION;return next;
+ const m=obj(next.meta,'meta');m.stateVersion=Math.max(Number(m.stateVersion),STATE_VERSION);return next;
 }
 /**
  * S4 (D31): each placed dome becomes a glass shell with a built-in airlock and keeps its air. Interior: cells x−2…x+1 ×
  * z−2…z+1, three air levels above each column's lowest air level, one common top. Shell: every non-ground face neighbour
- * of the interior plus four corner columns for the look. The airlock takes the two lowest wall cells in the middle of the
- * old front wall (same `rot`). Stations stay where they stand (overlaps are allowed here; only new placement checks them).
- * A passage through a dome ends at once: the player is set down at that side's landing point.
+ * of the interior plus four corner columns for the look. The platform is gone: stations that stood on it go down to the
+ * terrain (stationY), and so does the player. Stations stay where they stand otherwise (overlaps are allowed here).
+ * The airlock takes the two lowest wall cells in the middle of a wall, at the level of the highest of its three columns.
+ * It keeps the old front (same `rot`, middle column x/z, then x−1/z−1) when both landings are clear by the rules of a new
+ * door (glass, doors, ground, stations, rocks); else the other walls are tried in turn; if none is clear the old front
+ * stays. A passage through a dome ends at once, and a player left inside the new glass is set down on a landing: the
+ * room side when the chest was inside the old dome, else the outer side.
  */
 export function domesToGlass(base:Obj,player:Obj){
- const bodies=arr(base.buildings,'buildings',64),domes=bodies.filter((b):b is Obj=>isObj(b)&&b.kind==='dome');
+ const bodies=arr(base.buildings,'buildings',64),domes=bodies.filter((b):b is Obj=>isObj(b)&&b.kind==='dome'),rest=bodies.filter((b):b is Obj=>isObj(b)&&b.kind!=='dome');
  base.buildings=bodies.filter(b=>!(isObj(b)&&b.kind==='dome'));
  const glass=new Set((Array.isArray(base.glass)?base.glass:[]) as number[]),doors=(Array.isArray(base.doors)?base.doors:[]) as Door[];
- let nextId=Number(base.nextId);const made:{id:string;door:Door;inner:number;zone:Obj}[]=[];
- for(const d of domes){
-  const x=Number(d.x),z=Number(d.z),rot=((Number(d.rot??0)%4)+4)%4,f=doorFront(rot),interior=groundRoom(x-2,z-2,4,4,3),top=Math.max(...interior.map(c=>cellOf(c).k));
+ // The old dome volume (insideDome of S3): |dx|, |dz| < 2 above the platform.
+ const onPlatform=(d:Obj,b:Obj)=>Math.abs(Number(b.x)-Number(d.x))<2&&Math.abs(Number(b.z)-Number(d.z))<2&&Number(b.y)>=Number(d.y)-.1&&Number(b.y)<Number(d.y)+3;
+ const shells=domes.map(d=>{
+  const x=Number(d.x),z=Number(d.z),rot=((Number(d.rot??0)%4)+4)%4,interior=groundRoom(x-2,z-2,4,4,3),top=Math.max(...interior.map(c=>cellOf(c).k));
   for(const c of shellOf(interior))glass.add(c);
   for(const [i,j] of [[x-3,z-3],[x-3,z+2],[x+2,z-3],[x+2,z+2]])for(let k=lowestAir(i,j);k<=top;k++)glass.add(cellKey(i,k,j));
-  const di=Math.floor(x+f.x*2.5),dj=Math.floor(z+f.z*2.5),door:Door={id:'door-'+nextId++,x:di,y:Math.max(lowestAir(di,dj),lowestAir(di-f.x,dj-f.z)),z:dj,rot};
-  doors.push(door);made.push({id:String(d.id),door,inner:Math.min(...interior),zone:isObj(d.zone)?d.zone:{}});
+  return {d,x,z,rot,interior:new Set(interior),inner:Math.min(...interior)};
+ });
+ for(const b of rest){const s=shells.find(m=>onPlatform(m.d,b));if(s)b.y=stationY(Number(b.x),Number(b.z));}
+ if(shells.some(m=>onPlatform(m.d,player)))player.y=heightAt(Number(player.x),Number(player.z));
+ const stations=rest.map(b=>stationBox({kind:String(b.kind),level:Number(b.level),x:Number(b.x),y:Number(b.y),z:Number(b.z)}));
+ const taken=new Set<number>(),reserved=new Set<number>(),claim=(d:Door)=>{for(const k of doorKeys(d))taken.add(k);for(const s of ['front','back'] as const)for(const k of landingCells(d,s))reserved.add(k);};
+ for(const d of doors)claim(d);
+ let nextId=Number(base.nextId);const made:{id:string;door:Door;inner:number;interior:Set<number>;x:number;z:number;zone:Obj}[]=[];
+ for(const m of shells){
+  const own=(d:Door)=>new Set(doorKeys(d)),options=[0,1,2,3].flatMap(r=>{const rot=(m.rot+r)%4,f=doorFront(rot),i0=Math.floor(m.x+f.x*2.5),j0=Math.floor(m.z+f.z*2.5);
+   return [0,-1].map(o=>{const i=i0+(f.x?0:o),j=j0+(f.z?0:o);return {id:'',x:i,y:Math.max(lowestAir(i,j),lowestAir(i-f.x,j-f.z),lowestAir(i+f.x,j+f.z)),z:j,rot} as Door;});});
+  const pick=options.find(d=>{const mine=own(d);return doorFits(k=>(glass.has(k)&&!mine.has(k))||taken.has(k),d,stations,reserved);})??options[0];
+  const door={...pick,id:'door-'+nextId++};claim(door);
+  doors.push(door);made.push({id:String(m.d.id),door,inner:m.inner,interior:m.interior,x:m.x,z:m.z,zone:isObj(m.d.zone)?m.d.zone:{}});
  }
  for(const door of doors)for(const k of doorKeys(door))glass.delete(k);
  const sorted=[...glass].sort((a,b)=>a-b),view=deriveRooms(sorted,doors),zones=(Array.isArray(base.zones)?base.zones:[]) as unknown[];
@@ -217,8 +241,13 @@ export function domesToGlass(base:Obj,player:Obj){
   if(same){same.q=Math.min(Number(same.q)+q,capacityOf(room.volume));continue;}
   zones.push({cell:room.cell,q,temperature:Number(z.temperature??10),purity:Number(z.purity??0),lossRemainder:Number(z.lossRemainder??0)});}
  Object.assign(base,{glass:sorted,doors,zones,nextId});
- const pass=base.passage;
+ const pass=base.passage,px=Number(player.x),py=Number(player.y),pz=Number(player.z);
  if(isObj(pass)&&'domeId' in pass){const m=made.find(v=>v.id===pass.domeId);if(m)Object.assign(player,landingAt(view,m.door,pass.direction==='in'?'back':'front'));base.passage=null;}
+ // The shell reaches 1 m past the old walls: a player saved beside the dome (often right at its airlock) would stand in glass.
+ else if(made.length&&bodyInSolid(view,px,py,pz)){
+  const m=made.reduce((a,b)=>Math.hypot(b.x-px,b.z-pz)<Math.hypot(a.x-px,a.z-pz)?b:a);
+  Object.assign(player,landingAt(view,m.door,m.interior.has(cellKey(Math.floor(px),Math.floor(py+1),Math.floor(pz)))?'back':'front'));
+ }
 }
 function toV6(r:Obj):Obj{
  const next=structuredClone(r),world=obj(next.world,'world');
