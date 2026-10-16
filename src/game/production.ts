@@ -60,7 +60,10 @@ export const manualWork = (g: GameState) => g.world.base.buildings.filter(b=>b.k
 export const energyRate = (b: Building, r: Recipe) => b.kind === 'workbench' && b.level === 2 ? WORKBENCH_UPGRADE.EU_per_second : r.EU_per_second;
 /** S5: workbench II also runs pocket recipes, so what its window queues is made there, with or without the player
  * (in S4 the window sent grass → fiber to the pocket and no batch ever counted as made without you). */
-export const runsOn = (b: { kind: string; level?: number }, r: Recipe) => r.station === b.kind || (r.station === 'hand' && b.kind === 'workbench' && b.level === 2);
+export const runsOn = (b: { kind: string; level?: number }, r: Recipe) => r.station === b.kind || (r.station === 'hand' && b.kind === 'workbench' && b.level === 2 && slotsOf(r.inputs) <= 4 && slotsOf(r.outputs) <= 4);
+/** Slots a set of stacks takes (stateful tools/tanks one each). A pocket recipe that would not fit the four input or
+ * output slots of bench II (the legacy dismantle_dome: 64 glass blocks + an airlock = 5) stays in the pocket. */
+const slotsOf = (o: Record<string, number>) => Object.entries(o).reduce((n,[id,c])=>n+(!ITEMS[id]?0:TOOLS[id]||TANKS[id]?c:Math.ceil(c/(ITEMS[id].stack??1))),0);
 /** Where a recipe chosen in a station window (or in the pocket workshop, `b` undefined) is made. */
 export const craftOwner = (b: Building | undefined, r: Recipe) => b && runsOn(b, r) ? b.id : 'hand';
 export const electricPort = (b: {kind:string;level?:number}) => !['capsule','kiln'].includes(b.kind) && (b.kind !== 'workbench' || b.level === 2);

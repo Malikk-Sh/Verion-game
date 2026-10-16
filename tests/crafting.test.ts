@@ -17,6 +17,15 @@ test('Workbench I pauses away, resumes near; only one nearby bench uses the play
  const {g,b}=setup();stock(g,{copper:3});assert.equal(startJob(g,'craft_wire',b.id),'');tick(g,1000);g.player.x=80;tick(g,8000);assert.equal(b.job?.workMs,1000);assert.match(startJob(g,'craft_wire',b.id,true),/текущую/);
  g.player.x=42;const second=makeBuilding(g,'workbench',44,0,42);assert.equal(startJob(g,'craft_wire',second.id),'');tick(g,1000);assert.equal(b.job!.workMs,2000);assert.equal(second.job!.workMs,0);tick(g,6000);assert.equal(countItem(b.output,'wire'),4);assert.equal(second.job!.workMs,0);tick(g,8000);assert.equal(countItem(second.output,'wire'),4);
 });
+test('A pocket recipe that does not fit the four bench II output slots (dismantle_dome) stays in the pocket',()=>{
+ const {g,b}=setup();equip(g);stock(g,{...WORKBENCH_UPGRADE.inputs,cable:1});upgradeBuilding(g,b.id);const gen=makeBuilding(g,'biogenerator',44,0,42);gen.energy=GEN_BUFFER;connect(g,'cable',gen.id,b.id);
+ // 64 glass blocks (stack 16 = 4 slots) + 1 airlock need 5 slots: on the bench the batch finished but could never be delivered.
+ g.player.inventory[1]=null;stock(g,{dome:1});const r=RECIPE_BY_ID.get('dismantle_dome')!;assert.equal(craftOwner(b,r),'hand');assert.equal(craftOwner(b,RECIPE_BY_ID.get('grass_parts')!),b.id);
+ assert.equal(queueJob(g,'dismantle_dome',b.id,1),'Неверная очередь');assert.equal(startJob(g,'dismantle_dome',b.id),'Нужна подходящая станция');assert.equal(countItem(g.player.inventory,'dome'),1);
+ assert.equal(startJob(g,'dismantle_dome',craftOwner(b,r)),'');tick(g,2100);assert.equal(g.world.base.hand,null);assert.equal(b.job,null);
+ assert.equal(countItem(g.player.inventory,'window'),64);assert.equal(countItem(g.player.inventory,'airlock'),1);assert.equal(countItem(g.player.inventory,'dome'),0);
+ const bad:any=structuredClone(g);bad.world.base.buildings.find((v:any)=>v.id===b.id).queue=['dismantle_dome'];assert.throws(()=>sanitizeState(bad),/рецепт/);
+});
 test('Filling inputs is atomic and moves only deficits; cancellation and returning buffers conserve items',()=>{
  const {g,b}=setup();stock(g,{iron:4,copper:1});assert.equal(loadRecipeInputs(g,'craft_wrench',b.id),'');assert.equal(loadRecipeInputs(g,'craft_wrench',b.id),'');assert.equal(countItem(b.input,'iron'),4);assert.equal(startJob(g,'craft_wrench',b.id,true),'');tick(g,1500);assert.equal(cancelJob(g,b.id),'');assert.equal(countItem(g.player.inventory,'iron'),4);assert.equal(countItem(b.input,'iron'),0);
  b.input=Array.from({length:4},()=>({itemId:'stone',count:64}));const before=structuredClone(g);assert.match(loadRecipeInputs(g,'craft_wrench',b.id),/полон/);assert.deepEqual(g,before);b.input=[{itemId:'copper',count:1},null,null,null];assert.equal(collectInput(g,b.id),1);
