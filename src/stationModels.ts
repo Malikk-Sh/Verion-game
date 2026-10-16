@@ -159,14 +159,15 @@ function doorBody(k: Kit, m: Mats) {
 }
 export type DoorLook = { status: StationStatus; outer: number; inner: number };
 export type DoorVisual = { group: THREE.Group; update(dt: number, look: DoorLook, still?: boolean): void; dispose(): void };
-let DOOR: THREE.Group | null = null;
+let DOOR: THREE.Group | null = null, DOOR_LAMPS: THREE.BufferGeometry | null = null;
 /** One placed airlock: the cached static frame plus its own shutters and status lamps. */
 export function buildDoor(): DoorVisual {
  const m = M(); if (!DOOR) { const k = new Kit(); doorBody(k, m); DOOR = k.finish(); }
  const group = new THREE.Group(); for (const c of DOOR.children) { const mesh = c as THREE.Mesh, copy = new THREE.Mesh(mesh.geometry, mesh.material); copy.castShadow = mesh.castShadow; copy.receiveShadow = true; group.add(copy); }
  const shutters = [.43, -.43].map(z => { const s = new THREE.Group(); s.position.set(0, 1.79, z); const p = new THREE.Mesh(BOX, m.panel); p.scale.set(.8, 1.72, .04); p.position.y = -.86; p.castShadow = true; s.add(p); const w = new THREE.Mesh(BOX, m.glass); w.scale.set(.34, .18, .05); w.position.set(0, -.5, 0); s.add(w); group.add(s); return s; });
  const mat = new THREE.MeshStandardMaterial({ color: '#202628', emissive: LAMP_COLOR.idle, emissiveIntensity: 2.2, roughness: .3 });
- for (const z of [-.51, .51]) { const l = new THREE.Mesh(lampGeo, mat); l.position.set(0, 1.9, z); group.add(l); }
+ // S5: both status lamps (one each side) are one mesh — one draw call per airlock fewer.
+ DOOR_LAMPS ??= mergeGeometries([-.51, .51].map(z => lampGeo.clone().translate(0, 1.9, z)))!; group.add(new THREE.Mesh(DOOR_LAMPS, mat));
  let t = Math.random() * 10;
  return {
   group,

@@ -109,6 +109,8 @@ function boot(){
  // ---------- Settings ----------
  function applyQuality(q:Quality){
   settings.quality=q;saveSettings(settings);world.setQuality(q);fx.setQuality(q);prints.setQuality(q);renderer.shadowMap.enabled=q!=='low';lastRender=-Infinity;diagnostics.event('quality',0,{quality:q});
+  // S5: the new shadow setup changes every lit program; the hidden glass and airlock warm-ups join that compile, so the first room built after a quality change compiles nothing.
+  if(sceneReady){built.glass.warmup(true);void renderer.compileAsync(scene,camera).catch(()=>{});built.glass.warmup(false);}
   renderer.setPixelRatio(q==='high'?Math.min(devicePixelRatio,1.5):q==='low'?.75:1);resize();
   el('quality-label').textContent=QUALITY_LABEL[q];
  }

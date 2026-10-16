@@ -155,6 +155,9 @@ export function createGlassView(root: THREE.Group, fx?: Fx) {
  // zero vertices still counts as a call).
  const warm = new THREE.Mesh(joinChunks([{ position: new Float32Array([0, -999, 0, 0, -999, 0, 0, -999, 0]), normal: new Float32Array([0, 1, 0, 0, 1, 0, 0, 1, 0]), trim: new Float32Array(3), index: new Uint32Array([0, 1, 2]), faces: 0, skirts: 0, trims: 0 }]), mat);
  warm.geometry.setDrawRange(0, 0); warm.frustumCulled = false; warm.onAfterRender = () => { warm.visible = false; }; group.add(warm);
+ // Likewise one airlock model far below the world for the boot-time compile (its two-pass station glass would otherwise
+ // compile on the first airlock in view); hidden on the first game frame and kept, so its programs stay referenced.
+ const warmDoor = buildDoor(); warmDoor.group.position.y = -999; warmDoor.group.name = 'warm-door'; group.add(warmDoor.group);
  // Chunks keep their cells and built faces; the one drawn mesh joins every chunk (rebuilt only after an edit).
  const chunks = new Map<number, { cells: Set<number>; faces: ChunkGeometry | null }>();
  let mesh: THREE.Mesh | null = null;
@@ -249,7 +252,7 @@ export function createGlassView(root: THREE.Group, fx?: Fx) {
  function reset() { chunks.clear(); join(); for (const s of doors.values()) { group.remove(s.v.group); s.v.dispose(); } doors.clear(); hash.clear(); solids.clear(); glass = new Set(); doorCells = new Set(); rev = -1; clearTint(); showLeak([]); vent = null; }
  /** `dt` is real frame time (0 while frozen). */
  function update(g: GameState, dt: number) {
-  const still = reducedMotion(), p = g.world.base.passage;
+  const still = reducedMotion(), p = g.world.base.passage; warmDoor.group.visible = false;
   for (const s of doors.values()) {
    // Outer shutter opens early in an inbound cycle and late in an outbound one; the inner one the other way round.
    const cycle = p?.doorId === s.d.id && p.remainingMs > 0, t = cycle ? 1 - p!.remainingMs / 6000 : 0, open = (a: number) => cycle ? Math.max(0, Math.sin(Math.PI * THREE.MathUtils.clamp((t - a) / .35, 0, 1))) : 0;
@@ -271,6 +274,8 @@ export function createGlassView(root: THREE.Group, fx?: Fx) {
   query: (minX: number, minZ: number, maxX: number, maxZ: number, out: Box[]) => hash.query(minX, minZ, maxX, maxZ, out),
   /** A breach jet is playing. */
   get venting() { return !!vent; },
+  /** Shows the hidden warm-up meshes for one renderer.compile (a quality change recompiles the lit programs). */
+  warmup(on: boolean) { warm.visible = warmDoor.group.visible = on; },
   stats: () => ({ chunks: [...chunks.values()].filter(c => c.faces).length, meshes: mesh ? 1 : 0, castShadow: !!mesh?.castShadow, faces: [...chunks.values()].reduce((a, c) => a + (c.faces?.faces ?? 0), 0), trims: [...chunks.values()].reduce((a, c) => a + (c.faces?.trims ?? 0), 0), doors: doors.size, lamps: lamps?.count ?? 0, boxes: hash.count, leak: leak?.mesh.count ?? 0, tint: !!tint }),
   };
 }
