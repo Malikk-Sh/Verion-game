@@ -72,3 +72,17 @@ test('The map mark is optional in saves: older worlds load with null, a mark rou
 test('The full-screen map renders the covered 3D scene at 4 Hz',()=>{
  assert.equal(sceneInterval(true,true,'map-panel','high'),250);assert.equal(sceneInterval(true,true,'map-panel','low'),250);assert.equal(sceneInterval(true,true,'inventory-panel','high'),1000/15);
 });
+
+test('Glass rooms on the map: one outline per glass structure, the airlock opens a card and can be led to (D31 × D34)',async()=>{
+ const {glassPrints}=await import('../src/ui/map');const {groundRoom,shellOf,doorKeys,lowestAir,bumpRooms,allRooms}=await import('../src/game/rooms');
+ const g=fresh();assert.deepEqual(glassPrints(g),[]);
+ const door={id:'door-1',x:57,y:lowestAir(57,45),z:45,rot:0};g.world.base.glass=[...shellOf(groundRoom(56,42,3,3,3))].filter(k=>!doorKeys(door).includes(k)).sort((a,b)=>a-b);g.world.base.doors=[door];g.world.base.nextId=2;bumpRooms(g);
+ assert.equal(allRooms(g).length,1);
+ const [shape,lock]=glassPrints(g);assert.deepEqual([shape.x,shape.z,shape.w,shape.d,shape.tone,shape.id],[57.5,43.5,5,5,'warn',undefined],'a closed room short of air needs help');
+ assert.deepEqual([lock.id,lock.x,lock.z,lock.tone,lock.label],['door-1',57.5,45.5,'warn','Шлюз']);
+ g.world.base.zones[0].q=216000;g.world.base.zones[0].purity=1;g.world.base.zones[0].temperature=18;assert.deepEqual(glassPrints(g).map(f=>f.tone),['ok','ok'],'habitable air tints like a working station');
+ const t=resolveNav(g,'door-1',null);assert.ok(t&&t!=='invalid');assert.deepEqual([t.x,t.z,t.radius,t.name],[57.5,45.5,3,'Шлюз']);
+ assert.ok(arrived(t,57.5,47.9)&&!arrived(t,57.5,48.6),'arrival within 3 m of the airlock');
+ g.world.base.doors=[];bumpRooms(g);assert.equal(resolveNav(g,'door-1',null),'invalid','a removed airlock falls back to the guide');
+ assert.deepEqual(glassPrints(g).map(f=>f.tone),['off'],'open glass is drawn switched off');
+});

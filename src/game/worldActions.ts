@@ -1,5 +1,5 @@
 import { addItems, firstEmpty, type Slot } from './inventory';
-import { insideDome, linkLength, linkSegments, machine, nearby, type Building } from './production';
+import { linkLength, linkSegments, machine, nearby } from './production';
 import { TANKS } from './defs';
 import { tankGap } from './survival';
 import { HOTBAR_SIZE, type GameState } from './state';
@@ -7,8 +7,6 @@ const isTank = (s: Slot) => !!s && Object.hasOwn(TANKS, s.itemId);
 /** Packing and all link refunds are atomic: a full backpack leaves the world unchanged. */
 export function packStation(g:GameState,id:string):string{
  const b=machine(g,id);if(!b||Math.hypot(g.player.x-b.x,g.player.z-b.z)>3.2)return 'Подойдите к станции';
- if(g.world.base.passage?.domeId===id||insideDome(b,g.player.x,g.player.y,g.player.z))return 'Сначала выйдите из купола';
- if(b.kind==='dome'&&g.world.base.buildings.some(v=>v!==b&&insideDome(b,v.x,v.y,v.z)))return 'Сначала заберите станции внутри купола';
  const inv=structuredClone(g.player.inventory),at=firstEmpty(inv);if(at<0)return 'Освободите ячейку в рюкзаке';
  const {id:oldId,x,y,z,...packed}=structuredClone(b);inv[at]={itemId:b.kind,count:1,packed};
  const links=g.world.base.links.filter(l=>l.from===id||l.to===id);for(const l of links)if(addItems(inv,l.kind,linkSegments(linkLength(g,l))))return 'Нет места для кабелей и труб';

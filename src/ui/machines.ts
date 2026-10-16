@@ -2,8 +2,9 @@ import { installTank } from '../game/backpack';
 import { ITEMS, TANKS } from '../game/defs';
 import { loadMachineSlot, takeSlot, packStation, moveTank, moveTankGap, wearSlot, type TankPlace } from '../game/worldActions';
 import { addItems, countItem, transferSlot, type Slot } from '../game/inventory';
-import { machine, RECIPES, RECIPE_BY_ID, beginPassage, cancelJob, connect, disconnect, linkOptions, linkLength, endpoint, gasRate, powerRate, supplyRate, telemetry, DOME_CAPACITY, ELECTROLYZER_O2, FIBER_EU, GEN_BUFFER, O2_PER_WU, PORT_O2, type Building } from '../game/production';
-import { stationStatus, type StationStatus } from '../game/stationStatus';
+import { machine, RECIPES, RECIPE_BY_ID, cancelJob, connect, disconnect, linkOptions, linkLength, endpoint, gasRate, powerRate, supplyRate, telemetry, ELECTROLYZER_O2, FIBER_EU, GEN_BUFFER, O2_PER_WU, PORT_O2, type Building } from '../game/production';
+import { stationStatus, structureStatus, type StationStatus } from '../game/stationStatus';
+import { beginPassage, capacityOf, doorById, doorKeys, doorRooms, habitableQ, removeDoor, removeGlass, type RoomEdit } from '../game/rooms';
 import { CAPSULE_CAPACITY, lastAirText } from '../game/survival';
 import type { GameState } from '../game/state';
 import type { GuideTarget } from '../game/guide';
@@ -23,7 +24,9 @@ const ELECTROLYSIS = RECIPE_BY_ID.get('electrolysis')!;
 /** Meter scale of an empty tank connector: the basic tank. */
 const EMPTY_TANK = TANKS.bottle_1.capacity / 1000;
 /** What a machine window needs from its host; `caution` shows an amber chip that asks to repeat the action. */
-export type MachineHost = { say: Say; caution: (text: string) => void; changed: () => void; draw: () => void; refill: (id: string | null) => void; nav?: (t: GuideTarget) => void; inside: () => boolean };
+export type MachineHost = { say: Say; caution: (text: string) => void; changed: () => void; draw: () => void; refill: (id: string | null) => void; nav?: (t: GuideTarget) => void; inside: () => boolean; room?: RoomHost };
+/** World side of the room window: effects after a glass/door edit, the red tint before air leaves. */
+export type RoomHost = { edited(r: RoomEdit): void; tint(key: number): void };
 type Ctx = MachineHost & { g: GameState; id: string };
 
 function meter(key: string, label: string, value: number, max: number, unit: string, tone = '', mark?: number) {
@@ -128,8 +131,8 @@ function connections(ctx: Ctx, b: Building) {
  const { g, id } = ctx, sec = h('section', '', 'st-links');
  const own = g.world.base.links.filter(l => l.from === id || l.to === id);
  const options = linkOptions(g, id);
- if (!own.length && !options.length && b.kind !== 'dome' && b.kind !== 'kiln') { sec.append(h('h4', 'Подключения'), h('p', 'Рядом нет станций для соединения (до 12 м).', 'st-note')); return sec; }
- if (b.kind === 'dome' || b.kind === 'kiln' || (b.kind === 'workbench' && b.level === 1)) return sec;
+ if (!own.length && !options.length && b.kind !== 'kiln') { sec.append(h('h4', 'Подключения'), h('p', 'Рядом нет станций для соединения (до 12 м).', 'st-note')); return sec; }
+ if (b.kind === 'kiln' || (b.kind === 'workbench' && b.level === 1)) return sec;
  sec.append(h('h4', 'Подключения'));
  const list = h('ul', '', 'st-link-list');
  for (const l of own) {
@@ -173,7 +176,36 @@ function quickLoad(ctx: Ctx, kind: string, id: string, items: string[], label: s
   ctx.say(moved ? '' : err || (held && !g.player.inventory.some(s => s?.itemId === held) ? `В рюкзаке нет: ${ITEMS[held].name}. Сменить сырьё — нажмите на стак` : 'Нечего загрузить'), 'Загружено');
  }, 'st-btn small', !has);
 }
+/** Room window ids: 'glass:<cell key>' for a glass block, the airlock's own id ('door-N'). */
+export const isStructure = (id: string) => id.startsWith('glass:') || id.startsWith('door-');
+export function structureKey(g: GameState, id: string): number | null { if (id.startsWith('glass:')) { const k = Number(id.slice(6)); return g.world.base.glass.includes(k) ? k : null; } const d = doorById(g, id); return d ? doorKeys(d)[0] : null; }
+let confirmKey = -1, confirmUntil = 0, structureTick = 0;
+/** Glass block / airlock window (S4): the room beside it (volume, air, checklist) or why it is not closed; the airlock
+ *  passage; taking the block back (a second press within 3 s confirms when air would leave). */
+function structureView(g: GameState, id: string, host: MachineHost): HTMLElement {
+ const { say, caution } = host, root = h('div', '', 'st-layout'), left = h('div', '', 'st-main'); root.append(left);
+ const key = structureKey(g, id); if (key === null) return root;
+ root.dataset.kind = 'room'; const door = doorById(g, id), st = structureStatus(g, key);
+ // Left: status and the habitability checklist; right: air, the airlock and taking the block back.
+ const side = h('aside', '', 'st-bag st-room'); root.append(side);
+ left.append(statusBlock(st));
+ if (st.room) { const r = st.room; side.append(h('h4', `Помещение · ${r.volume} м³`), meter('room-air', 'Воздух', r.zone.q / 1000, capacityOf(r.volume) / 1000, 'GU', 'o2', habitableQ(r.volume) / 1000), meter('room-purity', 'Чистота', r.zone.purity * 100, 100, '%', 'clean', 50), h('p', `Дышать можно от ${habitableQ(r.volume) / 1000} GU (8 GU на м³).`, 'st-note')); }
+ else { side.append(h('h4', 'Конструкция')); if (st.leak.length) side.append(h('p', 'Путь утечки подсвечен красным в мире на 6 с.', 'st-note')); }
+ if (door) {
+  const sides = doorRooms(g, door), quick = h('div', '', 'st-actions'), pass = button('Пройти шлюз', () => say(beginPassage(g, door.id), 'Шлюз: 6 с'), 'st-btn accent'); pass.id = 'airlock-pass'; quick.append(pass);
+  side.append(h('h4', 'Шлюз'), quick, h('p', sides.front && sides.back ? 'Внутренняя дверь: переход стоит 4 GU из помещения назначения.' : sides.front || sides.back ? 'Цикл 6 с. Вход тратит 4 GU воздуха помещения, выход — остаток до 4 GU. В пригодном помещении баллоны не расходуются.' : 'Шлюз не граничит с помещением: это просто проход, без цикла.', 'st-note'));
+ }
+ const footer = h('div', '', 'st-actions st-foot');
+ footer.append(button(door ? 'Забрать шлюз' : 'Забрать стеклоблок', () => {
+  const confirmed = confirmKey === key && performance.now() < confirmUntil, r = door ? removeDoor(g, door.id, confirmed) : removeGlass(g, key, confirmed);
+  if (r.needConfirm) { confirmKey = key; confirmUntil = performance.now() + 3000; host.room?.tint(key); caution(r.error); return; }
+  confirmKey = -1; if (!r.error) host.room?.edited(r); say(r.error, 'Возвращено в рюкзак');
+ }, 'st-btn small ghost'));
+ side.append(footer);
+ return root;
+}
 export function machineView(g: GameState, id: string, host: MachineHost): HTMLElement {
+ if (isStructure(id)) return structureView(g, id, host);
  const ctx: Ctx = { ...host, g, id }, { say, changed, draw, refill } = host;
  const root = h('div', '', 'st-layout'), left = h('div', '', 'st-main'); root.append(left);
  const change = () => { changed(); draw(); };
@@ -228,21 +260,17 @@ export function machineView(g: GameState, id: string, host: MachineHost): HTMLEl
   const proc = h('div', '', 'st-process'), ins = h('div', '', 'st-inputs'); ins.append(slotCell(ctx, b, 'Топливо', 0, 'fiber'));
   const out = h('div', '', 'st-slot'); out.append(h('span', 'Энергия'), (() => { const c = h('div', '', 'st-slot-cell power'); c.append(h('b', '⚡')); return c; })());
   proc.append(ins, arrow(null), out); left.append(proc, meter('energy', 'Накопитель', b.energy / 1000, GEN_BUFFER / 1000, 'EU', 'power'));
-  const quick = h('div', '', 'st-actions'); quick.append(quickLoad(ctx, 'biogenerator', id, ['fiber'], 'Загрузить волокно')); left.append(quick, h('p', `1 волокно = ${FIBER_EU / 1000} EU. Выдача до 40 EU/с по кабелю. Ставьте снаружи купола.`, 'st-note'));
+  const quick = h('div', '', 'st-actions'); quick.append(quickLoad(ctx, 'biogenerator', id, ['fiber'], 'Загрузить волокно')); left.append(quick, h('p', `1 волокно = ${FIBER_EU / 1000} EU. Выдача до 40 EU/с по кабелю. Ставьте снаружи помещений.`, 'st-note'));
  } else if (b.kind === 'refill') {
   left.append(meter('oxygen', 'Буфер O₂', b.oxygen / 1000, o2Max(b), 'GU', 'o2'));
   g.player.bottles.forEach((t, i) => left.append(meter('bottle-' + i, t ? `Баллон ${i + 1}` : `Слот ${i + 1} пуст`, (t?.milliGU ?? 0) / 1000, t ? TANKS[t.itemId].capacity / 1000 : EMPTY_TANK, 'GU', 'o2')));
   const quick = h('div', '', 'st-actions'); quick.append(button('Заправить баллоны', () => { refill(id); say('', 'Заправка идёт'); }, 'st-btn accent'), button('Стоп', () => { refill(null); say('', 'Остановлено'); }, 'st-btn')); left.append(quick);
  } else if (b.kind === 'distributor') {
-  left.append(meter('oxygen', 'Буфер O₂', b.oxygen / 1000, o2Max(b), 'GU', 'o2'), h('p', 'Наполняет купол до 20 GU/с, очищает воздух и держит +20 °C. Нужны труба O₂ и кабель питания.', 'st-note'));
- } else if (b.kind === 'dome') {
-  left.append(meter('air', 'Воздух', b.zone.q / 1000, DOME_CAPACITY / 1000, 'GU', 'o2', 384), meter('purity', 'Чистота', b.zone.purity * 100, 100, '%', 'clean', 50));
-  const quick = h('div', '', 'st-actions'); quick.append(button('Пройти шлюз', () => say(beginPassage(g, id), 'Шлюз: 6 с'), 'st-btn accent')); left.append(quick, h('p', 'Шлюз тратит до 4 GU воздуха за проход. Внутри пригодного купола баллоны не расходуются.', 'st-note'));
+  left.append(meter('oxygen', 'Буфер O₂', b.oxygen / 1000, o2Max(b), 'GU', 'o2'), h('p', 'Наполняет помещение до 20 GU/с, очищает воздух и держит +20 °C. Один обслуживает до 256 м³. Нужны труба O₂ и кабель питания.', 'st-note'));
  }
  left.append(connections(ctx, b));
  const footer = h('div', '', 'st-actions st-foot');
- // The dome is a passive shell: no switch (its air, leak and airlock never depended on it).
- if (b.kind !== 'dome') footer.append(button(b.enabled ? 'Выключить' : 'Включить', () => { b.enabled = !b.enabled; change(); }, 'st-btn small ghost'));
+ footer.append(button(b.enabled ? 'Выключить' : 'Включить', () => { b.enabled = !b.enabled; change(); }, 'st-btn small ghost'));
  if (b.job && b.kind !== 'workbench') footer.append(button('Отменить обработку', () => say(cancelJob(g, id), 'Оплаченное сырьё возвращено'), 'st-btn small ghost'));
  footer.append(button('Забрать станцию', () => { const e = packStation(g, id); say(e, 'Станция в рюкзаке'); }, 'st-btn small ghost'));
  if (b.input.slice(2).some(Boolean) || b.output.slice(1).some(Boolean)) { const legacy = h('details', '', 'st-legacy'); legacy.append(h('summary', 'Другие сохранённые ячейки')); for (const [source, from] of [[b.input, 2], [b.output, 1]] as const) source.forEach((v, i) => { if (v && i >= from) legacy.append(button(ITEMS[v.itemId].name + ' ×' + v.count, () => say(takeSlot(g, source, i), 'Предмет забран'), 'st-btn small')); }); footer.append(legacy); }
@@ -252,6 +280,13 @@ export function machineView(g: GameState, id: string, host: MachineHost): HTMLEl
  return root;
 }
 export function tickMachine(g: GameState, id: string) {
+ // Room windows: status and meters 4 times a second (the leak search is not free).
+ if (isStructure(id)) {
+  if (performance.now() - structureTick < 250) return; structureTick = performance.now();
+  const key = structureKey(g, id); if (key === null) return; const st = structureStatus(g, key); updateStatus(st);
+  if (st.room) { setMeter('room-air', st.room.zone.q / 1000, capacityOf(st.room.volume) / 1000, 'GU'); setMeter('room-purity', st.room.zone.purity * 100, 100, '%'); }
+  return;
+ }
  if (id === 'capsule') {
   setMeter('capsule', g.world.capsuleMilliGU / 1000, CAPSULE_CAPACITY / 1000, 'GU');
   g.player.bottles.forEach((t, i) => setMeter('bottle-' + i, (t?.milliGU ?? 0) / 1000, t ? TANKS[t.itemId].capacity / 1000 : EMPTY_TANK, 'GU'));
@@ -269,6 +304,5 @@ export function tickMachine(g: GameState, id: string) {
  if (b.kind === 'refill') g.player.bottles.forEach((t, i) => setMeter('bottle-' + i, (t?.milliGU ?? 0) / 1000, t ? TANKS[t.itemId].capacity / 1000 : EMPTY_TANK, 'GU'));
  if (b.kind === 'biogenerator') { setMeter('energy', b.energy / 1000, GEN_BUFFER / 1000, 'EU'); const f = document.getElementById('st-slot-0-Топливо'); if (f) f.textContent = String(countItem(b.input, 'fiber') || ''); }
  if (b.kind === 'kiln') { const f = document.getElementById('st-slot-1-Топливо'); if (f) f.textContent = String(b.input[1]?.count ?? ''); const raw = document.getElementById('st-slot-0-Сырьё'); if (raw) raw.textContent = String(b.input[0]?.count ?? ''); }
- if (b.kind === 'dome') { setMeter('air', b.zone.q / 1000, DOME_CAPACITY / 1000, 'GU'); setMeter('purity', b.zone.purity * 100, 100, '%'); }
  void endpoint; void gasRate;
 }

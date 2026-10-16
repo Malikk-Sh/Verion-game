@@ -2,13 +2,13 @@ import * as THREE from 'three';
 /**
  * Fixed point-light pool (S4, 07 §8): 2 lights on Low, 4 otherwise, created at boot and always
  * visible, so the scene's light count — part of every lit shader's program key — never changes
- * when a kiln or dome is placed, packed or loaded (no synchronous recompiles). Real emitters
+ * when a kiln or room lamp is placed, packed or loaded (no synchronous recompiles). Real emitters
  * (station PointLights, capsule lamps) stay hidden and only lend position, colour and intensity
  * to the nearest active pool slots each frame.
  */
 export type LightSource = { x: number; y: number; z: number; intensity: number; distance: number; priority: number };
-/** Emitter priority: kiln fire, dome light, capsule door, cabin interior. */
-export const LIGHT_PRIORITY: Record<string, number> = { kiln: 3, dome: 2, door: 1, interior: 0 };
+/** Emitter priority: kiln fire, room lamp, capsule door, cabin interior. */
+export const LIGHT_PRIORITY: Record<string, number> = { kiln: 3, room: 2, door: 1, interior: 0 };
 /** Indices of at most `slots` sources that light the area around the viewer: active, reach within `near` m, nearest edge first, higher priority on ties. */
 export function assignLights(sources: readonly LightSource[], x: number, y: number, z: number, slots: number, near = 40): number[] {
  const c: [number, number, number][] = [];
@@ -25,10 +25,10 @@ export function createLightPool(scene: THREE.Scene, count = 4) {
  /** Registers a hidden emitter that is always part of the scene (capsule lamps). */
  function add(light: THREE.PointLight, priority: number) { light.visible = false; fixed.push({ light, priority }); }
  /** `roots`: groups scanned every frame for station PointLights (hidden here, before the frame is drawn). Untagged
-  * station lights are told apart by reach: the kiln's fire glow is short (3.2 m), the dome lamp wide (6 m). */
+  * station lights are told apart by reach: the kiln's fire glow is short (3.2 m), a room lamp wide (≥ 4 m). */
  function update(camera: THREE.Camera, dt: number, roots: THREE.Object3D[] = []) {
   found.length = 0;
-  for (const r of roots) r.traverse(o => { const l = o as THREE.PointLight; if (!l.isPointLight) return; l.visible = false; found.push({ light: l, priority: LIGHT_PRIORITY[l.userData.emitter as string] ?? (l.distance > 4 ? LIGHT_PRIORITY.dome : LIGHT_PRIORITY.kiln) }); });
+  for (const r of roots) r.traverse(o => { const l = o as THREE.PointLight; if (!l.isPointLight) return; l.visible = false; found.push({ light: l, priority: LIGHT_PRIORITY[l.userData.emitter as string] ?? (l.distance > 4 ? LIGHT_PRIORITY.room : LIGHT_PRIORITY.kiln) }); });
   sources.length = 0;
   for (const list of [fixed, found]) for (const e of list) { e.light.getWorldPosition(world); sources.push({ x: world.x, y: world.y, z: world.z, intensity: e.light.intensity, distance: e.light.distance, priority: e.priority, e }); }
   const p = camera.position, pick = assignLights(sources, p.x, p.y, p.z, pool.length).map(i => sources[i]);

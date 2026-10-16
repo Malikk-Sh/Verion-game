@@ -1,7 +1,7 @@
 import { NODES, nodeCovered, bodyHalf, PATCH_NODES, SHARED_PATCH_SPLIT, FINITE_NODES, VEIN_LOOK, VEIN_MATERIALS, VEIN_SPOTS, VEIN_SPOT_BY_ID, veinSizeRange, type ResourceNode, type VeinMaterial, type VeinSpot, type Vein } from './resources';
 import type { GameState } from './state';
-import { domeFront } from './production';
 import { GRASS, random } from '../world';
+import { cellKey, cellOf, doorKeys, landingCells, lowestAir, roomsView } from './rooms';
 /** Rendered tufts of each grass deposit: centre and horizontal reach (leaves 0.48 m × instance scale, plus wind sway). */
 const TUFTS = new Map<string, { x: number; z: number; r: number }[]>();
 for (const t of GRASS) if (t.patch >= 0) {
@@ -21,7 +21,16 @@ export function covers(n: ResourceNode, x: number, z: number, h: number): boolea
  * produces a burst. A patch under a body does not grow (WORLD §2: only while not built over).
  * Returns the ids of deposits whose stock changed.
  */
-const builtOver = (g: GameState, n: ResourceNode) => g.world.base.buildings.some(b => covers(n, b.x, b.z, bodyHalf(b.kind)));
+/** A glass block resting on the ground over a tuft (its column's lowest air cell) covers it too; cached per glass layout. */
+const UNDER_GLASS = new WeakMap<object, Map<string, boolean>>();
+function underGlass(g: GameState, n: ResourceNode) {
+ const v = roomsView(g.world.base); if (!v.glass.size) return false;
+ let known = UNDER_GLASS.get(v); if (!known) UNDER_GLASS.set(v, known = new Map());
+ let hit = known.get(n.id);
+ if (hit === undefined) { hit = (TUFTS.get(n.id) ?? [{ x: n.x, z: n.z }]).some(t => { const i = Math.floor(t.x), j = Math.floor(t.z); return v.glass.has(cellKey(i, lowestAir(i, j), j)); }); known.set(n.id, hit); }
+ return hit;
+}
+const builtOver = (g: GameState, n: ResourceNode) => g.world.base.buildings.some(b => covers(n, b.x, b.z, bodyHalf(b.kind))) || underGlass(g, n);
 export function natureTick(g: GameState, ms: number, nowTicks = g.meta.activeTicks): string[] {
  const changed: string[] = [];
  for (const n of NODES) {
@@ -64,19 +73,28 @@ export function queueRespawn(g: GameState, material: string) {
 }
 /** Axis-aligned footprint (centre, half-sizes) that a new vein must not touch. */
 export type VeinBlocker = { x: number; z: number; hx: number; hz: number; why: string };
-/** Player structures kept outside `base.buildings` add their footprints here (glass panels, doors and room zones of
- *  D31 at merge time), like `mapFootprintSources` for the map; `veinSpotBlocked` checks them with the bodies. */
+/** Player structures kept outside `base.buildings` add their footprints here (glass rooms register below), like
+ *  `mapFootprintSources` for the map; `veinSpotBlocked` checks them with the bodies. */
 export const veinBlockers: ((g: GameState) => VeinBlocker[])[] = [];
-/** Why a fixed spot cannot take a new vein right now ('' when free): a body, a registered structure footprint or an
- *  airlock landing on it, the player close by, another vein or a stocked deposit within 8 m. The static checks (slope,
+/** Glass rooms (D31): every glass column, each airlock with both landings, and each room's bounding cells, so a vein
+ *  never grows inside or across a room, its door or the spot where the passage lands. Cached per glass layout. */
+const ROOM_BLOCKS = new WeakMap<object, VeinBlocker[]>();
+export function roomBlockers(g: GameState): VeinBlocker[] {
+ const v = roomsView(g.world.base), hit = ROOM_BLOCKS.get(v); if (hit) return hit;
+ const out: VeinBlocker[] = [], cols = new Set<string>(), col = (key: number, why: string) => { const c = cellOf(key), id = c.i + ',' + c.j; if (!cols.has(id)) { cols.add(id); out.push({ x: c.i + .5, z: c.j + .5, hx: .5, hz: .5, why }); } };
+ for (const d of g.world.base.doors) { col(doorKeys(d)[0], 'шлюз'); for (const s of ['front', 'back'] as const) col(landingCells(d, s)[0], 'выход шлюза'); }
+ for (const key of v.glass) col(key, 'стеклоблок');
+ for (const r of v.rooms) { let i0 = Infinity, i1 = -Infinity, j0 = Infinity, j1 = -Infinity; for (const key of r.cells) { const c = cellOf(key); i0 = Math.min(i0, c.i); i1 = Math.max(i1, c.i); j0 = Math.min(j0, c.j); j1 = Math.max(j1, c.j); } out.push({ x: (i0 + i1 + 1) / 2, z: (j0 + j1 + 1) / 2, hx: (i1 - i0 + 1) / 2, hz: (j1 - j0 + 1) / 2, why: 'помещение' }); }
+ ROOM_BLOCKS.set(v, out); return out;
+}
+veinBlockers.push(roomBlockers);
+/** Why a fixed spot cannot take a new vein right now ('' when free): a body or a registered structure footprint (glass,
+ *  an airlock or its landing, a room) on it, the player close by, another vein or a stocked deposit within 8 m. The static checks (slope,
  *  colliders, zones) are done in the data. */
 export function veinSpotBlocked(g: GameState, s: VeinSpot): string {
  const [w, , d] = VEIN_LOOK[s.material].box, hx = w / 2 * 1.08 + .5, hz = d / 2 * 1.08 + .5;
  const over = (x: number, z: number, h: number) => Math.abs(x - s.x) < hx + h && Math.abs(z - s.z) < hz + h;
- for (const b of g.world.base.buildings) {
-  if (over(b.x, b.z, bodyHalf(b.kind))) return 'постройка';
-  if (b.kind === 'dome') { const f = domeFront(b); if (over(b.x + f.x, b.z + f.z, .45) || over(b.x + f.x * 3.5, b.z + f.z * 3.5, .45)) return 'выход шлюза'; }
- }
+ for (const b of g.world.base.buildings) if (over(b.x, b.z, bodyHalf(b.kind))) return 'постройка';
  for (const src of veinBlockers) for (const f of src(g)) if (Math.abs(f.x - s.x) < hx + f.hx && Math.abs(f.z - s.z) < hz + f.hz) return f.why;
  if (Math.hypot(g.player.x - s.x, g.player.z - s.z) < VEIN_PLAYER_CLEAR) return 'игрок рядом';
  for (const v of g.world.veins) { const o = VEIN_SPOT_BY_ID.get(v.spot); if (o && Math.hypot(o.x - s.x, o.z - s.z) < VEIN_GAP) return 'другая жила'; }

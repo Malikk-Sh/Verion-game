@@ -2,19 +2,22 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {newGame,sanitizeState,STATE_VERSION} from '../src/game/state';
 import {addItems,removeItems,countItem} from '../src/game/inventory';
-import {makeBuilding,startJob,productionTick,connect,cancelJob,WORKBENCH_UPGRADE,RECIPE_BY_ID,releaseHandOnDeath} from '../src/game/production';
+import {makeBuilding,startJob,productionTick,connect,cancelJob,WORKBENCH_UPGRADE,RECIPE_BY_ID,LEGACY_RECIPES,releaseHandOnDeath} from '../src/game/production';
+import {allRooms,boxCells,bumpRooms,editRooms,shellOf,cellKey} from '../src/game/rooms';
 import {refreshQuestProgress,questStatus} from '../src/game/quests';
 import {QUESTS,QUEST_IDS,QUEST_ROUTES} from '../src/game/questCatalog';
 import {QUEST_FACTS,recordQuestFact} from '../src/game/questFacts';
 import {encodePages,decodePages} from '../src/persist/pages';
 const fresh=()=>newGame('w-quests',123,1,0);
+/** A closed 4×4×3 glass room on the flat base pad (48 m³); its air is set directly. */
+const room=(g:ReturnType<typeof fresh>,air:{q:number;purity:number;temperature:number})=>{g.world.base.glass=shellOf(boxCells(56,0,42,4,3,4));bumpRooms(g);const r=allRooms(g)[0];Object.assign(r.zone,air);return r;};
 const stock=(g:ReturnType<typeof fresh>,items:Record<string,number>)=>{for(const [id,n] of Object.entries(items))assert.equal(addItems(g.player.inventory,id,n),0);};
 const tick=(g:ReturnType<typeof fresh>,ms:number,id:string|null=null)=>{for(let i=0;i<ms;i+=50)productionTick(g,50,id);refreshQuestProgress(g);};
 function powered(){const g=fresh();g.player.x=42;g.player.z=42;const b=makeBuilding(g,'workbench',42,0,42);b.level=2;const gen=makeBuilding(g,'biogenerator',44,0,42);stock(g,{copper:4,cable:1});connect(g,'cable',gen.id,b.id);return {g,b,gen};}
 test('Quest DAG covers every current recipe and has forward links, no fictitious recipes or cycles',()=>{
  assert.equal(new Set(QUESTS.map(q=>q.id)).size,QUEST_IDS.length);const byId=new Map(QUESTS.map(q=>[q.id,q]));
  for(const q of QUESTS){for(const p of [...q.parents,...q.context]){assert.ok(byId.has(p));assert.ok(byId.get(p)!.x<q.x);}for(const rid of q.recipes)assert.ok(rid==='upgrade'||RECIPE_BY_ID.has(rid));for(const p of q.parents)assert.ok(QUEST_ROUTES.some(r=>r.from===p&&r.to===q.id));}
- for(const rid of RECIPE_BY_ID.keys())if(rid!=='legacy_melt')assert.ok(QUESTS.some(q=>q.recipes.includes(rid)),rid);
+ for(const rid of RECIPE_BY_ID.keys())if(!LEGACY_RECIPES.has(rid))assert.ok(QUESTS.some(q=>q.recipes.includes(rid)),rid);
  assert.equal(WORKBENCH_UPGRADE.queueCapacity,5);
 });
 test('Fresh expedition has no completed spare-tool/refill achievement from starter equipment',()=>{
@@ -47,11 +50,13 @@ test('Refill achievement requires station gas, power and real tank transfer; sta
  const g=fresh();g.player.x=42;g.player.z=42;const r=makeBuilding(g,'refill',42,0,42),gen=makeBuilding(g,'biogenerator',44,0,42);r.oxygen=240000;stock(g,{cable:1});connect(g,'cable',gen.id,r.id);gen.energy=400000;tick(g,50,r.id);assert.ok(!g.progress.quests.completed.includes('refill'));g.player.bottles[0]!.milliGU=0;gen.energy=0;tick(g,50,r.id);assert.ok(!g.progress.quests.completed.includes('refill'));gen.energy=400000;tick(g,50,r.id);assert.ok(g.progress.quests.completed.includes('refill'));
 });
 test('Breathable shelter checks seal, gas, purity and temperature; completed goal survives a later breach',()=>{
- for(const field of ['gas','purity','temperature','seal']){const g=fresh(),d=makeBuilding(g,'dome',50,0,50);d.zone.q=384000;d.zone.purity=.5;d.zone.temperature=20;if(field==='gas')d.zone.q=383999;if(field==='purity')d.zone.purity=.49;if(field==='temperature')d.zone.temperature=41;if(field==='seal')d.zone.shell[0]=0;refreshQuestProgress(g);assert.ok(!g.progress.quests.completed.includes('air'),field);}
- const g=fresh(),d=makeBuilding(g,'dome',50,0,50);d.zone.q=384000;d.zone.purity=.5;d.zone.temperature=20;refreshQuestProgress(g);assert.ok(g.progress.quests.completed.includes('air'));d.zone.shell[0]=0;refreshQuestProgress(g);assert.equal(questStatus(g,'air'),'done');
+ // 48 m³: habitable from 8 GU per m³ (384 GU), purity 50%, −5…+40 °C; an open shell is no room at all.
+ for(const field of ['gas','purity','temperature','seal']){const g=fresh(),r=room(g,{q:384000,purity:.5,temperature:20});if(field==='gas')r.zone.q=383999;if(field==='purity')r.zone.purity=.49;if(field==='temperature')r.zone.temperature=41;if(field==='seal'){g.world.base.glass=g.world.base.glass.slice(1);bumpRooms(g);}refreshQuestProgress(g);assert.ok(!g.progress.quests.completed.includes('air'),field);}
+ const g=fresh();room(g,{q:384000,purity:.5,temperature:20});refreshQuestProgress(g);assert.ok(g.progress.quests.completed.includes('air'));assert.ok(!g.progress.quests.completed.includes('dome'),'no airlock yet');
+ assert.equal(editRooms(g,{remove:[cellKey(55,1,43)]}).breached,true);assert.equal(allRooms(g).length,0);refreshQuestProgress(g);assert.equal(questStatus(g,'air'),'done');
 });
 test('Final milestone checks simultaneous real work, rather than two historical checkmarks',()=>{
- const {g,b,gen}=powered();g.player.x=80;gen.energy=400000;startJob(g,'craft_wire',b.id,true);g.player.x=42;startJob(g,'craft_wire',b.id);g.player.x=80;tick(g,8000);const d=makeBuilding(g,'dome',50,0,50);d.zone.q=500000;d.zone.purity=1;d.zone.temperature=20;refreshQuestProgress(g);assert.ok(g.progress.quests.completed.includes('auto'));assert.ok(g.progress.quests.completed.includes('air'));assert.ok(!g.progress.quests.completed.includes('base'));g.player.x=42;startJob(g,'craft_wire',b.id);g.player.x=80;gen.energy=0;tick(g,50);assert.ok(!g.progress.quests.completed.includes('base'));gen.energy=400000;tick(g,50);assert.ok(!g.progress.quests.completed.includes('base'),'Progress alone is not a finished unattended batch');tick(g,8000);assert.ok(g.progress.quests.completed.includes('base'));
+ const {g,b,gen}=powered();g.player.x=80;gen.energy=400000;startJob(g,'craft_wire',b.id,true);g.player.x=42;startJob(g,'craft_wire',b.id);g.player.x=80;tick(g,8000);room(g,{q:500000,purity:1,temperature:20});refreshQuestProgress(g);assert.ok(g.progress.quests.completed.includes('auto'));assert.ok(g.progress.quests.completed.includes('air'));assert.ok(!g.progress.quests.completed.includes('base'));g.player.x=42;startJob(g,'craft_wire',b.id);g.player.x=80;gen.energy=0;tick(g,50);assert.ok(!g.progress.quests.completed.includes('base'));gen.energy=400000;tick(g,50);assert.ok(!g.progress.quests.completed.includes('base'),'Progress alone is not a finished unattended batch');tick(g,8000);assert.ok(g.progress.quests.completed.includes('base'));
 });
 test('v4 queues, WIP, tank gas and quest evidence survive current round trip; untrusted quest data is strict',()=>{
  const {g,b}=powered();startJob(g,'craft_wire',b.id);const old:any=structuredClone(g);old.meta.stateVersion=4;delete old.progress.quests;const migrated=sanitizeState(old);assert.deepEqual(migrated.world.base,g.world.base);assert.deepEqual(migrated.player,g.player);recordQuestFact(migrated,'item:stone');refreshQuestProgress(migrated);assert.deepEqual(decodePages(encodePages(migrated)),migrated);

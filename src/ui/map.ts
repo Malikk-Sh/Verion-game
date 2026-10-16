@@ -1,7 +1,8 @@
 import { LANDMARKS, MIN, MAX, SIZE } from '../world';
 import { NODES, GRASS_PATCHES, bodyHalf, depositById, depositLeft, isVeinId, veinNode } from '../game/resources';
 import { stationStatus, type Tone } from '../game/stationStatus';
-import { stationName, stationRadius, nodeRadius, clampWaypoint, type Waypoint } from '../game/navigation';
+import { stationName, stationRadius, nodeRadius, clampWaypoint, doorTarget, type Waypoint } from '../game/navigation';
+import { allRooms, cellOf, doorRooms, habitableQ, habitableRoom, roomsView, type RoomInfo } from '../game/rooms';
 import { reducedMotion } from '../motion';
 import { itemName } from '../game/mining';
 import type { GameState } from '../game/state';
@@ -12,9 +13,36 @@ import { toScreen, toWorld, clampView, zoomAt, panBy, fitView, valleyZoom, hitTe
  * «Вести»; a long press on empty ground sets the player's «Метка». Markers keep a constant screen size and labels are
  * culled. The overlay redraws on interaction and at ~4 Hz while open; the relief raster is built once in slices.
  */
-export type MapFootprint = { x: number; z: number; w: number; d: number; rot: number; tone: Tone; label?: string };
-/** Extra outlines drawn under the stations layer. Glass rooms (D31) register their footprints here at merge time. */
+export type MapFootprint = { x: number; z: number; w: number; d: number; rot: number; tone: Tone; label?: string; id?: string };
+/** Extra outlines drawn under the stations layer (glass rooms register below). A print with an id opens a card. */
 export const mapFootprintSources: ((g: GameState) => MapFootprint[])[] = [];
+/** Glass structures (D31) as outlines: glass and airlock columns joined by sides or corners, one box per group with the
+ *  rooms inside it. The geometry is cached per glass layout; the tone is read live (the air changes every tick). */
+const SHAPES = new WeakMap<object, { x: number; z: number; w: number; d: number; rooms: number[] }[]>();
+function glassShapes(g: GameState) {
+ const v = roomsView(g.world.base), hit = SHAPES.get(v); if (hit) return hit;
+ const cols = new Set<string>(), add = (i: number, j: number) => cols.add(i + ',' + j);
+ for (const key of v.glass) { const c = cellOf(key); add(c.i, c.j); }
+ for (const d of g.world.base.doors) add(d.x, d.z);
+ const out: { x: number; z: number; w: number; d: number; rooms: number[] }[] = [], seen = new Set<string>();
+ for (const start of cols) {
+  if (seen.has(start)) continue; seen.add(start); const todo = [start]; let i0 = Infinity, i1 = -Infinity, j0 = Infinity, j1 = -Infinity;
+  while (todo.length) { const [i, j] = todo.pop()!.split(',').map(Number); i0 = Math.min(i0, i); i1 = Math.max(i1, i); j0 = Math.min(j0, j); j1 = Math.max(j1, j);
+   for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const k = (i + a) + ',' + (j + b); if (cols.has(k) && !seen.has(k)) { seen.add(k); todo.push(k); } } }
+  const rooms = v.rooms.filter(r => { const c = cellOf(r.cell); return c.i >= i0 && c.i <= i1 && c.j >= j0 && c.j <= j1; }).map(r => r.index);
+  out.push({ x: (i0 + i1 + 1) / 2, z: (j0 + j1 + 1) / 2, w: i1 - i0 + 1, d: j1 - j0 + 1, rooms });
+ }
+ SHAPES.set(v, out); return out;
+}
+/** Habitable air → «работает», a closed room still short of air → «нужна помощь», open glass → «выключена». */
+const roomTone = (rooms: (RoomInfo | null | undefined)[]): Tone => rooms.some(r => r && habitableRoom(r)) ? 'ok' : rooms.some(r => r) ? 'warn' : 'off';
+export function glassPrints(g: GameState): MapFootprint[] {
+ const shapes = glassShapes(g); if (!shapes.length) return [];
+ const info = allRooms(g), out: MapFootprint[] = shapes.map(s => ({ x: s.x, z: s.z, w: s.w, d: s.d, rot: 0, tone: roomTone(s.rooms.map(i => info[i])) }));
+ for (const d of g.world.base.doors) { const r = doorRooms(g, d), t = doorTarget(d); out.push({ id: d.id, x: t.x, z: t.z, w: 1, d: 1, rot: 0, tone: roomTone([r.front, r.back]), label: t.name }); }
+ return out;
+}
+mapFootprintSources.push(glassPrints);
 type Layer = 'places' | 'resources' | 'stations';
 type Card = { kind: 'landmark' | 'node' | 'station' | 'drop' | 'point'; id: string; ids?: string[] };
 type Deps = {
@@ -82,7 +110,7 @@ export function createMap(d: Deps) {
   if (c.kind === 'point') { const p = d.waypoint(); return p ? { name: 'Метка', x: p.x, z: p.z, radius: 3 } : null; }
   if (c.kind === 'landmark') { const l = LANDMARKS.find(v => v.id === c.id); return l ? { name: l.name, x: l.x, z: l.z, radius: l.radius } : null; }
   if (c.kind === 'node') { const n = depositById(g, c.id); return n ? { name: n.name, x: n.x, z: n.z, radius: nodeRadius(n) } : null; }
-  if (c.kind === 'station') { const b = g.world.base.buildings.find(v => v.id === c.id); return b ? { name: stationName(b), x: b.x, z: b.z, radius: stationRadius(b) } : null; }
+  if (c.kind === 'station') { const b = g.world.base.buildings.find(v => v.id === c.id), door = b ? null : g.world.base.doors.find(v => v.id === c.id); return b ? { name: stationName(b), x: b.x, z: b.z, radius: stationRadius(b) } : door ? doorTarget(door) : null; }
   const dr = g.world.drops.find(v => v.id === c.id); return dr ? { name: 'Груз', x: dr.x, z: dr.z, radius: 2.2 } : null;
  }
  function showCard(c: Card | null, focusMap = false) {
@@ -105,6 +133,12 @@ export function createMap(d: Deps) {
    kind = (isVeinId(n.id) ? 'Новая жила · ' : 'Залежь · ') + MAT[n.material].name.toLowerCase(); text = left > 0 ? `Осталось ${left} / ${amount}${ids.length > 1 ? ` · ${ids.length} выхода рядом` : ''}` : n.regrowSeconds ? 'Всё собрано — растения отрастают в активное время.' : 'Запас исчерпан.';
    if (n.regrowSeconds) data.push(['Отрастает', `1 растение за ${n.regrowSeconds} с`]);
    data.push(['Добыча', itemName(n.itemId)]); canGo = left > 0;
+  } else if (card.kind === 'station' && card.id.startsWith('door-')) {
+   // An airlock stands for its glass room: the room behind it (or in front), its volume and air.
+   const door = g.world.base.doors.find(v => v.id === card!.id)!, sides = doorRooms(g, door), r = sides.back ?? sides.front;
+   kind = 'Помещение · ' + (r ? habitableRoom(r) ? 'пригодно для дыхания' : 'мало воздуха' : 'не замкнуто');
+   text = r ? `Стеклянное помещение со шлюзом. Пройти: наведите на шлюз и нажмите F.` : 'Шлюз стоит в стене, но помещение за ним не замкнуто.';
+   if (r) data.push(['Объём', `${r.volume} м³`], ['Воздух', `${Math.floor(r.zone.q / 1000)} / ${habitableQ(r.volume) / 1000} GU`]);
   } else if (card.kind === 'station') {
    const b = g.world.base.buildings.find(v => v.id === card!.id)!, st = stationStatus(g, b); kind = 'Станция · ' + TONE_NAME[st.tone]; text = `${st.title}. ${st.hint}`;
   } else if (card.kind === 'drop') {
@@ -163,7 +197,7 @@ export function createMap(d: Deps) {
    const base = g.world.base, by = new Map(base.buildings.map(b => [b.id, b]));
    for (const l of base.links) { const a = by.get(l.from), b = by.get(l.to); if (!a || !b) continue; const s = S(a.x, a.z), e = S(b.x, b.z); ctx.strokeStyle = l.kind === 'cable' ? 'rgba(255,196,110,.75)' : 'rgba(127,230,218,.8)'; ctx.lineWidth = 1.5; ctx.setLineDash(l.kind === 'cable' ? [] : [4, 3]); ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke(); }
    ctx.setLineDash([]);
-   const prints: (MapFootprint & { id?: string })[] = [...mapFootprintSources.flatMap(f => f(g))];
+   const prints: MapFootprint[] = [...mapFootprintSources.flatMap(f => f(g))];
    for (const b of base.buildings) { const half = bodyHalf(b.kind); prints.push({ id: b.id, x: b.x, z: b.z, w: half * 2, d: half * 2, rot: b.rot, tone: stationStatus(g, b).tone, label: stationName(b) }); }
    for (const f of prints) {
     const s = S(f.x, f.z), fw = Math.max(10, f.w * z), fd = Math.max(10, f.d * z), c = TONE[f.tone]; markers++;

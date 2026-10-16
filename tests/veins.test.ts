@@ -2,9 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { newGame, cloneState, sanitizeState, type GameState } from '../src/game/state.ts';
 import { NODE_BY_ID, VEIN_SPOTS, VEIN_SPOT_BY_ID, VEIN_MATERIALS, VEIN_LOOK, veinSizeRange, depositById, depositLeft, type VeinMaterial } from '../src/game/resources.ts';
-import { natureTick, veinSpotBlocked, veinBlockers, spawnVein, queueRespawn, nextVeinSeconds, VEIN_DELAY_RANGE, VEIN_RETRY_MS, VEIN_CAP, VEIN_PLAYER_CLEAR } from '../src/game/nature.ts';
+import { natureTick, veinSpotBlocked, veinBlockers, roomBlockers, spawnVein, queueRespawn, nextVeinSeconds, VEIN_DELAY_RANGE, VEIN_RETRY_MS, VEIN_CAP, VEIN_PLAYER_CLEAR } from '../src/game/nature.ts';
 import { mineTick, type Mining } from '../src/game/mining.ts';
-import { makeBuilding, domeFront } from '../src/game/production.ts';
+import { makeBuilding } from '../src/game/production.ts';
+import { bumpRooms, doorKeys, groundRoom, lowestAir, shellOf, allRooms, type Door } from '../src/game/rooms.ts';
 import { nearestNode } from '../src/game/guide.ts';
 import { resolveNav } from '../src/game/navigation.ts';
 import { heightAt } from '../src/world.ts';
@@ -67,15 +68,17 @@ test('D33: a vein mines like a deposit; its last block removes it and queues the
  assert.equal(mineTick(g, m, v.id, true).kind, 'idle');
 });
 
-test('D33: spawn rules — bodies, airlock landings, the player within 24 m, another vein or a stocked deposit within 8 m', () => {
+test('D33: spawn rules — bodies, an airlock landing, the player within 24 m, another vein or a stocked deposit within 8 m', () => {
  const g = fresh(), s = VEIN_SPOTS.find(s => s.id === 'stone-s1')!;
  assert.equal(veinSpotBlocked(g, s), '');
  g.player.x = s.x + VEIN_PLAYER_CLEAR - 1; g.player.z = s.z; assert.equal(veinSpotBlocked(g, s), 'игрок рядом');
  g.player.x = -120;
  const body = makeBuilding(g, 'workbench', Math.round(s.x) + 1, 0, Math.round(s.z)); assert.equal(veinSpotBlocked(g, s), 'постройка');
  g.world.base.buildings = [];
- const dome = makeBuilding(g, 'dome', Math.round(s.x), 0, Math.round(s.z) - 5, 0), f = domeFront(dome); assert.equal(f.z, 1);
- assert.equal(veinSpotBlocked(g, s), 'выход шлюза'); g.world.base.buildings = []; void body;
+ // A lone airlock (rot 0, front +z) just past the vein's reach: its own column is clear, its back landing is not.
+ const hz = VEIN_LOOK.stone.box[2] / 2 * 1.08 + .5, i = Math.floor(s.x), j = Math.ceil(s.z + hz + .5), door: Door = { id: 'door-1', x: i, y: lowestAir(i, j), z: j, rot: 0 };
+ g.world.base.doors.push(door); g.world.base.nextId = 2; bumpRooms(g); assert.equal(veinSpotBlocked(g, s), 'выход шлюза');
+ g.world.base.doors = []; bumpRooms(g); assert.equal(veinSpotBlocked(g, s), ''); void body;
  const near = VEIN_SPOTS.find(o => o.id === 'stone-s5')!; g.world.veins.push({ id: 'vein-1', spot: 'stone-s1', material: 'stone', amount: 5, size: 24, spawnedAt: 0 }); g.world.nextVeinId = 2;
  assert.equal(veinSpotBlocked(g, s), 'другая жила'); assert.equal(veinSpotBlocked(g, near), '');
  // Static spots keep 8 m from static deposits, so the stocked-deposit rule is checked with a synthetic spot.
@@ -93,6 +96,23 @@ test('D33: footprints registered by other structures (glass rooms, D31) keep new
   g.world.respawn.push({ material: 'stone', ms: 50 }); const ids = tick(g, 50);
   assert.equal(ids.length, 1); assert.notEqual(g.world.veins[0].spot, 'stone-s5', 'the spawn never picks the covered spot');
  } finally { veinBlockers.splice(veinBlockers.indexOf(src), 1); }
+});
+
+test('D33 × D31: a real glass room keeps veins out — its walls, its interior and its airlock', () => {
+ const g = fresh(), s = VEIN_SPOTS.find(s => s.id === 'stone-s5')!, i = Math.floor(s.x), j = Math.floor(s.z);
+ const lay = (interior: number[]) => { g.world.base.glass = [...shellOf(interior)].sort((a, b) => a - b); bumpRooms(g); };
+ // A 3×3×3 shelter around the spot: the walls are within the vein's reach.
+ lay(groundRoom(i - 1, j - 1, 3, 3, 3)); assert.equal(allRooms(g).length, 1); assert.equal(veinSpotBlocked(g, s), 'стеклоблок');
+ // A wide 13×13 hall: the walls are far, but the roof and the room's own bounds still cover the spot.
+ lay(groundRoom(i - 6, j - 6, 13, 13, 3)); assert.equal(allRooms(g).length, 1); assert.equal(veinSpotBlocked(g, s), 'стеклоблок');
+ assert.deepEqual(roomBlockers(g).filter(b => b.why === 'помещение'), [{ x: i + .5, z: j + .5, hx: 6.5, hz: 6.5, why: 'помещение' }]);
+ // An airlock in the south wall: its column and both landings are registered.
+ g.world.base.doors.push({ id: 'door-1', x: i, y: lowestAir(i, j - 7), z: j - 7, rot: 2 }); g.world.base.glass = g.world.base.glass.filter(k => !doorKeys(g.world.base.doors[0]).includes(k)); g.world.base.nextId = 2; bumpRooms(g);
+ assert.equal(allRooms(g).length, 1, 'the airlock keeps the hall sealed');
+ assert.deepEqual(roomBlockers(g).filter(b => b.why !== 'стеклоблок' && b.why !== 'помещение').map(b => [b.why, b.x, b.z]), [['шлюз', i + .5, j - 6.5], ['выход шлюза', i + .5, j - 7.5], ['выход шлюза', i + .5, j - 5.5]]);
+ assert.equal(veinSpotBlocked(g, VEIN_SPOTS.find(o => o.id === 'stone-s1')!), '', 'a far spot stays free');
+ g.world.respawn.push({ material: 'stone', ms: 50 }); const ids = tick(g, 50);
+ assert.equal(ids.length, 1); assert.notEqual(g.world.veins[0].spot, 'stone-s5', 'the spawn never picks a spot in a room');
 });
 
 test('D33: when every spot is blocked the queue retries every 10 s; capped materials wait for a free place', () => {

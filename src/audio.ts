@@ -75,6 +75,12 @@ export class Ambience {
   const c=this.ctx;if(!c||!this.enabled)return;this.burst('lowpass',200,.7,.38,.75,this.master);this.burst('lowpass',150,.7,.26,.6,this.master,.14);
   this.ring('sine',520,.05,.18,this.master,.08);this.ring('sine',390,.05,.28,this.master,.24);
  }
+ /** Air escaping a breached room: 2 s of high band-passed noise that fades out. */
+ hiss(){
+  const c=this.ctx;if(!c||!this.enabled)return;const s=c.createBufferSource();s.buffer=this.noise;const f=c.createBiquadFilter();f.type='highpass';f.frequency.value=2400;f.Q.value=.8;
+  const g=c.createGain(),t=c.currentTime;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.22,t+.03);g.gain.exponentialRampToValueAtTime(.001,t+2);
+  s.connect(f).connect(g).connect(this.master);s.start(t,Math.random()*1.5,2.05);
+ }
  /** Interface tones; `at` delays (s) and `level` scales one (the mined-item chime follows the crack quieter). */
  tone(kind:'ui'|'scan'|'discover'|'boot'|'item'|'warn',at=0,level=1){
   const c=this.ctx;if(!c||!this.enabled)return;const t=c.currentTime+at;

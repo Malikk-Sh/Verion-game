@@ -139,7 +139,7 @@ export const QUESTS: readonly QuestDefinition[] = [
   "context": [
    "bench"
   ],
-  "objective": "Установить биогенератор снаружи купола и загрузить топливо.",
+  "objective": "Установить биогенератор снаружи помещений и загрузить топливо.",
   "recipes": [
    "craft_biogenerator"
   ]
@@ -164,8 +164,8 @@ export const QUESTS: readonly QuestDefinition[] = [
  },
  {
   "id": "dome",
-  "label": "Купол",
-  "item": "dome",
+  "label": "Стеклянное\nубежище",
+  "item": "window",
   "x": 430,
   "y": 550,
   "parents": [
@@ -175,9 +175,10 @@ export const QUESTS: readonly QuestDefinition[] = [
   "context": [
    "bench"
   ],
-  "objective": "Установить герметичный купол. Для дыхания в нём нужна рабочая кислородная система.",
+  "objective": "Построить из стеклоблоков замкнутое помещение и встроить в стену шлюз. Для дыхания в нём нужна рабочая кислородная система.",
   "recipes": [
-   "craft_dome"
+   "craft_window",
+   "craft_airlock"
   ]
  },
  {
@@ -222,7 +223,7 @@ export const QUESTS: readonly QuestDefinition[] = [
    "circuit"
   ],
   "context": [],
-  "objective": "Установить распределитель внутри купола. Подключить питание и кислород.",
+  "objective": "Установить распределитель внутри стеклянного помещения. Подключить питание и кислород.",
   "recipes": [
    "craft_distributor"
   ]
@@ -278,7 +279,7 @@ export const QUESTS: readonly QuestDefinition[] = [
  {
   "id": "air",
   "label": "Дышащее\nубежище",
-  "item": "dome",
+  "item": "airlock",
   "x": 850,
   "y": 550,
   "parents": [
@@ -287,7 +288,7 @@ export const QUESTS: readonly QuestDefinition[] = [
    "oxygen"
   ],
   "context": [],
-  "objective": "Обеспечить пригодный воздух в герметичном куполе: ≥384 GU O₂, чистота ≥50%, температура −5…40 °C.",
+  "objective": "Обеспечить пригодный воздух в помещении: O₂ ≥ 8 GU на м³ объёма, чистота ≥50%, температура −5…40 °C.",
   "recipes": [
    "craft_gas_pipe"
   ]
@@ -295,7 +296,7 @@ export const QUESTS: readonly QuestDefinition[] = [
  {
   "id": "base",
   "label": "База\nработает",
-  "item": "dome",
+  "item": "window",
   "x": 966,
   "y": 265,
   "parents": [
@@ -303,7 +304,7 @@ export const QUESTS: readonly QuestDefinition[] = [
    "air"
   ],
   "context": [],
-  "objective": "Завершить автосборку вдали от верстака, пока в куполе пригодный воздух.",
+  "objective": "Завершить автосборку вдали от верстака, пока в помещении пригодный воздух.",
   "recipes": []
  }
 ];

@@ -1,20 +1,30 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { newGame, cloneState, sanitizeState, type GameState } from '../src/game/state.ts';
+import { newGame, cloneState, sanitizeState, STATE_VERSION, type GameState } from '../src/game/state.ts';
 import { addItems, countItem } from '../src/game/inventory.ts';
 import { NODES, NODE_BY_ID, PATCH_NODES } from '../src/game/resources.ts';
 import { natureTick, nextRegrowSeconds, covers } from '../src/game/nature.ts';
-import { RECIPES, RECIPE_BY_ID, WORKBENCH_UPGRADE, makeBuilding, startJob, productionTick, connect, linkSegments, insideDome, beginPassage, domeFront, telemetry, deliverPower, manualWork, queueJob } from '../src/game/production.ts';
+import { RECIPES, RECIPE_BY_ID, WORKBENCH_UPGRADE, makeBuilding, startJob, productionTick, connect, linkSegments, telemetry, deliverPower, manualWork, queueJob } from '../src/game/production.ts';
+import { allRooms, beginPassage, bumpRooms, cellKey, doorFront, doorKeys, doorProblem, groundRoom, landingPoint, lowestAir, placeDoor, roomAt, shellOf, stationRoom, type Door } from '../src/game/rooms.ts';
 import { packStation } from '../src/game/worldActions.ts';
-import { TANKS } from '../src/game/defs.ts';
-import { heightAt, GRASS } from '../src/world.ts';
+import { TANKS, type BuildingKind } from '../src/game/defs.ts';
+import { heightAt, GRASS, makeColliders } from '../src/world.ts';
 import { placementProblem } from '../src/buildings.ts';
 import { survivalTick } from '../src/game/survival.ts';
-import { stationStatus } from '../src/game/stationStatus.ts';
+import { stationStatus, roomStatus } from '../src/game/stationStatus.ts';
 import { nearestNode, guideStep } from '../src/game/guide.ts';
 import { refreshQuestProgress } from '../src/game/quests.ts';
 
 const fresh = () => newGame('w-s3', 7, 1, heightAt(40, 42));
+/** A closed glass room over the ground (3 levels above each interior column's floor); an airlock replaces the two lowest
+ *  wall cells of column (x, z) facing `rot`. `room()` reads the live room (its zone changes with every edit). */
+function shelter(g: GameState, x0: number, z0: number, w: number, d: number, at?: { x: number; z: number; rot: number }) {
+ let glass = shellOf(groundRoom(x0, z0, w, d, 3)), door: Door | undefined;
+ if (at) { const f = doorFront(at.rot); door = { id: 'door-' + g.world.base.nextId++, x: at.x, y: Math.max(lowestAir(at.x, at.z), lowestAir(at.x - f.x, at.z - f.z)), z: at.z, rot: at.rot }; const cells = doorKeys(door); glass = glass.filter(k => !cells.includes(k)); g.world.base.doors.push(door); }
+ g.world.base.glass = [...new Set([...g.world.base.glass, ...glass])].sort((a, b) => a - b); bumpRooms(g);
+ const cell = groundRoom(x0, z0, w, d, 3)[0], room = () => { const r = allRooms(g).find(r => r.cells.includes(cell)); assert.ok(r, 'the shelter is closed'); return r!; };
+ room(); return { room, door: door! };
+}
 const advance = (g: GameState, ms: number) => { for (let n = 0; n < ms; n += 50) { productionTick(g, 50); natureTick(g, 50); g.meta.activeTicks++; } };
 
 test('S3: grass regrows one plant per period of active time, never in a burst and never above its amount', () => {
@@ -38,7 +48,7 @@ test('S3: a version 6 save migrates to 7 (and on to 8) without losing anything; 
  k.job = { recipeId: 'glass', workMs: 3000, reserved: [{ itemId: 'sand', count: 2 }, { itemId: 'fiber', count: 2 }], water: 0 } as any;
  old.player.inventory[5] = { itemId: 'workbench', count: 1, packed: { kind: 'workbench', level: 1, input: [null, null, null, null], output: [null, null, null, null], job: null, queue: [], enabled: true, lowPriority: false, energy: 0, fuel: 0, water: 0, oxygen: 0, zone: k.zone } };
  const m = sanitizeState(old);
- assert.equal(m.meta.stateVersion, 8);
+ assert.equal(m.meta.stateVersion, STATE_VERSION);
  for (const id of ['stone-b', 'iron-c', 'ice-crater', 'grass-g']) assert.equal(m.world.nodes[id], NODE_BY_ID.get(id)!.amount);
  const forged: any = cloneState(g); forged.meta.stateVersion = 6; delete forged.world.regrow; delete forged.world.nodes['iron-a'];
  assert.throws(() => sanitizeState(forged), 'A deleted pre-S3 deposit is not refilled by migration');
@@ -68,7 +78,9 @@ test('S3: a repeated batch keeps crafting while inputs last, then stops without 
 
 test('S3: the whole start-to-base path fits the valley deposits with margin', () => {
  // Build list of the Verdana milestones: every station once, a second tank, the upgrade, lines.
- const want: Record<string, number> = { workbench: 1, kiln: 1, tool_stone: 1, wrench: 1, biogenerator: 1, electrolyzer: 1, refill: 1, bottle_1: 1, distributor: 1, dome: 1, cable: 12, gas_pipe: 8 };
+ // S4 (D31): the shelter equal to the old dome (4×4×3 inside, ground floor) needs the minimal 64-block shell and one airlock.
+ const want: Record<string, number> = { workbench: 1, kiln: 1, tool_stone: 1, wrench: 1, biogenerator: 1, electrolyzer: 1, refill: 1, bottle_1: 1, distributor: 1, window: 64, airlock: 1, cable: 12, gas_pipe: 8 };
+ assert.equal(shellOf(groundRoom(56, 42, 4, 4, 3)).length, 64); assert.equal(groundRoom(56, 42, 4, 4, 3).length, 48);
  const raw: Record<string, number> = {}, made: Record<string, number> = {};
  const produce = (id: string, n: number) => {
   const r = RECIPES.find(r => r.outputs[id] && r.station !== 'electrolyzer');
@@ -85,66 +97,67 @@ test('S3: the whole start-to-base path fits the valley deposits with margin', ()
  assert.ok((raw.grass ?? 0) <= 100, 'grass ' + raw.grass);
  assert.ok(TANKS.bottle_1.capacity >= 600000);
  assert.ok(RECIPE_BY_ID.get('electrolysis'));
- assert.equal(insideDome({ kind: 'dome', x: 0, y: 0, z: 0 } as any, 1, .5, 1), true);
+ assert.ok(raw.iron_raw >= 16 && raw.sand >= 32, 'the shell costs 16 glass and 16 iron'); assert.equal(RECIPE_BY_ID.get('craft_dome'), undefined);
 });
-test('S3: a turned dome keeps its airlock on the turned side, in and out', () => {
- const g = fresh(), d = makeBuilding(g, 'dome', 60, 0, 40, 1);
- assert.deepEqual(domeFront(d), { x: 1, z: 0 });
- Object.assign(g.player, { x: 60, y: 0, z: 42.8 });
- assert.equal(beginPassage(g, d.id), 'Подойдите к шлюзу купола');
- Object.assign(g.player, { x: 62.8, z: 40 });
- d.zone.q = 3999; assert.match(beginPassage(g, d.id), /4 GU/, 'Entry needs the full 4 GU charge');
- d.zone.q = 8000; assert.equal(beginPassage(g, d.id), ''); assert.equal(d.zone.q, 4000);
+test('S3/S4: a turned airlock keeps its side, in and out', () => {
+ const g = fresh(), { room, door } = shelter(g, 57, 39, 3, 3, { x: 60, z: 40, rot: 1 });
+ assert.deepEqual(doorFront(door.rot), { x: 1, z: 0 });
+ Object.assign(g.player, { x: 60, y: heightAt(60, 43.5), z: 43.5 });
+ assert.equal(beginPassage(g, door.id), 'Подойдите к шлюзу');
+ Object.assign(g.player, { x: 62.8, z: 40.5 });
+ room().zone.q = 3999; assert.match(beginPassage(g, door.id), /4 GU/, 'Entry needs the full 4 GU charge');
+ room().zone.q = 8000; assert.equal(beginPassage(g, door.id), ''); assert.equal(room().zone.q, 4000);
  const enter = productionTick(g, 6000).passage!;
- assert.ok(insideDome(d, enter.x, enter.y, enter.z)); assert.equal(Math.round(enter.x), 61); assert.equal(enter.z, 40);
+ assert.equal(roomAt(g, enter.x, enter.y + 1, enter.z)?.volume, 27); assert.deepEqual([enter.x, enter.z], [59.5, 40.5]);
  Object.assign(g.player, { x: enter.x, y: enter.y, z: enter.z });
- d.zone.q = 0; assert.equal(beginPassage(g, d.id), '', 'Leaving an empty dome is always possible');
+ room().zone.q = 0; assert.equal(beginPassage(g, door.id), '', 'Leaving an empty room is always possible');
  const leave = productionTick(g, 6000).passage!;
- assert.ok(!insideDome(d, leave.x, leave.y, leave.z)); assert.ok(leave.x > 63); assert.equal(leave.z, 40);
+ assert.equal(roomAt(g, leave.x, leave.y + 1, leave.z), null); assert.deepEqual([leave.x, leave.z], [61.5, 40.5]);
 });
-test('S3: the airlock landing spots stay free and its 6 s cycle is breathable', () => {
- const g = fresh(), y = heightAt(60, 40), d = makeBuilding(g, 'dome', 60, y, 40, 1);
- Object.assign(g.player, { x: 58, y, z: 37 });
- assert.match(placementProblem(g, 'distributor', 61, 40), /шлюза/);
- assert.equal(placementProblem(g, 'distributor', 59, 40), '');
- assert.match(placementProblem(g, 'biogenerator', 59, 40), /выхлоп/, 'A generator never burns inside a dome');
- Object.assign(g.player, { x: 66, y, z: 37 });
- assert.match(placementProblem(g, 'kiln', 64, 40), /шлюза/);
- const g2 = fresh(); makeBuilding(g2, 'kiln', 64, heightAt(64, 40), 40); Object.assign(g2.player, { x: 58, y, z: 35 });
- assert.match(placementProblem(g2, 'dome', 60, 40, 1), /Перед шлюзом/);
- // A rock or deposit in front of the door counts too: the stone pile X24/Z25 blocks a dome at X24/Z21 facing it.
- Object.assign(g2.player, { x: 18, z: 15 }); assert.match(placementProblem(g2, 'dome', 24, 21, 0), /препятствие/); assert.equal(placementProblem(g2, 'dome', 24, 21, 1), '');
+test('S3/S4: the airlock landing spots stay free and its 6 s cycle is breathable', () => {
+ const g = fresh(), { room, door } = shelter(g, 57, 39, 3, 3, { x: 60, z: 40, rot: 1 }), y = heightAt(58, 40) + .12;
+ Object.assign(g.player, { x: 58, y, z: 36 });
+ assert.match(placementProblem(g, 'distributor', 62, 40), /шлюза/, 'the outer landing cell (61, 40)');
+ assert.equal(placementProblem(g, 'distributor', 58, 40), '');
+ assert.match(placementProblem(g, 'biogenerator', 58, 40), /выхлоп/, 'A generator never burns inside a room');
+ assert.match(placementProblem(g, 'kiln', 61, 40), /стеклом/, 'the door cells are part of the wall');
+ // A station or a rock beside a new airlock would trap the player set down there.
+ const g2 = fresh(); makeBuilding(g2, 'kiln', 62, heightAt(62, 40) + .12, 40); Object.assign(g2.player, { x: 58, y, z: 36 }); addItems(g2.player.inventory, 'airlock', 1);
+ const before = structuredClone(g2); assert.match(placeDoor(g2, cellKey(60, lowestAir(60, 40), 40), 1).error, /станция/); assert.deepEqual(g2, before);
+ makeColliders(); Object.assign(g2.player, { x: 20, y: heightAt(20, 20), z: 20 });
+ const rock = cellKey(24, lowestAir(24, 22), 22); assert.match(doorProblem(g2, rock, 0), /препятствие/, 'the stone pile X24/Z25 stands in front of a door at X24/Z22 facing +z'); assert.equal(doorProblem(g2, rock, 1), '');
  // Entering from outside with empty tanks: the paid chamber air carries the player through the cycle.
- Object.assign(g.player, { x: 62.8, y: d.y, z: 40 }); for (const t of g.player.bottles) if (t) t.milliGU = 0;
- d.zone.q = 20000; assert.equal(beginPassage(g, d.id), ''); assert.equal(d.zone.q, 16000);
+ Object.assign(g.player, { x: 62.8, y: heightAt(62.8, 40.5), z: 40.5 }); for (const t of g.player.bottles) if (t) t.milliGU = 0;
+ room().zone.q = 20000; assert.equal(beginPassage(g, door.id), ''); assert.equal(room().zone.q, 16000);
  for (let i = 0; i < 100; i++) survivalTick(g, .05, false);
- // The 4 GU paid at the start carry the cycle: no suffocation and no second charge from the dome.
- assert.equal(g.player.survival.suffocationMs, 0); assert.equal(d.zone.q, 16000);
+ // The 4 GU paid at the start carry the cycle: no suffocation and no second charge from the room.
+ assert.equal(g.player.survival.suffocationMs, 0); assert.equal(room().zone.q, 16000);
 });
-test('S3: in a power shortage the dome distributor is served before workbench II (SYSTEMS energy classes)', () => {
- const g = fresh(), gen = makeBuilding(g, 'biogenerator', 44, 0, 40), dist = makeBuilding(g, 'distributor', 52, 0, 40), bench = makeBuilding(g, 'workbench', 46, 0, 44);
- makeBuilding(g, 'dome', 52, 0, 40); bench.level = 2;
+test('S3/S4: in a power shortage the room distributor is served before workbench II (SYSTEMS energy classes)', () => {
+ const g = fresh(), gen = makeBuilding(g, 'biogenerator', 44, 0, 40), dist = makeBuilding(g, 'distributor', 52, heightAt(52, 40) + .12, 40), bench = makeBuilding(g, 'workbench', 46, 0, 44);
+ shelter(g, 51, 39, 3, 3); bench.level = 2; assert.equal(stationRoom(g, dist)?.volume, 27);
  addItems(g.player.inventory, 'cable', 9); assert.equal(connect(g, 'cable', gen.id, dist.id), ''); assert.equal(connect(g, 'cable', gen.id, bench.id), '');
  Object.assign(g.player, { x: 46, z: 45 }); addItems(g.player.inventory, 'copper', 4); assert.equal(startJob(g, 'craft_wire', bench.id), '');
  gen.energy = 600; productionTick(g, 50, null, 10);
  assert.equal(telemetry.power.get(dist.id), Math.round((10 + Math.abs(10 - 20) / 20) * 50));
  assert.equal(telemetry.power.get(bench.id), 600 - Math.round((10 + Math.abs(10 - 20) / 20) * 50));
 });
-test('S3: the dome checklist wants pipe and power at the same distributor; an idle workbench II reports its power', () => {
- const g = fresh(), gen = makeBuilding(g, 'biogenerator', 44, 0, 40), electro = makeBuilding(g, 'electrolyzer', 48, 0, 36), dome = makeBuilding(g, 'dome', 52, 0, 40);
- const piped = makeBuilding(g, 'distributor', 51, 0, 40), powered = makeBuilding(g, 'distributor', 53, 0, 40);
+test('S3/S4: the room checklist wants pipe and power at the same distributor; an idle workbench II reports its power', () => {
+ const g = fresh(), gen = makeBuilding(g, 'biogenerator', 44, 0, 40), electro = makeBuilding(g, 'electrolyzer', 48, 0, 36), { room } = shelter(g, 50, 39, 4, 3);
+ const piped = makeBuilding(g, 'distributor', 51, heightAt(51, 40) + .12, 40), powered = makeBuilding(g, 'distributor', 53, heightAt(53, 40) + .12, 40);
  addItems(g.player.inventory, 'cable', 9); addItems(g.player.inventory, 'gas_pipe', 9);
  assert.equal(connect(g, 'gas_pipe', electro.id, piped.id), ''); assert.equal(connect(g, 'cable', gen.id, powered.id), '');
  gen.energy = 400000; productionTick(g, 50, null, 10);
- const checks = stationStatus(g, dome).checks!, check = (label: RegExp) => checks.find(c => label.test(c.label))!.ok;
+ const checks = roomStatus(g, room()).checks!, check = (label: RegExp) => checks.find(c => label.test(c.label))!.ok;
+ assert.equal(check(/Распределитель внутри/), true); assert.equal(check(/Распределителей: 2 из 1/), true);
  assert.equal(check(/Труба/), true); assert.equal(check(/Питание/), false);
  const bench = makeBuilding(g, 'workbench', 46, 0, 44); bench.level = 2;
  assert.equal(stationStatus(g, bench).title, 'Не подключён');
  assert.equal(connect(g, 'cable', gen.id, bench.id), ''); assert.match(stationStatus(g, bench).title, /Питание есть/);
- // A generator inside a dome burns nothing there: fuel alone is no power for the network.
- const g2 = fresh(), d2 = makeBuilding(g2, 'dome', 52, 0, 40), inGen = makeBuilding(g2, 'biogenerator', 51, 0, 40), b2 = makeBuilding(g2, 'workbench', 46, 0, 44);
- b2.level = 2; addItems(inGen.input, 'fiber', 5); addItems(g2.player.inventory, 'cable', 9); assert.equal(connect(g2, 'cable', inGen.id, b2.id), '');
- void d2; assert.equal(stationStatus(g2, b2).title, 'Нет питания');
+ // A generator inside a room burns nothing there: fuel alone is no power for the network.
+ const g2 = fresh(), inGen = makeBuilding(g2, 'biogenerator', 52, heightAt(52, 40) + .12, 40), b2 = makeBuilding(g2, 'workbench', 46, 0, 44);
+ shelter(g2, 51, 39, 3, 3); b2.level = 2; addItems(inGen.input, 'fiber', 5); addItems(g2.player.inventory, 'cable', 9); assert.equal(connect(g2, 'cable', inGen.id, b2.id), '');
+ assert.equal(stationStatus(g2, b2).title, 'Нет питания');
 });
 test('S3: beside a far deposit the compass points at it, not back to the valley', () => {
  const g = fresh(), far = NODE_BY_ID.get('iron-canyon')!;
@@ -152,10 +165,10 @@ test('S3: beside a far deposit the compass points at it, not back to the valley'
  Object.assign(g.player, { x: far.x + 3, z: far.z });
  assert.equal(nearestNode(g, 'iron_raw')!.name, far.name);
 });
-test('S3: the distributor step needs a distributor inside a dome, not just anywhere', () => {
- const g = fresh(); makeBuilding(g, 'distributor', 46, 0, 46); makeBuilding(g, 'dome', 56, 0, 40);
+test('S3/S4: the distributor step needs a distributor inside a glass room, not just anywhere', () => {
+ const g = fresh(); makeBuilding(g, 'distributor', 46, 0, 46); shelter(g, 55, 39, 3, 3);
  refreshQuestProgress(g); assert.ok(!g.progress.quests.completed.includes('distributor'));
- makeBuilding(g, 'distributor', 56, 0, 40); refreshQuestProgress(g); assert.ok(g.progress.quests.completed.includes('distributor'));
+ makeBuilding(g, 'distributor', 56, heightAt(56, 40) + .12, 40); refreshQuestProgress(g); assert.ok(g.progress.quests.completed.includes('distributor'));
 });
 test('S3: each cable carries 120 EU/s, the network as a whole is not capped; classes fill in order', () => {
  const ms = 50, g = fresh(); addItems(g.player.inventory, 'cable', 40);
@@ -213,7 +226,7 @@ test('S3: a v6 world gets no new deposit under a body, the player or an airlock 
  const g = fresh(), old: any = cloneState(g);
  old.meta.stateVersion = 6; delete old.world.regrow;
  for (const id of ['stone-b', 'grass-c', 'iron-c', 'ice-crater']) delete old.world.nodes[id];
- const d = makeBuilding(old, 'dome', 24, 0, 21); delete d.rot; // door north: its outer exit (24, 24.5) is inside stone-b
+ const d = makeBuilding(old, 'dome' as BuildingKind, 24, 0, 21) as any; delete d.rot; // door north: its outer exit (24, 24.5) is inside stone-b
  makeBuilding(old, 'workbench', 16, 0, 66); // on grass-c
  Object.assign(old.player, { x: 98, z: 63 }); // inside iron-c
  const m = sanitizeState(old);
@@ -257,27 +270,23 @@ test('S3: a power deficit inside one class is shared in proportion to the reques
  assert.equal(r.get(a.id), 15 * ms); assert.equal(r.get(b.id), 5 * ms);
 });
 
-test('S3: leaving through the airlock lands on the ground in front of the door, not at the dome floor height', () => {
- const g = fresh(), x = 70, z = 44, d = makeBuilding(g, 'dome', x, heightAt(x, z) + .12, z, 0), f = domeFront(d), out = { x: x + f.x * 3.5, z: z + f.z * 3.5 };
- assert.ok(Math.abs(heightAt(out.x, out.z) - (d.y + .12)) > .05, 'the outer pad must sit at another height for this check');
- Object.assign(g.player, { x: x + 1, y: d.y + .1, z: z + .5 });
- assert.equal(beginPassage(g, d.id), '');
+test('S3/S4: leaving through the airlock lands on the ground in front of the door, not at the room floor height', () => {
+ const g = fresh(), { room, door } = shelter(g, 69, 42, 3, 3, { x: 70, z: 45, rot: 0 }), out = landingPoint(g, door, 'front');
+ assert.deepEqual([out.x, out.z], [70.5, 46.5]); assert.equal(out.y, heightAt(70.5, 46.5));
+ assert.ok(Math.abs(out.y - door.y) > .05, 'the outer ground must sit at another height than the door sill for this check');
+ Object.assign(g.player, { x: 70.5, y: heightAt(70.5, 44.5), z: 44.5 }); assert.ok(room());
+ assert.equal(beginPassage(g, door.id), '');
  const leave = productionTick(g, 6000).passage!;
- assert.deepEqual([leave.x, leave.z], [out.x, out.z]); assert.equal(leave.y, heightAt(out.x, out.z));
+ assert.deepEqual(leave, out);
 });
 
-test('S3: the dome is passive — no on/off switch, an old "off" flag changes nothing', async () => {
- const g = fresh(), d = makeBuilding(g, 'dome', 58, heightAt(58, 42) + .12, 42, 0); d.enabled = false;
- const { stationStatus } = await import('../src/game/stationStatus.ts');
- assert.notEqual(stationStatus(g, d).title, 'Выключено');
-});
-
-test('S3: the journal follows the distributor inside the dome where the pipe and the cable meet', () => {
- const g = fresh(), y = heightAt(58, 42) + .12, dome = makeBuilding(g, 'dome', 58, y, 42, 0);
+test('S3/S4: the journal follows the distributor inside the room where the pipe and the cable meet', () => {
+ const g = fresh(), y = heightAt(57, 42) + .12; shelter(g, 56, 41, 3, 3);
  const outside = makeBuilding(g, 'distributor', 46, heightAt(46, 46) + .12, 46, 0), inside = makeBuilding(g, 'distributor', 57, y, 42, 0);
  const gen = makeBuilding(g, 'biogenerator', 51, heightAt(51, 40) + .12, 40, 0), el = makeBuilding(g, 'electrolyzer', 51, heightAt(51, 43) + .12, 43, 0);
- assert.ok(g.world.base.buildings.indexOf(outside) < g.world.base.buildings.indexOf(inside) && insideDome(dome, inside.x, inside.y, inside.z) && !insideDome(dome, outside.x, outside.y, outside.z));
+ assert.ok(g.world.base.buildings.indexOf(outside) < g.world.base.buildings.indexOf(inside) && !!stationRoom(g, inside) && !stationRoom(g, outside));
  g.world.base.links.push({ id: 'l-pipe', kind: 'gas_pipe', from: el.id, to: inside.id }, { id: 'l-cable', kind: 'cable', from: inside.id, to: gen.id });
  const tasks = guideStep(g, 'air').tasks;
- assert.equal(tasks[0].done, true, 'pipe to the distributor in the dome'); assert.equal(tasks[1].done, true, 'cable to the same distributor');
+ assert.equal(tasks[0].done, true, 'pipe to the distributor in the room'); assert.equal(tasks[1].done, true, 'cable to the same distributor');
+ assert.deepEqual([tasks[2].need, tasks[2].unit], [216, 'GU'], 'a 27 m³ room is habitable from 216 GU');
 });

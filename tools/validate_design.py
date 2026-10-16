@@ -47,7 +47,8 @@ def reach(scopes):
   if {'sieve_hand','mesh_steel'}.issubset(avail) and 'niva' in worlds:avail.add('velite_speck')
   if {'sieve_hand','mesh_velite'}.issubset(avail) and 'pyra' in worlds:avail.add('astrite_speck')
   if 'biogenerator' in avail and 'fiber' in avail:tech.add('power')
-  if {'dome','distributor','oxygen'}.issubset(avail) and 'power' in tech:tech.add('habitat')
+  # S4 (D31): the shelter is a player-built glass room with an airlock, not a prefab dome.
+  if {'window','airlock','distributor','oxygen'}.issubset(avail) and 'power' in tech:tech.add('habitat')
   if 'steel' in avail:tech.add('steel')
   if ({'cleaner','sorbent'}.issubset(avail) or {'basin_intake','water'}.issubset(avail)) and 'power' in tech:tech.add('terraform')
   if {'steel','terraform'}.issubset(tech) and 'blueprint_rocket' in avail:tech.add('flight')
@@ -99,7 +100,7 @@ def bom(order,extra_raw=()):
   stock[i]-=q;seconds+=r['seconds']*n;energy+=r['seconds']*r['EU_per_second']*n
  for i,q in need.items():obtain(i,q)
  return raw,seconds,energy
-starter={'workbench':1,'kiln':1,'biogenerator':1,'electrolyzer':1,'refill':1,'bottle_1':1,'distributor':1,'dome':1,'cable':4,'gas_pipe':4,'bed':1,'chest':1}
+starter={'workbench':1,'kiln':1,'biogenerator':1,'electrolyzer':1,'refill':1,'bottle_1':1,'distributor':1,'window':64,'airlock':1,'cable':4,'gas_pipe':4,'bed':1,'chest':1}
 raw,t,e=bom(starter)
 assert not any(x in raw for x in ['velite_raw','astrite_raw','gold_raw']),raw
 rocketraw,rt,rocket_energy=bom({'rocket_1':1,'landing_pad':2,'underwear_1':1},extra_raw=('blueprint_rocket',))
@@ -154,7 +155,7 @@ report=f'''# Проверка GDD 1.0 — 28.09.2026
 
 ## Ведомость ранней базы
 
-Набор: верстак, печь, биогенератор, электролиз, заправка, второй базовый баллон, распределитель, купол, 4 кабеля, 4 газовых трубы, кровать и контейнер.
+Набор: верстак, печь, биогенератор, электролиз, заправка, второй базовый баллон, распределитель, стеклянное помещение 4×4×3 (64 стеклоблока и шлюз), 4 кабеля, 4 газовых трубы, кровать и контейнер.
 
 Материалы по выбранным базовым рецептам: **{desc(raw)}**.
 

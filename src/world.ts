@@ -101,6 +101,8 @@ export function heightAt(x:number,z:number){
  const a=gridHeight(ix,iz),b=gridHeight(ix+1,iz),c=gridHeight(ix,iz+1),d=gridHeight(ix+1,iz+1);
  return u+v<=1?a+(b-a)*u+(c-a)*v:d+(c-d)*(1-u)+(b-d)*(1-v);
 }
+/** Stations stand on the terrain under their 3×3 footprint samples (S4: glass blocks are not bodies). */
+export const stationY=(x:number,z:number)=>Math.max(...[-.5,0,.5].flatMap(dx=>[-.5,0,.5].map(dz=>heightAt(x+dx,z+dz))))+.12;
 export function random(seed=78191){let s=seed;return()=>{s=(Math.imul(s,1664525)+1013904223)>>>0;return s/4294967296;};}
 export const ROCKS: {x:number;z:number;s:number;sy:number;rotation:number}[]=[];
 const rand=random();
