@@ -95,8 +95,10 @@ try{
  /** Aims the ghost at cell `key` from `stand` ([x, z] on the ground or [x, z, y] on blocks) towards `point`, then one real F. */
  const placeAt=async(key,stand,point,item='window')=>{await hold(item);await look(stand,point);await aimed(k=>{const s=window.__vireon.getState();return s.cellTarget===k&&s.cellProblem==='';},key,'Ghost is not on '+key);const n=(await snapshot()).world.base.glass.length;await page.keyboard.press('f');
   if(item==='window')await page.waitForFunction(([k,n])=>{const g=window.__vireon.snapshot().world.base.glass;return g.includes(k)&&g.length===n+1;},[key,n],{timeout:5000});else await page.waitForFunction(k=>window.__vireon.snapshot().world.base.doors.some(d=>((d.x+256)*1024+(d.z+256))*128+(d.y+32)===k),key,{timeout:5000});};
- /** A wall cell from outside (outward normal nx, nz): level 0 aims at the ground of its column (the 0.5 m pad), 1 and 2 at the top of the block below (D35: level k spans y k+0.5…k+1.5). */
- const wallCell=(i,k,j,nx,nz)=>{const cx=i+.5,cz=j+.5,out=k===2?1.45:1.9;return placeAt(ck(i,k,j),[cx+nx*out,cz+nz*out],k===0?[cx,.5,cz]:k===1?[cx+nx*.1,1.5,cz+nz*.1]:[cx-nx*.45,2.5,cz-nz*.45]);};
+ /** A wall cell from outside (outward normal nx, nz); D35: level k spans y k+0.5…k+1.5. Level 0 aims at the ground of its
+  *  column (the 0.5 m pad), 1 at the top of the block below; the top of level 1 (2.5 m) is above the eyes (2.1 m), so
+  *  level 2 aims up at the top 25 cm of that block's outer face, which stacks on it. */
+ const wallCell=(i,k,j,nx,nz)=>{const cx=i+.5,cz=j+.5,out=k===2?1.45:1.9;return placeAt(ck(i,k,j),[cx+nx*out,cz+nz*out],k===0?[cx,.5,cz]:k===1?[cx+nx*.1,1.5,cz+nz*.1]:[cx+nx*.5,2.4,cz+nz*.5]);};
  /** The room window of a glass block ('glass:<key>') or an airlock: aim with the multitool selected and press F. */
  const openRoom=async(id,stand,point)=>{if((await state()).dialog==='production-panel')await click('#close-production');await slot(0);await look(stand,point);await aimed(id=>{const s=window.__vireon.getState();return s.worldTarget===id&&s.action==='room';},id,'Not aimed at '+id);await page.keyboard.press('f');await page.waitForFunction(id=>{const s=window.__vireon.getState();return s.dialog==='production-panel'&&s.station===id;},id);};
  const rooms=async()=>(await state()).rooms,probe=ck(58,2,41),probeAim=[[58.5,39.4],[58.5,3,41]];
@@ -144,7 +146,8 @@ try{
   await page.click('#map-guide');s=await state();assert.equal(s.selected,'guide');if(s.dialog==='map-panel')await page.click('#close-map');assert.equal((await state()).running,true);
   check('Map: the glass room is an outline tinted by its air; its airlock opens a room card, is led to and returns to the journal');}
  // ---------- Growing behind a second wall, the airlock both ways, a confirmed breach ----------
- for(const [i,j,nx,nz] of [[60,42,0,-1],[60,44,0,1],[61,43,1,0]])for(const k of [0,1])await wallCell(i,k,j,nx,nz);await placeAt(ck(60,2,43),[62.9,43.5],[60,3,43.5]);
+ // The roof cell goes in front of the main room's east wall (level 2), aimed over the new 2-high wall from 4.3 m out (D35: its top is 2.5 m).
+ for(const [i,j,nx,nz] of [[60,42,0,-1],[60,44,0,1],[61,43,1,0]])for(const k of [0,1])await wallCell(i,k,j,nx,nz);await placeAt(ck(60,2,43),[64.3,43.5],[60,3,43.5]);
  rs=await rooms();assert.deepEqual(rs.map(r=>r.volume).sort((a,b)=>a-b),[2,27]);assert.equal(rs.find(r=>r.volume===2).q,0);check('A second shell built against the wall closes a small empty room of its own');
  // Diagnostics for a tap that CI has lost here before: where each pointer event of the click landed and what the window said.
  await page.evaluate(()=>{const log=window.__tapLog=[],name=t=>t instanceof Element?`${t.tagName.toLowerCase()}${t.id?'#'+t.id:''}.${[...t.classList].join('.')}:${(t.textContent??'').trim().slice(0,24)}`:String(t);for(const k of ['pointerdown','mousedown','pointerup','mouseup','click','pointercancel'])document.addEventListener(k,e=>log.push(`${k}@${Math.round(performance.now())} ${name(e.target)} (${Math.round(e.clientX)},${Math.round(e.clientY)})`),true);});

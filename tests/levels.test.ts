@@ -72,6 +72,12 @@ test('D35: the reticle places the cell it shows — on the pad, on top of a bloc
  assert.equal(look(57.5, 49, [57.5, 1.5, 46.4]), cellKey(57, 1, 46), 'aimed at the top face (y 1.5): the cell above');
  // y 1.2 is inside level 0 now (it was level 1 on the old integer lattice): the side face is struck and the new cell is in front of it.
  assert.equal(look(57.5, 49.5, [57.5, 1.2, 47]), cellKey(57, 0, 47)); assert.equal(w.struck?.key, cellKey(57, 0, 46)); assert.deepEqual(w.struck?.normal, [0, 0, 1]);
+ // The second row tops out at 2.5 m, above the eyes (2.1 m): its top face is out of sight from the ground, so aiming up at the
+ // top 25 cm of its side face stacks the third row on it; lower on that face the block still goes in front.
+ lay(g, [cellKey(57, 1, 46)]);
+ assert.equal(look(57.5, 48.45, [57.5, 2.4, 47]), cellKey(57, 2, 46), 'top band of a side face above the eyes: on top'); assert.equal(w.struck?.key, cellKey(57, 1, 46));
+ assert.equal(look(57.5, 48.45, [57.5, 2.1, 47]), cellKey(57, 1, 47), 'lower on the face: in front');
+ assert.equal(look(57.5, 49.5, [57.5, 1.4, 47]), cellKey(57, 0, 47), 'a face whose top is below the eyes (seen from above): in front');
 });
 
 test('D35: v8 → v9 keeps the keys; a room with an airlock on the pad keeps its rooms and every milli-GU', () => {

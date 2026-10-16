@@ -11,7 +11,7 @@ import { allDeposits, depositLeft, depositScale } from './game/resources';
 import { REACH } from './game/mining';
 import { cellKey, cellOf, cellY, doorFront, doorProblem, glassProblem, groundCell, placeDoor, placeGlass, roomsView, type RoomEdit } from './game/rooms';
 
-const OPEN_REACH = 3.7, LINK_REACH = LINK_RANGE + 2;
+const OPEN_REACH = 3.7, LINK_REACH = LINK_RANGE + 2, STACK_BAND = .25;
 /** Glass building: the aim ray walks the block grid up to 6 m; a room window opens from up to 4.5 m. */
 export const GLASS_AIM = 6, ROOM_REACH = 4.5;
 /** Quarter turn whose front (rot 0 = +z) points along a horizontal direction. */
@@ -78,7 +78,13 @@ export function createWorldInteraction(scene: THREE.Scene, camera: THREE.Camera)
    const n = struck.normal; support = struck.key;
    // An airlock aimed at a wall block replaces it (and the one above or below): the lower of the two stays on the floor.
    if (id === 'airlock' && !struck.door && n[1] === 0) cell = v.glass.has(struck.key - 1) ? struck.key - 1 : struck.key;
-   else { const c = cellOf(struck.key); cell = cellKey(c.i + n[0], c.k + n[1], c.j + n[2]); }
+   else {
+    // S5 (D35): with the levels 0.5 m up the second row of a wall tops out at 2.5 m, above the eyes on the pad (2.1 m), so
+    // its top face cannot be seen from the ground. Aiming up at the top 25 cm of a side face whose top is above the eyes
+    // stacks the block on it (the ghost shows where); everywhere else a side face places the block in front of it.
+    const c = cellOf(struck.key), top = cellY(c.k + 1), up = id === 'window' && n[1] === 0 && direction.y > 0 && camera.position.y < top && camera.position.y + direction.y * struck.distance > top - STACK_BAND;
+    cell = up ? cellKey(c.i, c.k + 1, c.j) : cellKey(c.i + n[0], c.k + n[1], c.j + n[2]);
+   }
   } else if (ground) {
    const at = groundCell(v, Math.floor(ground.x), Math.floor(ground.z)); cell = at.cell; support = at.support;
   }
