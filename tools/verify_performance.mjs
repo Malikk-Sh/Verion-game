@@ -37,8 +37,10 @@ try{
   else await page.keyboard.down('KeyF');
   await page.waitForFunction(()=>{const s=window.__vireon.getState();return s.fx.solid>0&&s.feel.shell;});const mining=await state();report[quality+'Mining']={fx:mining.fx,motes:mining.motes,feel:mining.feel,drawCalls:mining.drawCalls};
   assert.equal(mining.feel.ring,true,'Reticle ring shows progress');if(quality==='low')assert.ok(mining.drawCalls<=150,`Low draw calls with the crack shell ${mining.drawCalls} > 150`);
-  assert.ok(mining.motes>0,'Wind motes are drawn in '+quality);assert.equal(mining.motes,{low:96,standard:320,high:640}[quality]);
-  if(quality==='low'){assert.ok(mining.fx.cap+mining.motes<=512,'Low particle budget (pools + motes) is 512');assert.ok(mining.fx.live+mining.motes<=512);}
+  assert.ok(mining.motes>0,'Wind motes are drawn in '+quality);assert.equal(mining.motes,{low:72,standard:200,high:320}[quality]);assert.equal(mining.drift.cap,{low:6,standard:10,high:14}[quality]);
+  if(quality==='low'){assert.ok(mining.fx.cap+mining.motes+mining.drift.cap<=512,'Low particle budget (pools + motes + sand ribbons) is 512');assert.ok(mining.fx.live+mining.motes+mining.drift.live<=512);}
+  // S5: a strong gust (shared wind time 44 s) raises sand ribbons near the player, never more than the preset allows.
+  await page.evaluate(()=>window.__vireon.windTime(44));const gust=await (await page.waitForFunction(()=>{const s=window.__vireon.getState();return s.drift.live>0&&s;})).jsonValue();report[quality+'Gust']={drift:gust.drift,gust:gust.wind.gust};assert.ok(gust.drift.live<=gust.drift.cap&&gust.wind.gust>.6);
   await click('#pause-button');await page.keyboard.up('KeyF');await capture();const stableA=await capture();await page.waitForTimeout(350);const stableB=await capture();const frozen=await state();assert.equal(stableB===stableA,true,'Paused raw 3D pixels must stay stable in '+quality);
   assert.ok(frozen.fx.solid>0&&frozen.footprints.visible>0&&frozen.motes>0,'Chips, prints and motes are present in the paused frames');assert.equal(frozen.feel.shell,true,'The crack shell is part of the stable paused frame');
   if(quality==='low'){const before=frozen.footprints.count;await page.evaluate(()=>window.__vireon.agePrints(31));await capture();const faded=await state();assert.equal(faded.footprints.count,before);assert.equal(faded.footprints.visible,0,'Prints fade out after their 30 s life on Low');}
@@ -57,6 +59,6 @@ try{
   // A smaller swing stays (functional feedback); no model punch.
   const swings=await p2.evaluate(()=>new Promise(res=>{const v=[];const f=()=>{const s=window.__vireon.getState();v.push([s.feel.swing,s.feel.punching]);if(v.length<40)requestAnimationFrame(f);else res(v);};f();}));await p2.keyboard.up('KeyF');
   report.reducedSwing=Math.max(...swings.map(v=>Math.abs(v[0])));assert.ok(report.reducedSwing>0&&report.reducedSwing<=.35+1e-9,`Reduced swing ${report.reducedSwing}`);assert.ok(swings.every(v=>v[1]===0),'No punch under reduced motion');
-  report.reducedMotion={motes:r.motes,fx:r.fx,footprints:r.footprints,wind:r.wind};assert.equal(r.motes,0);assert.equal(r.fx.live,0);assert.ok(r.footprints.count>0);assert.equal(r.wind.time,0);await rm.close();check('Reduced motion hides motes, chips and dust, freezes the wind and keeps a smaller swing without punches; static prints remain');}
+  report.reducedMotion={motes:r.motes,drift:r.drift,fx:r.fx,footprints:r.footprints,wind:r.wind};assert.equal(r.motes,0);assert.equal(r.drift.live,0);assert.equal(r.fx.live,0);assert.ok(r.footprints.count>0);assert.equal(r.wind.time,0);await rm.close();check('Reduced motion hides motes, sand ribbons, chips and dust, freezes the wind and keeps a smaller swing without punches; static prints remain');}
  assert.deepEqual(report.errors,[]);check('No runtime or shader errors');
 }catch(e){report.failure=String(e.stack??e);throw e;}finally{await writeFile('artifacts/s27-verification.json',JSON.stringify(report,null,2));await browser?.close();await server.close();}

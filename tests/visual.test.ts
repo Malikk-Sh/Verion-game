@@ -5,7 +5,7 @@ import {assignLights,createLightPool,LIGHT_PRIORITY} from '../src/lights';
 import {windAt,Wind,WIND_WANDER,WIND_WRAP} from '../src/wind';
 import {printAllowed,PrintRing,printCorners,PRINT_W,PRINT_L,FOOTPRINTS} from '../src/footprints';
 import {ParticleSim,SHAPE,FX_CAPS} from '../src/fx';
-import {MOTES} from '../src/sky';
+import {MOTES,DRIFT,SandDrift} from '../src/dust';
 import {Terrain,groundSlope,groundCavity} from '../src/terrain';
 import {heightAt} from '../src/world';
 
@@ -41,7 +41,22 @@ test('Shared wind is deterministic, bounded, frozen at dt 0 and under reduced mo
  for(let i=0;i<4000;i++)w.update(.5);assert.ok(Math.abs(w.driftX)<WIND_WRAP&&w.driftX>0);
  // Mote boxes divide the drift wrap, so wrapping never makes motes jump.
  for(const q of Object.values(MOTES))assert.equal(WIND_WRAP%q.box,0);
- assert.ok(MOTES.low.count+FX_CAPS.low.solid+FX_CAPS.low.soft+FX_CAPS.low.glow<=512,'Low particle budget');
+ assert.ok(MOTES.low.count+DRIFT.low+FX_CAPS.low.solid+FX_CAPS.low.soft+FX_CAPS.low.glow<=512,'Low particle budget');
+});
+
+test('Sand drift: ribbons only in gusts, upwind and near the player, on the ground, bounded, frozen at dt 0 and gone under reduced motion',()=>{
+ const ground=(x:number,z:number)=>.05*x-.02*z,calm={gust:.5,vx:1.2,vz:0,dirX:1,dirZ:0,speed:1.2},gust={gust:.95,vx:2.1,vz:.4,dirX:.982,dirZ:.188,speed:2.14};
+ const d=new SandDrift(7);d.setQuality('low');for(let i=0;i<200;i++)d.update(.05,calm,100,100,ground);assert.equal(d.sheets.length,0,'no ribbons in a calm');
+ for(let i=0;i<400;i++){d.update(.05,gust,100,100,ground);assert.ok(d.sheets.length<=DRIFT.low);}
+ assert.ok(d.sheets.length>0,'a strong gust raises ribbons');
+ for(const s of d.sheets){assert.ok(Math.hypot(s.x-100,s.z-100)<30);assert.ok(Math.abs(s.y0-ground(s.x-gust.dirX*s.len/2,s.z-gust.dirZ*s.len/2))<1e-9&&Math.abs(s.y1-ground(s.x+gust.dirX*s.len/2,s.z+gust.dirZ*s.len/2))<1e-9,'both ends rest on the ground');assert.ok(s.height<=.65&&s.len<=7);assert.ok(SandDrift.strength(s,gust.gust)>=0&&SandDrift.strength(s,gust.gust)<=1);assert.equal(SandDrift.strength(s,.4),0,'no visible ribbon below a gust of 0.45');}
+ // A fresh ribbon crosses the view: at mid-life it is 4…14 m in front of the player (looking −z here), then it moves downwind.
+ const born=new SandDrift(3);for(let i=0;i<40&&!born.sheets.length;i++)born.update(.05,gust,0,0,ground,undefined,false,0,-1);const s0={...born.sheets[0]},mid=[s0.x+gust.vx*s0.speed*s0.life/2,s0.z+gust.vz*s0.speed*s0.life/2];assert.ok(-mid[1]>=3.9&&-mid[1]<=14.6&&Math.abs(mid[0])<=7.1,'crosses the view ahead: '+mid);born.update(.1,gust,0,0,ground,undefined,false,0,-1);assert.ok(born.sheets[0].x>s0.x);
+ const frozen=structuredClone(d.sheets);d.update(0,gust,100,100,ground);assert.deepEqual(d.sheets,frozen);
+ d.setQuality('high');assert.equal(d.cap,DRIFT.high);d.update(.05,gust,100,100,ground,undefined,true);assert.equal(d.sheets.length,0,'reduced motion: no drift');
+ // Over a long run of wind (all gust levels) the population never exceeds the cap and every ribbon ends.
+ const w=new SandDrift(11);w.setQuality('standard');let max=0;for(let t=0;t<600;t+=.05){const k=windAt(t);w.update(.05,{...k,vx:k.dirX*k.speed,vz:k.dirZ*k.speed},0,0,ground);max=Math.max(max,w.sheets.length);for(const s of w.sheets)assert.ok(s.age<s.life);}
+ assert.ok(max>0&&max<=DRIFT.standard);
 });
 
 test('Footprints skip the capsule, floors, crates and steep rock; the ring overwrites the oldest print',()=>{
