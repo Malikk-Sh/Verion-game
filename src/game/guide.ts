@@ -1,7 +1,8 @@
 import { countItem } from './inventory';
 import { allDeposits, depositLeft } from './resources';
 import { RECIPE_BY_ID, WORKBENCH_UPGRADE, type Building } from './production';
-import { allRooms, cellOf, habitableQ, habitableRoom, roomCenter, roomDoors, stationRoom, type Room, type RoomInfo } from './rooms';
+import { allRooms, cellOf, habitableQ, habitableRoom, roomCenter, roomDoors, roomy, stationRoom, type Room, type RoomInfo } from './rooms';
+export { roomy };
 import { ITEMS } from './defs';
 import { questStatus } from './quests';
 import type { QuestId } from './questCatalog';
@@ -38,7 +39,6 @@ export function nearestShelter(g: GameState, rooms: RoomInfo[] = allRooms(g)): G
  return spots.sort((a, b) => dist(g, a.x, a.z) - dist(g, b.x, b.z))[0] ?? null;
 }
 /** A room at least 3 × 3 inside and 3 high (the journal's box; any closed room still counts for the milestone). */
-export function roomy(r: Room) { const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]; for (const key of r.cells) { const c = cellOf(key), v = [c.i, c.k, c.j]; for (let n = 0; n < 3; n++) { lo[n] = Math.min(lo[n], v[n]); hi[n] = Math.max(hi[n], v[n]); } } return hi.every((h, n) => h - lo[n] >= 2); }
 const fact = (g: GameState, f: string) => g.progress.quests.facts.includes(f);
 const inv = (g: GameState, id: string) => countItem(g.player.inventory, id);
 const done = (g: GameState, id: QuestId) => g.progress.quests.completed.includes(id);

@@ -1,6 +1,7 @@
 import { LANDMARKS, MIN, MAX, SIZE } from '../world';
 import { NODES, GRASS_PATCHES, bodyHalf, depositById, depositLeft, isVeinId, veinNode } from '../game/resources';
 import { stationStatus, type Tone } from '../game/stationStatus';
+import { endpoint } from '../game/production';
 import { stationName, stationRadius, nodeRadius, clampWaypoint, doorTarget, type Waypoint } from '../game/navigation';
 import { allRooms, cellOf, doorRooms, habitableQ, habitableRoom, roomsView, type RoomInfo } from '../game/rooms';
 import { reducedMotion } from '../motion';
@@ -194,8 +195,8 @@ export function createMap(d: Deps) {
   let markers = 0;
   // Stations: real footprints tinted by status, links as thin lines; extra outlines (glass rooms) from the hook.
   if (layers.stations) {
-   const base = g.world.base, by = new Map(base.buildings.map(b => [b.id, b]));
-   for (const l of base.links) { const a = by.get(l.from), b = by.get(l.to); if (!a || !b) continue; const s = S(a.x, a.z), e = S(b.x, b.z); ctx.strokeStyle = l.kind === 'cable' ? 'rgba(255,196,110,.75)' : 'rgba(127,230,218,.8)'; ctx.lineWidth = 1.5; ctx.setLineDash(l.kind === 'cable' ? [] : [4, 3]); ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke(); }
+   const base = g.world.base;
+   for (const l of base.links) { const a = endpoint(g, l.from), b = endpoint(g, l.to); if (!a || !b) continue; const s = S(a.x, a.z), e = S(b.x, b.z); ctx.strokeStyle = l.kind === 'cable' ? 'rgba(255,196,110,.75)' : 'rgba(127,230,218,.8)'; ctx.lineWidth = 1.5; ctx.setLineDash(l.kind === 'cable' ? [] : [4, 3]); ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke(); }
    ctx.setLineDash([]);
    const prints: MapFootprint[] = [...mapFootprintSources.flatMap(f => f(g))]; glassMarks = prints.map(f => f.tone);
    for (const b of base.buildings) { const half = bodyHalf(b.kind); prints.push({ id: b.id, x: b.x, z: b.z, w: half * 2, d: half * 2, rot: b.rot, tone: stationStatus(g, b).tone, label: stationName(b) }); }

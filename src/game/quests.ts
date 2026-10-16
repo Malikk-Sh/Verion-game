@@ -1,6 +1,6 @@
 import { NODES, VEIN_LOOK } from './resources';
 import { RECIPES, WORKBENCH_UPGRADE } from './production';
-import { allRooms, habitableRoom, roomDoors, stationRoom } from './rooms';
+import { allRooms, habitableRoom, roomDoors, roomy, stationRoom } from './rooms';
 import { recordQuestFact } from './questFacts';
 import { countItem } from './inventory';
 import { QUESTS, QUEST_BY_ID, type QuestId } from './questCatalog';
@@ -46,7 +46,7 @@ export function refreshQuestProgress(g: GameState): boolean {
   metals:item('iron')&&item('copper'),glass:item('glass'),wrench:item('wrench'),circuit:item('circuit'),
   generator:has('biogenerator'),electrolyzer:has('electrolyzer'),
   // S4: the shelter is a closed glass room with an airlock on its boundary.
-  dome:rooms.some(r=>roomDoors(g,r).length>0),
+  dome:rooms.some(r=>roomy(r)&&roomDoors(g,r).length>0),
   bench2:g.world.base.buildings.some(b=>b.kind==='workbench'&&b.level===2),
   power:fact('system:power'),distributor:g.world.base.buildings.some(b=>b.kind==='distributor'&&!!stationRoom(g,b)),auto:fact('system:auto'),
   oxygen:fact('craft:electrolysis'),refill:fact('system:refill'),air:rooms.some(habitableRoom),

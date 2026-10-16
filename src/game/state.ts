@@ -162,7 +162,9 @@ const lacksVeins=(r:Obj)=>isObj(r.meta)&&Number(r.meta.stateVersion)>=V7&&isObj(
 export function toVeins(r:Obj):Obj{const next=structuredClone(r),m=obj(next.meta,'meta');addVeinState(obj(next.world,'world'),Number(m.seed)>>>0);m.stateVersion=Math.max(Number(m.stateVersion),STATE_VERSION);return next;}
 /** S4 vein fields (D33): no veins yet; every non-grass deposit an older world already exhausted queues one, so it recovers too. */
 function addVeinState(world:Obj,seed:number){
- if(!('veins' in world))world.veins=[];if(!('nextVeinId' in world))world.nextVeinId=1;if('respawn' in world)return;
+ if(!('veins' in world))world.veins=[];
+ // A partial preview file may hold live veins but no counter: start past the highest saved id so validation accepts them.
+ if(!('nextVeinId' in world))world.nextVeinId=1+(Array.isArray(world.veins)?world.veins:[]).reduce((m:number,v)=>{const n=isObj(v)&&typeof v.id==='string'&&/^vein-[1-9]\d*$/.test(v.id)?Number(v.id.slice(5)):0;return Math.max(m,n);},0);if('respawn' in world)return;
  const nodes=isObj(world.nodes)?world.nodes:{},q:Respawn[]=[];
  for(const n of NODES)if(n.material!=='grass'&&nodes[n.id]===0&&q.length<RESPAWN_MAX)q.push({material:n.material as VeinMaterial,ms:veinDelay(seed,q.length,n.material as VeinMaterial)});
  world.respawn=q;}

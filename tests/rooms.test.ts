@@ -151,6 +151,8 @@ test('Rooms: the airlock cycle — in needs the full 4 GU and locks breathing, o
  near(g, 57.5, 49); assert.equal(beginPassage(g, 'door-1'), ''); assert.equal(allRooms(g)[0].zone.q, 4000);
  assert.deepEqual(g.world.base.passage, { doorId: 'door-1', direction: 'in', remainingMs: 6000, paid: true });
  assert.equal(cyclingRoom(g)?.volume, 27); assert.match(beginPassage(g, 'door-1'), /занят/);
+ // Nothing comes down during the cycle, so the room that the paid 4 GU cover cannot vanish under the player.
+ { const before = JSON.stringify(g.world.base); assert.match(removeGlass(g, cellKey(56, 0, 45), true).error, /конца цикла/); assert.match(removeDoor(g, 'door-1', true).error, /занят/); assert.equal(JSON.stringify(g.world.base), before); }
  g.player.bottles = [null, null]; for (let i = 0; i < 100; i++) survivalTick(g, .05, false); assert.equal(g.player.survival.suffocationMs, 0, 'the paid 4 GU carry the cycle');
  const copy = sanitizeState(JSON.parse(JSON.stringify(g))); assert.deepEqual(copy, g, 'a cycle survives a save');
  const inside = tick(g, 6000)!; assert.deepEqual(inside, landingPoint(g, door, 'back')); assert.equal(inside.x, 57.5); assert.equal(inside.z, 44.5); assert.equal(inside.y, heightAt(57.5, 44.5));
@@ -415,4 +417,11 @@ test('Aim: the nearer of a deposit and a glass wall wins — a deposit walled in
  look(49, 57.4, 62); assert.equal(w.target, null); assert.equal(w.struck, null, 'R does not reach the wall behind the deposit');
  // Outside behind the wall: the deposit is in reach, but the glass is nearer and keeps the room window.
  a = look(49, 55.2, 62); assert.equal(a?.id, 'sand-a'); assert.match(w.target ?? '', /^glass:/); assert.ok(w.struck && w.struck.distance < a!.near);
+});
+
+test('Quests: an airlock in a box smaller than 3×3×3 does not complete the shelter milestone', () => {
+ const door = (): Door[] => [{ id: 'door-1', x: 57, y: 0, z: 45, rot: 0 }], open = (k: number) => k !== cellKey(57, 0, 45) && k !== cellKey(57, 1, 45);
+ const g = fresh(); lay(g, shell(56, 0, 42, 3, 2, 3).filter(open), door()); assert.equal(allRooms(g).length, 1);
+ refreshQuestProgress(g); assert.equal(g.progress.quests.completed.includes('dome'), false, 'a 2-high box is not the journal shelter');
+ g.world.base.glass = []; g.world.base.doors = []; lay(g, CUBE().filter(open), door()); refreshQuestProgress(g); assert.ok(g.progress.quests.completed.includes('dome'));
 });

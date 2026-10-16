@@ -34,6 +34,8 @@ export const habitableQ = (volume: number) => 8000 * volume;
 /** X = i+256, Z = j+256 (0…1023), Y = k+32 (0…127); key = (X·1024 + Z)·128 + Y < 2^27. */
 export const cellKey = (i: number, k: number, j: number) => ((i + 256) * 1024 + (j + 256)) * 128 + (k + 32);
 export function cellOf(key: number) { const y = key % 128, r = (key - y) / 128, z = r % 1024; return { i: (r - z) / 1024 - 256, k: y - 32, j: z - 256 }; }
+/** A shelter large enough for the journal: at least 3×3×3 cells of air inside (the guide and the quest share it). */
+export function roomy(r: Room) { const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]; for (const key of r.cells) { const c = cellOf(key), v = [c.i, c.k, c.j]; for (let n = 0; n < 3; n++) { lo[n] = Math.min(lo[n], v[n]); hi[n] = Math.max(hi[n], v[n]); } } return hi.every((h, n) => h - lo[n] >= 2); }
 export const cellCenter = (key: number) => { const c = cellOf(key); return { x: c.i + .5, y: c.k + .5, z: c.j + .5 }; };
 export const placeable = (i: number, k: number, j: number) => [i, k, j].every(Number.isInteger) && i >= CELL_MIN && i <= CELL_MAX && j >= CELL_MIN && j <= CELL_MAX && k >= LEVEL_MIN && k <= LEVEL_MAX;
 /** Saved cells may lie a little past the building area: a v7 dome on its edge became a shell 3 cells wide. */
@@ -379,6 +381,8 @@ function takeOne(g: GameState, itemId: string) {
 }
 /** Returns blocks to the backpack; what does not fit lands on the ground at the cell. */
 function giveBack(g: GameState, itemId: string, n: number, key: number) { const left = addItems(g.player.inventory, itemId, n); if (left) { const p = cellCenter(key); dropItems(g, p.x, p.z, [{ itemId, count: left }]); } }
+/** The paid 4 GU carry the breath of a cycle only while its room stands, so nothing is taken down until the cycle ends. */
+const CYCLING = 'Дождитесь конца цикла шлюза';
 const confirmText = (gu: number) => `Воздух уйдёт: ${Math.ceil(gu)} GU — нажмите ещё раз`;
 /** Places one glass block from the backpack. */
 export function placeGlass(g: GameState, key: number): RoomEdit {
@@ -391,6 +395,7 @@ export function placeGlass(g: GameState, key: number): RoomEdit {
 export function removeGlass(g: GameState, key: number, confirmed = false): RoomEdit {
  if (g.player.vitals.health <= 0) return refuse('Персонаж погиб');
  if (!isGlass(g, key)) return refuse('Здесь нет стеклоблока');
+ if (g.world.base.passage) return refuse(CYCLING);
  if (!reach(g, key)) return refuse('Слишком далеко — подойдите ближе');
  const gu = predictRemove(g, key); if (gu > 0 && !confirmed) return refuse(confirmText(gu), true, gu);
  const r = editRooms(g, { remove: [key] }); if (r.error) return refuse(r.error);
@@ -410,7 +415,7 @@ export function placeDoor(g: GameState, key: number, rot: number): RoomEdit {
 export function removeDoor(g: GameState, id: string, confirmed = false): RoomEdit {
  const d = doorById(g, id); if (!d) return refuse('Нет такого шлюза');
  if (g.player.vitals.health <= 0) return refuse('Персонаж погиб');
- if (g.world.base.passage?.doorId === id) return refuse('Шлюз занят');
+ if (g.world.base.passage) return refuse(g.world.base.passage.doorId === id ? 'Шлюз занят' : CYCLING);
  const key = doorKeys(d)[0]; if (!reach(g, key)) return refuse('Слишком далеко — подойдите ближе');
  const gu = predictRemove(g, key); if (gu > 0 && !confirmed) return refuse(confirmText(gu), true, gu);
  const r = editRooms(g, { undoor: id }); if (r.error) return refuse(r.error);
