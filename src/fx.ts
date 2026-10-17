@@ -3,7 +3,7 @@ import { reducedMotion } from './motion';
 import type { WindState } from './wind';
 /**
  * Pooled world particles (S3 motion design, S4 materials): mining chips that bounce and settle on
- * the ground, dust and wisps carried by the shared wind, landing rings, smoke from chimneys and
+ * the ground, dust carried by the shared wind, landing rings, smoke from chimneys and
  * exhausts, sparks along a new line. One draw call per blending mode; CPU update of a fixed ring
  * buffer, so emitting never allocates. Purely visual — never read by the game.
  */
@@ -155,13 +155,13 @@ const CHUNK: Record<string, readonly string[]> = { stone: P.stone, iron: [...P.i
 export const MATERIAL_FX: Record<string, string> = { stone: '#b9b0a2', iron: '#5a4c44', copper: '#b8703f', ice: '#e8f6fb', sand: '#d8c08a', grass: '#8a9a5e' };
 const DUST: Record<string, string> = { stone: '#c9b79c', iron: '#9a8270', copper: '#8f9a88', ice: '#f4fbff', sand: '#dcc79a', grass: '#a7b07a' };
 type V3 = { x: number; y: number; z: number };
-/** Low quality: half the emission and at most 416 live particles in the pools (the other 96 of the 512 budget are dust motes). */
+/** Low quality: half the emission and at most 416 live particles in the pools (72 dust motes and 6 sand ribbons of the 512 budget, dust.ts). */
 export const FX_CAPS = { low: { solid: 200, soft: 160, glow: 56, emission: .5 }, standard: { solid: 700, soft: 500, glow: 240, emission: 1 }, high: { solid: 700, soft: 500, glow: 240, emission: 1 } } as const;
 export type FxEnv = { night?: number; wind?: WindState };
 export function createFx(scene: THREE.Scene, opts: { ground?: Ground } = {}) {
  const solid = new Pool(700, THREE.NormalBlending), soft = new Pool(500, THREE.NormalBlending), glow = new Pool(240, THREE.AdditiveBlending);
  scene.add(solid.points, soft.points, glow.points);
- let enabled = true, emission = 1, quality: keyof typeof FX_CAPS = 'standard', wisp = 0;
+ let enabled = true, emission = 1, quality: keyof typeof FX_CAPS = 'standard';
  const ground = opts.ground, wind = { vx: 0, vz: 0, gust: .55, dirX: 1, dirZ: 0 };
  // Particles are pure motion: prefers-reduced-motion switches every emitter off.
  const on = () => enabled && !reducedMotion();
@@ -255,14 +255,6 @@ export function createFx(scene: THREE.Scene, opts: { ground?: Ground } = {}) {
   update(dt: number, camera: THREE.PerspectiveCamera, height: number, env: FxEnv = {}) {
    if (env.wind) Object.assign(wind, { vx: env.wind.vx, vz: env.wind.vz, gust: env.wind.gust, dirX: env.wind.dirX, dirZ: env.wind.dirZ });
    lit.copy(day).lerp(night, env.night ?? 0); solid.uniforms.uLight.value.copy(lit); soft.uniforms.uLight.value.copy(lit);
-   // Gust wisps: large faint sheets of dust skimming the ground upwind of the viewer, only in strong gusts (not on Low).
-   if (dt > 0 && quality !== 'low' && wind.gust > .75 && on() && ground) {
-    wisp -= dt * (wind.gust - .7) * 6;
-    if (wisp <= 0) {
-     wisp = 1; const back = 6 + Math.random() * 10, side = (Math.random() - .5) * 22, px = camera.position.x - wind.dirX * back - wind.dirZ * side, pz = camera.position.z - wind.dirZ * back + wind.dirX * side;
-     scaled(soft, { x: px, y: ground(px, pz) + .25 + Math.random() * .5, z: pz, vx: wind.vx * 1.1, vz: wind.vz * 1.1, color: '#d9c4a0', size: 2, grow: .8, life: 4, gravity: 0, drag: 0, alpha: .1 + (wind.gust - .75) * .3, shape: SHAPE.soft, wind: 1, count: 1 });
-    }
-   }
    solid.update(dt, camera, height, ground, wind.vx, wind.vz); soft.update(dt, camera, height, ground, wind.vx, wind.vz); glow.update(dt, camera, height, ground, wind.vx, wind.vz);
   },
   stats: () => ({ solid: solid.alive, soft: soft.alive, glow: glow.alive, live: solid.alive + soft.alive + glow.alive, cap: solid.cap + soft.cap + glow.cap }),

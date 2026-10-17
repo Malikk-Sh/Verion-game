@@ -1,6 +1,6 @@
 import { ITEMS } from '../game/defs';
 import { countItem } from '../game/inventory';
-import { RECIPES, RECIPE_BY_ID, WORKBENCH_UPGRADE, cancelJob, clearQueue, collectInput, collectOutput, energyRate, loadRecipeInputs, machine, nearby, queueJob, removeQueuedJob, startJob, upgradeBuilding, powerRate, MAX_REPEAT, type Recipe, type Building } from '../game/production';
+import { RECIPES, RECIPE_BY_ID, WORKBENCH_UPGRADE, cancelJob, clearQueue, collectInput, collectOutput, energyRate, hasPower, runsOn, loadRecipeInputs, machine, nearby, queueJob, removeQueuedJob, startJob, craftOwner, upgradeBuilding, powerRate, MAX_REPEAT, type Recipe, type Building } from '../game/production';
 import { readyWorldItem } from '../game/backpack';
 import { nearestNode, nearestStation, type GuideTarget } from '../game/guide';
 import { nextVeinSeconds } from '../game/nature';
@@ -161,12 +161,12 @@ export function createCraftingView() {
     const chips = h('span', '', 'cr-row-chips');
     for (const [id, k] of Object.entries(r.inputs)) { const have = countItem(g.player.inventory, id) + countItem(b?.input ?? [], id), c = h('span', '', 'cr-mini' + (have >= k ? ' ok' : '')); c.append(itemArt(id), h('i', String(k))); c.title = `${name(id)}: ${have} / ${k}`; chips.append(c); }
     text.append(chips);
-    const canHere = r.station === 'hand' ? affordable(g, r) : can;
+    const canHere = craftOwner(g, b, r) === 'hand' ? affordable(g, r) : can;
     row.append(itemArt(out, 'art cr-row-art'), text, here ? h('span', canHere > 0 ? '×' + Math.min(canHere, 99) : '—', 'cr-badge' + (canHere > 0 ? ' ok' : '')) : h('span', STATION_NAME[r.station] ?? r.station, 'cr-badge station'));
     row.title = here ? (can > 0 ? `Можно собрать: ${can}` : 'Не хватает материалов') : 'Делается: ' + (STATION_NAME[r.station] ?? r.station);
     list.append(row);
    }
-   if (!list.children.length) list.append(h('p', onlyReady ? 'Пока нечего собрать — проверьте журнал (J)' : 'Ничего не найдено', 'cr-empty'));
+   if (!list.children.length) list.append(h('p', onlyReady ? 'Пока нечего собрать — проверьте журнал' : 'Ничего не найдено', 'cr-empty'));
   }
   fill();
   // ---------- Recipe card ----------
@@ -174,17 +174,17 @@ export function createCraftingView() {
   const main = h('main', '', 'cr-main'), scroll = h('div', '', 'cr-detail-scroll');
   const head = h('header', '', 'cr-card-head');
   head.append(itemArt(out, 'art cr-hero'));
-  const titles = h('div', '', 'cr-titles'); titles.append(h('span', (STATION_NAME[r.station] ?? r.station) + ' · ' + r.seconds + ' с' + (b && here && energyRate(b, r) ? ' · ' + energyRate(b, r) + ' EU/с' : ''), 'cr-kicker'), h('h3', name(out) + (r.outputs[out] > 1 ? ' ×' + r.outputs[out] : '')));
+  const titles = h('div', '', 'cr-titles'); titles.append(h('span', (b && craftOwner(g, b, r) !== 'hand' ? STATION_NAME[b.kind] + (b.level === 2 ? ' II' : '') : STATION_NAME[r.station] ?? r.station) + ' · ' + r.seconds + ' с' + (b && here && energyRate(b, r) ? ' · ' + energyRate(b, r) + ' EU/с' : ''), 'cr-kicker'), h('h3', name(out) + (r.outputs[out] > 1 ? ' ×' + r.outputs[out] : '')));
   head.append(titles);
   scroll.append(head);
   const desc = ITEMS[out]?.description ?? (out === 'water' ? 'Переносимая вода для генератора кислорода.' : out === 'oxygen' ? 'Кислород для дыхания, баллонов и помещений.' : '');
   if (desc) scroll.append(h('p', desc, 'cr-desc'));
   // Where this is made.
   const req = h('div', '', 'cr-req');
-  if (here) req.append(h('span', '✓', 'cr-req-mark ok'), h('span', b ? (b.level === 2 ? 'Верстак II: очередь до 5 партий, работает без вас при питании' : near ? 'Верстак рядом: работает, пока вы рядом' : 'Подойдите к верстаку ближе 3 м') : 'Собирается в кармане, где угодно'));
+  if (here) req.append(h('span', '✓', 'cr-req-mark ok'), h('span', b && craftOwner(g, b, r) !== 'hand' ? (b.level === 2 ? 'Верстак II: очередь до 5 партий, работает без вас при питании' : near ? 'Верстак рядом: работает, пока вы рядом' : 'Подойдите к верстаку ближе 3 м') : b && auto && runsOn(b, r) ? (b.enabled ? 'Верстак II без питания — собирается в кармане' : 'Верстак II выключен — собирается в кармане') : 'Собирается в кармане, где угодно'));
   else {
    const st = r.station === 'hand' ? null : nearestStation(g, r.station);
-   req.classList.add('warn'); req.append(h('span', '!', 'cr-req-mark'), h('span', r.station === 'hand' ? 'Это карманный рецепт: откройте крафт без станции (B вдали от верстака)' : st ? `Делается: ${STATION_NAME[r.station]} — ${Math.round(Math.hypot(st.x - g.player.x, st.z - g.player.z))} м` : `Нужна станция: ${STATION_NAME[r.station]}. Сначала создайте и установите её`));
+   req.classList.add('warn'); req.append(h('span', '!', 'cr-req-mark'), h('span', r.station === 'hand' ? 'Это карманный рецепт: откройте мастерскую вдали от верстака' : st ? `Делается: ${STATION_NAME[r.station]} — ${Math.round(Math.hypot(st.x - g.player.x, st.z - g.player.z))} м` : `Нужна станция: ${STATION_NAME[r.station]}. Сначала создайте и установите её`));
    if (st) req.append(button('Показать', () => navigate?.(st), 'cr-go'));
   }
   scroll.append(req);
@@ -201,7 +201,7 @@ export function createCraftingView() {
   if (outs.length > 1 || r.outputs[out] > 1) { const res = h('div', '', 'cr-ings-inline'); for (const [id, k] of outs) { const c = h('span', '', 'cr-chip ok'); c.append(itemArt(id), h('b', '×' + k * quantity)); c.title = name(id); res.append(c); } scroll.append(h('h4', 'Результат'), res); }
   main.append(scroll);
   // ---------- Action bar ----------
-  const pocket = r.station === 'hand', owner = pocket ? 'hand' : id, ob = pocket ? undefined : b, obAuto = !pocket && auto;
+  const pocket = craftOwner(g, b, r) === 'hand', owner = pocket ? 'hand' : id, ob = pocket ? undefined : b, obAuto = !pocket && auto;
   const job = ob ? ob.job : g.world.base.hand, queueFree = obAuto ? 5 - ob!.queue.length - (ob!.job ? 1 : 0) : MAX_REPEAT + 1;
   const max = Math.max(1, Math.min(can, queueFree));
   // Never offer more batches than the backpack can pay for (and, for II, than the queue holds).
@@ -214,6 +214,8 @@ export function createCraftingView() {
    qty.append(button('−', () => { quantity = Math.max(1, quantity - 1); redraw(); }, 'cr-step', quantity <= 1), out2, button('+', () => { quantity = Math.min(limit, quantity + 1); redraw(); }, 'cr-step', quantity >= limit), button('Макс', () => { quantity = limit; redraw(); }, 'cr-max', limit < 2));
    const missing = Object.entries(r.inputs).filter(([id, k]) => countItem(g.player.inventory, id) + countItem(ob?.input ?? [], id) < k);
    const reason = ob && !near ? 'Подойдите к верстаку' : !obAuto && job ? 'Идёт работа — дождитесь или отмените' : obAuto && queueFree < 1 ? 'Очередь заполнена' : missing.length ? 'Не хватает: ' + missing.map(([id]) => name(id)).join(', ') : '';
+   // Bench II recipes may wait in the queue for power, but the player is told before the materials go in.
+   const unpowered = obAuto && !!energyRate(ob!, r) && !hasPower(g, ob!);
    const create = button(obAuto ? `В очередь ×${quantity}` : quantity > 1 ? `Создать ×${quantity}` : 'Создать', () => {
     const ins = [...ings.querySelectorAll('.cr-ing-art')];
     const tokens = captureTokens(ins, root?.querySelector('.cr-hero'));
@@ -224,11 +226,12 @@ export function createCraftingView() {
      if (!error) error = startJob(g, r.id, owner, !!ob);
      if (!error) { const j = ob ? ob.job : g.world.base.hand; if (j) j.repeat = Math.max(0, Math.min(MAX_REPEAT, quantity - 1)); }
     }
-    notify(error, obAuto ? 'Добавлено в очередь' : 'Сборка начата');
+    notify(error, obAuto ? (unpowered ? 'В очереди — ждёт питания' : 'Добавлено в очередь') : 'Сборка начата');
     if (!error) transferCraft(tokens, '.cr-work');
    }, 'cr-create', !!reason);
    make.append(qty, create);
    if (reason) make.append(h('p', reason, 'cr-reason warn'));
+   else if (unpowered) make.append(h('p', 'Нет питания: партии подождут кабель от генератора с топливом', 'cr-reason warn'));
   } else make.append(h('p', r.station === 'kiln' ? 'Откройте печь: положите сырьё в верхний слот и волокно в слот топлива — плавка пойдёт сама.' : r.station === 'electrolyzer' ? 'Положите воду в генератор кислорода и подайте питание.' : 'Этот рецепт собирается в другом месте.', 'cr-reason'));
   main.append(make);
   const strip = b?.kind === 'workbench' ? benchStrip(g, id, b, notify, changed, redraw) : null; if (strip) main.append(strip);

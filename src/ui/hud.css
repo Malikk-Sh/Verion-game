@@ -90,5 +90,13 @@
 #visor-settings-panel h2{font-size:22px;margin:0}.visor-settings-grid{display:grid;gap:12px}.visor-size-row{font-size:14px;gap:6px 8px}
 #visor-settings-panel .help{font-size:11px;line-height:1.35;margin:0}
 @media(max-height:360px){#visor-settings-panel{padding:12px 16px;gap:10px}.visor-settings-grid{gap:8px}.visor-size-row{font-size:12px;gap:4px 8px}}
+/* S5 (D38): keyboard controls live only here; the game UI names on-screen buttons. Two or three columns, no page overflow. */
+#keys-settings-panel{width:min(820px,calc(100vw - var(--sl) - var(--sr)));max-height:calc(100dvh - 20px);padding:12px 16px;display:flex;flex-direction:column;gap:8px;overflow:hidden}
+#keys-settings-panel h2{font-size:22px;margin:0}#keys-settings-panel .help{font-size:11px;line-height:1.35;margin:0;flex-shrink:0}
+.keys-list{margin:0;min-height:0;overflow:auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 16px;align-content:start}
+.keys-list div{display:grid;grid-template-columns:76px minmax(0,1fr);align-items:center;gap:8px;min-height:24px}.keys-list dt{margin:0;text-align:right}.keys-list dd{margin:0;font-size:12px;line-height:1.25;color:var(--text)}
+.keys-list kbd{display:inline-block;min-width:22px;padding:2px 6px;border:1px solid rgba(127,230,218,.55);border-radius:5px;background:rgba(127,230,218,.08);color:var(--aqua);font:600 11px ui-monospace,monospace;text-align:center;white-space:nowrap}
+@media(min-width:760px){.keys-list{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-height:360px){#keys-settings-panel{padding:10px 14px;gap:4px}#keys-settings-panel h2{font-size:20px}.keys-list{gap:2px 12px}.keys-list div{min-height:20px;grid-template-columns:64px minmax(0,1fr)}.keys-list{gap:1px 12px}.keys-list kbd{padding:1px 5px;font-size:10px}.keys-list dd{font-size:11px}}
 /* S4: no backdrop blur over the live 3D canvas (the compositor re-blurred it every frame); the plates are near-opaque instead. */
 #hud button,#hud .hud-plate{backdrop-filter:none;-webkit-backdrop-filter:none}

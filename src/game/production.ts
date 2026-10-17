@@ -5,7 +5,8 @@ import { BUILDABLE, ITEMS, TANKS, TOOLS, type BuildingKind } from './defs';
 import { addItems, countItem, emptyInventory, firstEmpty, removeItems, type Slot } from './inventory';
 import { dropItems } from './mining';
 import type { GameState, ItemStack } from './state';
-import { advancePassage, anyHabitable, capacityOf, distributorDemand, roomsTick, stationRoom, type Door, type Passage, type Zone } from './rooms';
+import { anyHabitable, capacityOf, distributorDemand, roomsTick, stationRoom, type Door, type Zone } from './rooms';
+import { airlockTick } from './airlock';
 export type Recipe = { id: string; station: string; inputs: Record<string, number>; outputs: Record<string, number>; seconds: number; EU_per_second: number };
 export const RECIPES: Recipe[] = catalog.recipes as unknown as Recipe[];
 export const RECIPE_BY_ID = new Map(RECIPES.map(r => [r.id, r]));
@@ -21,10 +22,10 @@ export const MAX_REPEAT = 99;
 /** `rot`: quarter turns around +y (0 = facing +z). */
 export type Building = { id: string; kind: BuildingKind; level: 1 | 2; rot: number; x: number; y: number; z: number; input: Slot[]; output: Slot[]; job: Job | null; queue: string[]; enabled: boolean; lowPriority: boolean; energy: number; fuel: number; water: number; oxygen: number };
 export type Link = { id: string; kind: 'cable' | 'gas_pipe'; from: string; to: string };
-/** S4 (D31): `glass` — sorted unique cell keys of glass blocks; `doors` — airlocks (1×2 cells); `zones` — the air of each
- * closed room (rooms.ts); `passage` — an airlock cycle in progress. */
-export type BaseState = { buildings: Building[]; links: Link[]; nextId: number; hand: Job | null; handQueue: string[]; glass: number[]; doors: Door[]; zones: Zone[]; passage: Passage | null };
-export const freshBase = (): BaseState => ({ buildings: [], links: [], nextId: 1, hand: null, handQueue: [], glass: [], doors: [], zones: [], passage: null });
+/** S4 (D31): `glass` — sorted unique cell keys of glass blocks; `doors` — airlock modules (2×1×2 cells, D36); `zones` — the air of each
+ * closed room (rooms.ts); every airlock module carries its own doors and chamber (airlock.ts). */
+export type BaseState = { buildings: Building[]; links: Link[]; nextId: number; hand: Job | null; handQueue: string[]; glass: number[]; doors: Door[]; zones: Zone[] };
+export const freshBase = (): BaseState => ({ buildings: [], links: [], nextId: 1, hand: null, handQueue: [], glass: [], doors: [], zones: [] });
 export const machine = (g: GameState, id: string) => g.world.base.buildings.find(b => b.id === id);
 /** Buffers in milli-units (D30, S4): generator 2000 EU and 300 EU per fiber, electrolyzer 2000 GU; refill and
  * distributor ports keep 480 GU; the capsule holds 2400 GU. */
@@ -58,6 +59,19 @@ export const hasQueue = (b?: Building) => !!b && (b.kind !== 'workbench' || b.le
 // A bench I whose batch is complete but blocked by a full output does not hold the hands (nor other benches).
 export const manualWork = (g: GameState) => g.world.base.buildings.filter(b=>b.kind==='workbench'&&b.level===1&&b.job&&b.enabled&&nearby(g,b)&&b.job.workMs<(RECIPE_BY_ID.get(b.job.recipeId)?.seconds??0)*1000).sort((a,b)=>Math.hypot(a.x-g.player.x,a.z-g.player.z)-Math.hypot(b.x-g.player.x,b.z-g.player.z))[0];
 export const energyRate = (b: Building, r: Recipe) => b.kind === 'workbench' && b.level === 2 ? WORKBENCH_UPGRADE.EU_per_second : r.EU_per_second;
+/** S5: workbench II also runs pocket recipes, so what its window queues is made there, with or without the player
+ * (in S4 the window sent grass → fiber to the pocket and no batch ever counted as made without you). */
+export const runsOn = (b: { kind: string; level?: number }, r: Recipe) => r.station === b.kind || (r.station === 'hand' && b.kind === 'workbench' && b.level === 2 && slotsOf(r.inputs) <= 4 && slotsOf(r.outputs) <= 4);
+/** Slots a set of stacks takes (stateful tools/tanks one each). A pocket recipe that would not fit the four input or
+ * output slots of bench II (the legacy dismantle_dome: 64 glass blocks + an airlock = 5) stays in the pocket. */
+const slotsOf = (o: Record<string, number>) => Object.entries(o).reduce((n,[id,c])=>n+(!ITEMS[id]?0:TOOLS[id]||TANKS[id]?c:Math.ceil(c/(ITEMS[id].stack??1))),0);
+/** Where a recipe chosen in a station window (or in the pocket workshop, `b` undefined) is made. A pocket recipe goes to
+ * bench II only while the bench can run it (switched on, its network can finish the batch: canFinish); otherwise it stays
+ * in the pocket, so the fiber for an empty generator never waits for the power it is meant to make. */
+export const craftOwner = (g: GameState, b: Building | undefined, r: Recipe) => b && runsOn(b, r) && (r.station !== 'hand' || b.enabled && canFinish(g, b, r)) ? b.id : 'hand';
+/** The bench's network can finish a batch: a generator with fuel or fiber to burn (outside rooms), or stored energy for the
+ *  whole batch. A small leftover alone is not enough: the batch would stall and hold the fiber meant to restart it. */
+const canFinish = (g: GameState, b: Building, r: Recipe) => { const gens = generatorsOf(g, b).filter(v => v.enabled); return gens.some(v => !stationRoom(g, v) && (v.fuel > 0 || countItem(v.input, 'fiber') > 0)) || gens.reduce((n, v) => n + v.energy, 0) >= energyRate(b, r) * r.seconds * 1000; };
 export const electricPort = (b: {kind:string;level?:number}) => !['capsule','kiln'].includes(b.kind) && (b.kind !== 'workbench' || b.level === 2);
 export function upgradeBuilding(g: GameState, id: string): string {
  const b=machine(g,id);if(!b || b.kind!=='workbench')return 'Для этой постройки пока нет улучшения';
@@ -73,7 +87,7 @@ export function upgradeBuilding(g: GameState, id: string): string {
 /** Move just the missing recipe inputs; selection never spends materials. */
 export function loadRecipeInputs(g: GameState, recipeId: string, id: string): string {
  const b=machine(g,id),r=RECIPE_BY_ID.get(recipeId);
- if(!b || !r || r.station!==b.kind)return 'Нужна подходящая станция';
+ if(!b || !r || !runsOn(b,r))return 'Нужна подходящая станция';
  if(!nearby(g,b))return 'Подойдите к станции';
  const inv=structuredClone(g.player.inventory),input=structuredClone(b.input);
  for(const [item,n] of Object.entries(r.inputs))if(item!=='water'||b.water<n*1000){
@@ -84,7 +98,7 @@ export function loadRecipeInputs(g: GameState, recipeId: string, id: string): st
 }
 export function startJob(g: GameState, recipeId: string, id = 'hand', buffered = false): string {
  const r = RECIPE_BY_ID.get(recipeId), b = id === 'hand' ? undefined : machine(g,id);
- if (!r || (id === 'hand' ? r.station !== 'hand' : !b || r.station !== b.kind)) return 'Нужна подходящая станция';
+ if (!r || (id === 'hand' ? r.station !== 'hand' : !b || !runsOn(b,r))) return 'Нужна подходящая станция';
  if (id==='hand' && Object.keys(r.inputs).length>2)return 'В кармане доступны два типа материалов';
  if (g.player.vitals.health <= 0) return 'Персонаж погиб';
  if (id === 'hand' ? g.world.base.hand : b!.job) return 'Сначала завершите или отмените текущую работу';
@@ -110,7 +124,7 @@ export function startJob(g: GameState, recipeId: string, id = 'hand', buffered =
 export function queueJob(g: GameState, recipeId: string, id = 'hand', count = 5): string {
  const r=RECIPE_BY_ID.get(recipeId),b=id==='hand'?undefined:machine(g,id),queue=id==='hand'?g.world.base.handQueue:b?.queue;
  if(!hasQueue(b))return 'Очередь открывается после улучшения верстака';
- if(!r||!queue||r.station!==(b?.kind??'hand')||!Number.isInteger(count)||count<1||count>5)return 'Неверная очередь';
+ if(!r||!queue||(b?!runsOn(b,r):r.station!=='hand')||!Number.isInteger(count)||count<1||count>5)return 'Неверная очередь';
  if(queue.length+count+(b?.job?1:0)>5)return 'В очереди максимум 5 рецептов';
  if(g.player.vitals.health<=0)return 'Персонаж погиб';
  if(b&&Math.hypot(b.x-g.player.x,b.z-g.player.z)>3.2)return 'Подойдите к станции';
@@ -185,7 +199,10 @@ export function linkOptions(g: GameState, id: string) {
 export function poweredComponent(g: GameState, id: string) {
  const seen=new Set([id]),q=[id];while(q.length){const v=q.shift()!;for(const l of g.world.base.links)if(l.kind==='cable'){const n=l.from===v?l.to:l.to===v?l.from:null;if(n&&!seen.has(n)){seen.add(n);q.push(n);}}}return seen;
 }
-export type ProductionTick = { changed: boolean; passage: {x:number;y:number;z:number} | null };
+export const generatorsOf = (g: GameState, b: Building) => { const net = poweredComponent(g, b.id); return g.world.base.buildings.filter(v => v.kind === 'biogenerator' && net.has(v.id)); };
+// A generator inside a room may still spend its stored energy, but never burns fuel there (productionTick).
+export const hasPower = (g: GameState, b: Building) => generatorsOf(g, b).some(v => v.enabled && (v.energy > 0 || !stationRoom(g, v) && (v.fuel > 0 || countItem(v.input, 'fiber') > 0)));
+export type ProductionTick = { changed: boolean };
 /**
  * Read-only view of the last simulated tick for visuals and station screens: accepted energy per
  * building and gas moved per link/room (milli-units in `ms`). Never read by the simulation itself.
@@ -289,13 +306,13 @@ export function productionTick(g: GameState, ms: number, refillId: string | null
  for(const l of base.links)if(l.kind==='gas_pipe'){const a=machine(g,l.from)!,b=machine(g,l.to),cap=b?PORT_O2:CAPSULE_CAPACITY,stored=b?b.oxygen:g.world.capsuleMilliGU;const mounted=a.input[1],reserved=mounted&&TANKS[mounted.itemId]?TANKS[mounted.itemId].capacity-(mounted.milliGU??0):0;const n=Math.min(Math.max(0,a.oxygen-reserved),cap-stored,40*ms);a.oxygen-=n;if(b)b.oxygen+=n;else g.world.capsuleMilliGU+=n;if(n>0)telemetry.gas.set(l.id,n);}
  roomsTick(g,ms,power,outside,(r,d,n)=>{const key='room-'+r.cell;telemetry.room.set(key,(telemetry.room.get(key)??0)+n);telemetry.gas.set(d.id,(telemetry.gas.get(d.id)??0)+n);});
  const refill=refillId&&machine(g,refillId);if(refill&&Math.hypot(refill.x-g.player.x,refill.z-g.player.z)<=3.2){let budget=Math.min(refill.oxygen,(power.get(refill.id)??0)*10);for(const t of g.player.bottles)if(t){const n=Math.min(budget,TANKS[t.itemId].capacity-(t.milliGU??0));t.milliGU=(t.milliGU??0)+n;refill.oxygen-=n;budget-=n;if(n>0)changed=recordQuestFact(g,'system:refill')||changed;}}
- const passage=advancePassage(g,ms);if(passage)changed=true;
- return {changed,passage};
+ if(airlockTick(g,ms))changed=true;
+ return {changed};
 }
 
 /** Death preserves WIP: incomplete hand inputs, or a finished output, join the cargo. */
 export function releaseHandOnDeath(g:GameState) {
  const job=g.world.base.hand;g.world.base.handQueue=[];if(!job)return;const r=RECIPE_BY_ID.get(job.recipeId)!;
  if(job.workMs>=r.seconds*1000)recordQuestFact(g,'craft:'+(r.id==='legacy_melt'?'melt_in_generator':r.id));
- dropItems(g,g.player.x,g.player.z,job.workMs>=r.seconds*1000?outputSlots(r):job.reserved);g.world.base.hand=null;g.world.base.handQueue=[];g.world.base.passage=null;
+ dropItems(g,g.player.x,g.player.z,job.workMs>=r.seconds*1000?outputSlots(r):job.reserved);g.world.base.hand=null;g.world.base.handQueue=[];
 }

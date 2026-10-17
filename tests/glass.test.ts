@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rayCells, SpatialHash, chunkFaces, chunkOf, CHUNK } from '../src/glass.ts';
-import { cellKey, cellOf } from '../src/game/rooms.ts';
+import { rayCells, SpatialHash, chunkFaces, chunkOf, joinChunks, CHUNK, TRIM } from '../src/glass.ts';
+import { cellKey, cellOf, cellY, levelAt } from '../src/game/rooms.ts';
 import { Character } from '../src/controller.ts';
 import { box, heightAt, FIXED_DT } from '../src/world.ts';
 
@@ -27,16 +27,16 @@ test('S4 glass: the DDA agrees with a fine ray-march on random rays and blocks',
  for (let n = 0; n < 60; n++) {
   const cells: [number, number, number][] = []; for (let c = 0; c < 40; c++) cells.push([Math.floor(rnd() * 8) - 4, Math.floor(rnd() * 8) - 4, Math.floor(rnd() * 8) - 4]);
   const s = set(cells), o = { x: rnd() * 2 - 1, y: rnd() * 2 - 1, z: rnd() * 2 - 1 }, d = { x: rnd() * 2 - 1, y: rnd() * 2 - 1, z: rnd() * 2 - 1 }, l = Math.hypot(d.x, d.y, d.z);
-  const start = key(Math.floor(o.x), Math.floor(o.y), Math.floor(o.z));
+  const start = key(Math.floor(o.x), levelAt(o.y), Math.floor(o.z));
   let march: number | null = null;
-  for (let t = 0; t <= 6; t += .0005) { const k = key(Math.floor(o.x + d.x / l * t), Math.floor(o.y + d.y / l * t), Math.floor(o.z + d.z / l * t)); if (k !== start && s.has(k)) { march = k; break; } }
+  for (let t = 0; t <= 6; t += .0005) { const k = key(Math.floor(o.x + d.x / l * t), levelAt(o.y + d.y / l * t), Math.floor(o.z + d.z / l * t)); if (k !== start && s.has(k)) { march = k; break; } }
   const hit = rayCells(o, d, 6, solidIn(s)), got = hit ? key(hit.i, hit.k, hit.j) : null;
   if (march !== got) {
    // Only a grazing pass through an edge or corner may differ, and then the hit lies within a hair of the march.
    assert.ok(hit && march !== null, `ray ${n}: ${got} vs ${march}`);
    const a = cellOf(got!), b = cellOf(march!); assert.ok(Math.abs(a.i - b.i) + Math.abs(a.k - b.k) + Math.abs(a.j - b.j) <= 2, `ray ${n}`);
   }
-  if (hit) { const p = [o.x + d.x / l * hit.distance, o.y + d.y / l * hit.distance, o.z + d.z / l * hit.distance], c = cellOf(got!); [c.i, c.k, c.j].forEach((v, a) => assert.ok(p[a] >= v - 1e-6 && p[a] <= v + 1 + 1e-6, 'the hit point lies on the struck cell')); }
+  if (hit) { const p = [o.x + d.x / l * hit.distance, o.y + d.y / l * hit.distance, o.z + d.z / l * hit.distance], c = cellOf(got!); [c.i, cellY(c.k), c.j].forEach((v, a) => assert.ok(p[a] >= v - 1e-6 && p[a] <= v + 1 + 1e-6, 'the hit point lies on the struck cell')); }
  }
 });
 
@@ -70,7 +70,7 @@ test('S4 glass: chunk faces are only those between glass and air, outward and wo
  const one = set([[0, 0, 0]]), f1 = chunkFaces(one, k => one.has(k));
  assert.equal(f1.faces, 6); assert.equal(f1.index.length, 36); checkWinding(f1);
  // Each face sits on the cube's surface with its normal pointing away from the centre.
- for (let q = 0; q < 6; q++) { let c = [0, 0, 0]; for (let v = 0; v < 4; v++) c = c.map((x, a) => x + f1.position[(q * 4 + v) * 3 + a] / 4); const n = f1.normal.subarray(q * 12, q * 12 + 3); assert.ok(c.every((x, a) => Math.abs(x - .5 - n[a] * .5) < 1e-9)); }
+ for (let q = 0; q < 6; q++) { let c = [0, 0, 0]; for (let v = 0; v < 4; v++) c = c.map((x, a) => x + f1.position[(q * 4 + v) * 3 + a] / 4); const n = f1.normal.subarray(q * 12, q * 12 + 3); assert.ok(c.every((x, a) => Math.abs(x - (a === 1 ? cellY(0) : 0) - .5 - n[a] * .5) < 1e-9)); }
  const two = set([[0, 0, 0], [1, 0, 0]]); assert.equal(chunkFaces(two, k => two.has(k)).faces, 10);
  const cube: [number, number, number][] = []; for (let i = 0; i < 3; i++) for (let k = 0; k < 3; k++) for (let j = 0; j < 3; j++) cube.push([i, k, j]);
  const solid = set(cube), f3 = chunkFaces(solid, k => solid.has(k)); assert.equal(f3.faces, 54); checkWinding(f3);
@@ -82,11 +82,12 @@ test('S4 glass: blocks resting on ground get skirts down to lower terrain only, 
  const one = set([[4, 2, 4]]), closed = (k: number) => one.has(k), ground = (_i: number, k: number) => k <= 1;
  const low = chunkFaces(one, closed, { ground, height: () => 1.6 }); assert.equal(low.skirts, 4); checkWinding(low);
  // The strip reaches just below the terrain and up to the block's bottom.
- const ys = Array.from(low.position).filter((_, n) => n % 3 === 1); assert.ok(Math.min(...ys) < 1.6 && Math.min(...ys) > 1.5);
- assert.equal(chunkFaces(one, closed, { ground, height: () => 2.3 }).skirts, 0, 'terrain above the block bottom: nothing to hide');
+ const ys = Array.from(low.position).filter((_, n) => n % 3 === 1); assert.ok(Math.min(...ys) < 1.6 && Math.min(...ys) > 1.5); assert.equal(Math.max(...ys), cellY(3), 'the top of the block (level 2)');
+ assert.ok(Array.from(low.trim).slice(-16).every(t => t === 1) && Array.from(low.trim).slice(0, 24).every(t => t === 0), 'panes are clear glass, the skirt is dark metal');
+ assert.equal(chunkFaces(one, closed, { ground, height: () => 2.55 }).skirts, 0, 'terrain above the block bottom (y 2.5): nothing to hide');
  assert.equal(chunkFaces(one, closed, { ground: () => false, height: () => 0 }).skirts, 0, 'a floating block has no skirt');
  // Slope: only the corners below the block pull the strip down; a neighbouring block hides the shared side.
- const pair = set([[4, 2, 4], [5, 2, 4]]), slope = chunkFaces(pair, k => pair.has(k), { ground, height: (x: number) => x < 5 ? 1.7 : 2.4 });
+ const pair = set([[4, 2, 4], [5, 2, 4]]), slope = chunkFaces(pair, k => pair.has(k), { ground, height: (x: number) => x < 5 ? 2.2 : 2.9 });
  assert.equal(slope.skirts, 3); checkWinding(slope);
 });
 

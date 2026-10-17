@@ -24,26 +24,31 @@ try{
  await configure(async()=>{const s=window.__vireon.snapshot();s.player.x=55;s.player.z=42;s.player.y=0;s.player.yaw=0;window.__vireon.setState(s);});
  await page.locator('#joystick').evaluate(e=>{const r=e.getBoundingClientRect();e.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,pointerId:11,pointerType:'touch',clientX:r.x+r.width/2,clientY:r.y+10}));});await page.locator('#run').dispatchEvent('pointerdown',{pointerId:12,pointerType:'touch',bubbles:true,cancelable:true});await page.waitForFunction(()=>window.__vireon.getState().input.run&&window.__vireon.getState().input.forward>0);await page.keyboard.press('Space');await page.waitForFunction(()=>!window.__vireon.getState().grounded);await page.locator('#joystick').dispatchEvent('pointerup',{pointerId:11,pointerType:'touch'});check('Walking joystick and second touch can enable run; jump works during the same motion');
  // ---------- Mining, bare hands, regrowth ----------
- await configure(async()=>{const {addItems}=await import('/src/game/inventory.ts');const s=window.__vireon.snapshot();addItems(s.player.inventory,'stone',7);s.world.nodes['iron-a']=0;s.world.nodes['copper-a']=0;window.__vireon.setState(s);window.__vireon.teleport(30,54.5,Math.PI,-.5);});await page.waitForFunction(()=>window.__vireon.getState().action==='mine'&&document.getElementById('aim-meta').textContent.includes('в рюкзаке 7'));await page.keyboard.down('f');await page.waitForFunction(()=>window.__vireon.getState().cells.some(s=>s?.itemId==='stone'&&s.count>=8));await page.keyboard.up('f');await shot('mining');
- const collisions=await page.evaluate(async()=>{const {boxes}=await import('/src/world.ts');return boxes.filter(b=>['iron-outcrop','copper-outcrop'].includes(b.id)).length;});assert.equal(collisions,0);check('Mining reports backpack count; depleted main ores lose their collider');
+ await configure(async()=>{const {addItems}=await import('/src/game/inventory.ts');const s=window.__vireon.snapshot();addItems(s.player.inventory,'stone',7);s.world.nodes['iron-a']=0;s.world.nodes['copper-a']=0;window.__vireon.setState(s);window.__vireon.teleport(30,54.5,Math.PI,-.5);});await page.waitForFunction(()=>window.__vireon.getState().action==='mine');
+ // S5 (D37): the mining label is lean (no stock); the selected scanner reads the deposit — stock and the backpack count.
+ assert.doesNotMatch(await page.locator('#aim').textContent(),/Запас|в рюкзаке/);const stoneAt=(await state()).aimNode;
+ await page.locator('#hotbar-slots .cell').nth(2).click();await page.waitForFunction(()=>window.__vireon.getState().action==='scan');await page.locator('#action').click();await page.waitForFunction(()=>window.__vireon.getState().dialog==='info-panel');
+ assert.equal(await page.locator('#info-title').textContent(),'Камень');assert.match(await page.locator('#info-kind').textContent(),/^Залежь · /);const readout=await page.locator('#info-data').textContent();assert.match(readout,/Запас\d+ \/ \d+/);assert.match(readout,/В рюкзаке7/);await shot('scan-deposit');
+ await click('#close-info');await page.locator('#hotbar-slots .cell').nth(0).click();await page.waitForFunction(id=>window.__vireon.getState().action==='mine'&&window.__vireon.getState().aimNode===id,stoneAt);await page.keyboard.down('f');await page.waitForFunction(()=>window.__vireon.getState().cells.some(s=>s?.itemId==='stone'&&s.count>=8));await page.keyboard.up('f');await shot('mining');
+ const collisions=await page.evaluate(async()=>{const {boxes}=await import('/src/world.ts');return boxes.filter(b=>['iron-outcrop','copper-outcrop'].includes(b.id)).length;});assert.equal(collisions,0);check('The scanner reads a deposit (stock, backpack count) while the mining label stays lean; depleted main ores lose their collider');
  await configure(async()=>{const s=window.__vireon.snapshot();s.player.inventory[0].durability=0;window.__vireon.setState(s);window.__vireon.teleport(30,54.5,Math.PI,-.5);});await page.waitForFunction(()=>window.__vireon.getState().action==='mine'&&/руками/.test(document.getElementById('aim-name').textContent));const stone=(await snapshot()).player.inventory.filter(v=>v?.itemId==='stone').reduce((n,v)=>n+v.count,0);await page.keyboard.down('f');await page.waitForFunction(n=>window.__vireon.getState().cells.filter(v=>v?.itemId==='stone').reduce((a,v)=>a+v.count,0)>n,stone);await page.keyboard.up('f');check('With a broken multitool loose stone is still gathered by hand, slower and labelled');
  await configure(async()=>{const {NODE_BY_ID}=await import('/src/game/resources.ts');const s=window.__vireon.snapshot();s.player.inventory[0].durability=160;s.world.nodes['grass-a']=10;s.world.regrow['grass-a']=NODE_BY_ID.get('grass-a').regrowSeconds*1000-1500;window.__vireon.setState(s);});const grown=await snapshot();assert.equal(grown.world.nodes['grass-a'],10);await page.waitForFunction(()=>window.__vireon.getState().nodes['grass-a']>10,null,{timeout:120000});check('Local grass regrows in active time');
  // ---------- S4 (D33): an exhausted deposit returns as a new vein at a fixed spot ----------
- await configure(async()=>{const s=window.__vireon.snapshot();s.world.nodes['sand-a']=1;window.__vireon.setState(s);window.__vireon.teleport(49,61.5,Math.PI,-.5);});await page.waitForFunction(()=>window.__vireon.getState().aimNode==='sand-a'&&document.getElementById('aim-meta').textContent.startsWith('Запас 1/32'));
+ await configure(async()=>{const s=window.__vireon.snapshot();s.world.nodes['sand-a']=1;window.__vireon.setState(s);window.__vireon.teleport(49,61.5,Math.PI,-.5);});await page.waitForFunction(()=>window.__vireon.getState().aimNode==='sand-a'&&window.__vireon.getState().action==='mine');
  await page.keyboard.down('f');await page.waitForFunction(()=>window.__vireon.getState().respawn.length===1);await page.keyboard.up('f');
  let veinState=await state();assert.equal(veinState.nodes['sand-a'],0);assert.equal(veinState.respawn[0].material,'sand');assert.ok(veinState.respawn[0].ms>=225000&&veinState.respawn[0].ms<=375000,String(veinState.respawn[0].ms));assert.deepEqual(veinState.veins,[]);
  // Active time is advanced through the dev state instead of waiting 5 minutes: the due entry spawns on the next ticks.
  await configure(async()=>{const s=window.__vireon.snapshot();s.world.respawn[0].ms=400;window.__vireon.setState(s);});
  veinState=await (await page.waitForFunction(()=>{const s=window.__vireon.getState();return s.veins.length===1&&s.veinGroups===1&&s.veinBoxes===1&&s.respawn.length===0&&s;})).jsonValue();
- const vein=veinState.veins[0];assert.equal(vein.id,'vein-1');assert.equal(vein.material,'sand');assert.ok(vein.amount===vein.size&&vein.size>=18&&vein.size<=30);assert.match(veinState.toast.kind,/^Новая жила: песок — (север|северо-восток|восток|юго-восток|юг|юго-запад|запад|северо-запад)$/);
+ const vein=veinState.veins[0];assert.equal(vein.id,'vein-1');assert.equal(vein.material,'sand');assert.ok(vein.amount===vein.size&&vein.size>=18&&vein.size<=30);assert.doesNotMatch(veinState.toast.kind+' '+veinState.toast.text,/жила/i,'D38: a new vein is not announced');
  await page.locator('#map-button').click();await page.waitForFunction(()=>window.__vireon.getState().dialog==='map-panel'&&window.__vireon.getState().map.veins===1);await page.locator('#close-map').click();await page.waitForFunction(()=>window.__vireon.getState().running);
  await configure(async([id])=>{const {VEIN_SPOT_BY_ID}=await import('/src/game/resources.ts');const s=window.__vireon.snapshot(),v=s.world.veins.find(v=>v.id===id),p=VEIN_SPOT_BY_ID.get(v.spot);v.amount=1;window.__vireon.setState(s);window.__vireon.teleport(p.x,p.z+2.6,Math.PI,-.5);},[vein.id]);
- await page.waitForFunction(id=>window.__vireon.getState().aimNode===id&&window.__vireon.getState().action==='mine'&&document.getElementById('aim-meta').textContent.startsWith('Запас 1/'),vein.id);
+ await page.waitForFunction(id=>window.__vireon.getState().aimNode===id&&window.__vireon.getState().action==='mine',vein.id);
  const sandBefore=(await state()).cells.filter(v=>v?.itemId==='sand').reduce((n,v)=>n+v.count,0);
  await page.keyboard.down('f');await page.waitForFunction(()=>window.__vireon.getState().veins.length===0);await page.keyboard.up('f');
  veinState=await state();assert.equal(veinState.cells.filter(v=>v?.itemId==='sand').reduce((n,v)=>n+v.count,0),sandBefore+1);assert.equal(veinState.veinBoxes,0);assert.deepEqual(veinState.respawn.map(e=>e.material),['sand']);
  await page.waitForFunction(()=>window.__vireon.getState().veinGroups===0&&window.__vireon.getState().feel.crumbling===0);
- check('A mined-out deposit queues a new vein; it appears at a fixed spot with a toast and a map marker, mines like a deposit and, mined out, queues the next one');
+ check('A mined-out deposit queues a new vein; it rises at a fixed spot without an announcement, shows on the map like a deposit, mines like one and, mined out, queues the next one');
  // ---------- Placement and pick-up ----------
  await configure(async()=>{const s=window.__vireon.snapshot();s.player.inventory[12]={itemId:'workbench',count:1};s.player.hotbar=2;window.__vireon.setState(s);window.__vireon.teleport(46,48,Math.PI,-.65);});await page.keyboard.press('i');
  // The inventory keeps its mouse drag through the shared dragDrop.ts: there and back again, with no tap on the way.
@@ -95,22 +100,24 @@ try{
  /** Aims the ghost at cell `key` from `stand` ([x, z] on the ground or [x, z, y] on blocks) towards `point`, then one real F. */
  const placeAt=async(key,stand,point,item='window')=>{await hold(item);await look(stand,point);await aimed(k=>{const s=window.__vireon.getState();return s.cellTarget===k&&s.cellProblem==='';},key,'Ghost is not on '+key);const n=(await snapshot()).world.base.glass.length;await page.keyboard.press('f');
   if(item==='window')await page.waitForFunction(([k,n])=>{const g=window.__vireon.snapshot().world.base.glass;return g.includes(k)&&g.length===n+1;},[key,n],{timeout:5000});else await page.waitForFunction(k=>window.__vireon.snapshot().world.base.doors.some(d=>((d.x+256)*1024+(d.z+256))*128+(d.y+32)===k),key,{timeout:5000});};
- /** A wall cell from outside (outward normal nx, nz): level 0 aims at the ground of its column, 1 and 2 at the top of the block below. */
- const wallCell=(i,k,j,nx,nz)=>{const cx=i+.5,cz=j+.5,out=k===2?1.45:1.9;return placeAt(ck(i,k,j),[cx+nx*out,cz+nz*out],k===0?[cx,.5,cz]:k===1?[cx+nx*.1,1,cz+nz*.1]:[cx-nx*.45,2,cz-nz*.45]);};
+ /** A wall cell from outside (outward normal nx, nz); D35: level k spans y k+0.5…k+1.5. Level 0 aims at the ground of its
+  *  column (the 0.5 m pad), 1 at the top of the block below; the top of level 1 (2.5 m) is above the eyes (2.1 m), so
+  *  level 2 aims up at the top 25 cm of that block's outer face, which stacks on it. */
+ const wallCell=(i,k,j,nx,nz)=>{const cx=i+.5,cz=j+.5,out=k===2?1.45:1.9;return placeAt(ck(i,k,j),[cx+nx*out,cz+nz*out],k===0?[cx,.5,cz]:k===1?[cx+nx*.1,1.5,cz+nz*.1]:[cx+nx*.5,2.4,cz+nz*.5]);};
  /** The room window of a glass block ('glass:<key>') or an airlock: aim with the multitool selected and press F. */
  const openRoom=async(id,stand,point)=>{if((await state()).dialog==='production-panel')await click('#close-production');await slot(0);await look(stand,point);await aimed(id=>{const s=window.__vireon.getState();return s.worldTarget===id&&s.action==='room';},id,'Not aimed at '+id);await page.keyboard.press('f');await page.waitForFunction(id=>{const s=window.__vireon.getState();return s.dialog==='production-panel'&&s.station===id;},id);};
- const rooms=async()=>(await state()).rooms,probe=ck(58,2,41),probeAim=[[58.5,39.4],[58.5,2.5,41]];
+ const rooms=async()=>(await state()).rooms,probe=ck(58,2,41),probeAim=[[58.5,39.4],[58.5,3,41]];
  // ---------- S4: a glass room built block by block (3×3 inside, 3 high on the ground), an airlock in its wall ----------
  await click('#close-production');await configure(async()=>{const s=window.__vireon.snapshot(),inv=s.player.inventory;for(let i=1;i<6;i++)if(inv[i]){const f=inv.findIndex((v,n)=>n>5&&!v);inv[f]=inv[i];inv[i]=null;}for(let i=1;i<5;i++)inv[i]={itemId:'window',count:16};inv[5]={itemId:'airlock',count:1};s.player.hotbar=1;window.__vireon.setState(s);});
  for(const k of [0,1,2]){for(const i of [56,57,58]){await wallCell(i,k,45,0,1);await wallCell(i,k,41,0,-1);}for(const j of [42,43,44]){await wallCell(55,k,j,-1,0);await wallCell(59,k,j,1,0);}}
  assert.equal((await rooms()).length,0);await openRoom('glass:'+probe,...probeAim);assert.equal(await page.locator('#st-status-title').textContent(),'Утечка');assert.ok((await state()).glass.leak>0);await validate('room-leak');await shot('room-leak');await click('#close-production');assert.ok((await state()).glass.leak>0);await shot('room-leak-path');
  check('36 wall blocks placed with the crosshair and real F presses; an open box is «Утечка» and its leak path lights up in the world');
  // The roof from the top of the west wall: three parapet blocks on the far wall, then rows from the far side.
- const onWall=[55.5,42.5,3];for(const j of [42,43,44])await placeAt(ck(59,3,j),onWall,[59.5,3,j+.5]);for(const j of [44,43,42])for(const i of [58,57,56])await placeAt(ck(i,3,j),onWall,[i+1,3.5,j+.5]);
+ const onWall=[55.5,42.5,3.5];for(const j of [42,43,44])await placeAt(ck(59,3,j),onWall,[59.5,3.5,j+.5]);for(const j of [44,43,42])for(const i of [58,57,56])await placeAt(ck(i,3,j),onWall,[i+1,4,j+.5]);
  let rs=await rooms();assert.equal(rs.length,1);assert.equal(rs[0].volume,27);assert.equal(rs[0].q,0);check('Standing on the wall the roof closes the box: a new 27 m³ room, born empty');
  const windows=async()=>(await snapshot()).player.inventory.reduce((n,v)=>n+(v?.itemId==='window'?v.count:0),0),spare=await windows();
- await placeAt(ck(57,0,45),[57.5,47.6],[57.5,1.5,46],'airlock');rs=await rooms();assert.equal(rs.length,1);assert.equal(rs[0].doors.length,1);assert.equal(await windows(),spare+2);assert.ok(!(await snapshot()).world.base.glass.includes(ck(57,1,45)));
- const door=rs[0].doors[0];check('The airlock goes straight onto two wall blocks: they return to the backpack and the room stays sealed');
+ await placeAt(ck(57,0,45),[57.5,47.6],[57.5,2,46],'airlock');rs=await rooms();assert.equal(rs.length,1);assert.equal(rs[0].doors.length,1);assert.equal(await windows(),spare+4);{const g=(await snapshot()).world.base.glass;for(const k of [ck(57,0,45),ck(57,1,45),ck(58,0,45),ck(58,1,45)])assert.ok(!g.includes(k));}
+ const door=rs[0].doors[0];assert.deepEqual((await state()).doors,[{id:door,width:2,outer:'closed',inner:'closed',pressure:0,cycleMs:0,shown:{outer:0,inner:0}}]);check('The 2×2 airlock module goes straight onto four wall blocks: they return to the backpack and the room stays sealed');
  // The distributor stands inside: aim at it through the glass and lay the pipe with the world tool, the cable from its window.
  await configure(async([e])=>{const s=window.__vireon.snapshot(),inv=s.player.inventory,i=inv.findIndex(v=>v?.itemId==='gas_pipe');[inv[5],inv[i]]=[inv[i],inv[5]];s.player.hotbar=5;s.world.base.buildings.find(b=>b.id===e).oxygen=1000000;window.__vireon.setState(s);},[electro]);
  await face(electro);await page.keyboard.press('f');await page.waitForFunction(e=>window.__vireon.getState().linkSource===e,electro);
@@ -119,6 +126,9 @@ try{
  await click('#close-production');await page.waitForFunction(()=>window.__vireon.getState().rooms[0]?.q>=8,null,{timeout:120000});await openRoom('glass:'+probe,...probeAim);assert.equal(await page.locator('.st-checks li').count(),7);assert.notEqual(await page.locator('#st-status-title').textContent(),'Утечка');await validate('room');await shot('room');
  check('With pipe and cable the room fills with air; the window of any wall block lists every habitability condition');
  // ---------- Storage and capsule ----------
+ // S5 review (D37): the selected scanner replaces only the actions on what it reads; a supply crate still opens with it.
+ await configure(()=>{const s=window.__vireon.snapshot(),inv=s.player.inventory,i=inv.findIndex(v=>v?.itemId==='scanner');if(i<0){const f=inv.findIndex((v,k)=>!v&&k>=6);inv[f]=inv[2];inv[2]={itemId:'scanner',count:1};}else[inv[2],inv[i]]=[inv[i],inv[2]];window.__vireon.setState(s);});await slot(2);await face('crate-a');assert.equal((await state()).action,'crate');assert.equal(await page.locator('#aim-name').textContent(),'Ящик снабжения');
+ await page.locator('#action').click();await page.waitForFunction(()=>window.__vireon.getState().dialog==='production-panel');await click('#close-production');await slot(0);check('With the scanner selected the supply crate keeps its open action');
  await open('crate-a');await bag('stone');assert.ok((await snapshot()).world.crates['crate-a'].some(s=>s?.itemId==='stone'));await validate('crate');await shot('crate');check('Starting crate accepts real items');
  for(const size of [{width:667,height:320},{width:568,height:320}]){await page.setViewportSize(size);await validate('crate'+size.width);await open(electro);await validate('oxygen'+size.width);await shot('oxygen-'+size.width);await open(kiln);await validate('kiln'+size.width);await shot('kiln-'+size.width);await openRoom('glass:'+probe,...probeAim);await validate('room'+size.width);await shot('room-'+size.width);}
  check('Furnace, oxygen, room and storage windows fit 844×390, 667×320 and 568×320; all controls ≥32×32');
@@ -134,34 +144,80 @@ try{
   for(const b of ['#map-zoom-in','#map-zoom-in']){await page.click(b);await page.waitForFunction(k=>window.__vireon.getState().map.draws>k,await draws());}
   let m=(await state()).map;assert.deepEqual(m.structures,[tone,tone],'one outline for the glass and one airlock, tinted by the room air');
   const mb=await page.locator('#map').boundingBox(),at=(x,z)=>({x:mb.x+(m.size.w/2+(m.center.x-x)*m.zoom)*mb.width/m.size.w,y:mb.y+(m.size.h/2-(z-m.center.z)*m.zoom)*mb.height/m.size.h});
-  let q=at(door.x+.5,door.z+.5);await page.mouse.click(q.x,q.y);assert.deepEqual((await state()).map.card,{kind:'station',id:door.id});
+  let q=at(door.x+1,door.z+.5);await page.mouse.click(q.x,q.y);assert.deepEqual((await state()).map.card,{kind:'station',id:door.id});
   assert.equal(await page.locator('#map-card-title').innerText(),'Шлюз');assert.match(await page.locator('#map-card-kind').textContent(),/^Помещение · пригодно/);assert.match(await page.locator('#map-card-data').textContent(),new RegExp('Объём'+room.volume+' м³'));
   await page.click('#map-go');let s=await state();assert.equal(s.selected,door.id);assert.equal(s.dialog,'');assert.equal(s.guide.nav.name,'Шлюз');assert.equal(s.guide.nav.radius,3);
   // The map reopens without a card; once it has drawn, one click on the airlock opens its card again.
   {const n=await draws();await page.click('#map-button');await page.waitForFunction(k=>window.__vireon.getState().dialog==='map-panel'&&window.__vireon.getState().map.draws>k,n);}
-  m=(await state()).map;assert.equal(m.card,null);q=at(door.x+.5,door.z+.5);await page.mouse.click(q.x,q.y);
+  m=(await state()).map;assert.equal(m.card,null);q=at(door.x+1,door.z+.5);await page.mouse.click(q.x,q.y);
   assert.deepEqual((await state()).map.card,{kind:'station',id:door.id});assert.equal(await page.locator('#map-go').innerText(),'Ведём · закрыть');
+  // S5: at the maximum 24 px/m every glass column of the room is a 1 m square, and the airlock still opens with one tap.
+  // A drag brings the airlock to the middle (a drag pans, never taps); each wheel notch zooms about it to an exact factor.
+  {await page.click('#map-back');assert.equal((await state()).map.card,null);
+   q=at(door.x+.5,door.z+.5);await page.mouse.move(q.x,q.y);await page.mouse.down();await page.mouse.move(mb.x+mb.width/2,mb.y+mb.height/2,{steps:6});await page.mouse.up();assert.equal((await state()).map.card,null,'a drag pans, it does not open a card');
+   while((m=(await state()).map).zoom<24){const want=Math.min(24,m.zoom*Math.exp(.6));q=at(door.x+.5,door.z+.5);await page.mouse.move(q.x,q.y);await page.mouse.wheel(0,-400);assert.ok(Math.abs((await state()).map.zoom-want)<1e-6,'one wheel notch zooms to '+want);}
+   await page.waitForFunction(k=>window.__vireon.getState().map.draws>k,(await state()).map.draws);m=(await state()).map;
+   const cols=new Set([...(await snapshot()).world.base.glass.map(k=>Math.floor(k/128)),(door.x+256)*1024+door.z+256]);assert.equal(m.columns,cols.size,'every glass column of the room is drawn at 24 px/m');
+   q=at(door.x+.5,door.z+.5);assert.ok(q.x>mb.x&&q.x<mb.x+mb.width&&q.y>mb.y&&q.y<mb.y+mb.height,'the airlock is on screen');await page.mouse.click(q.x,q.y);assert.deepEqual((await state()).map.card,{kind:'station',id:door.id});
+   await shot('map-max');}
   await page.click('#map-guide');s=await state();assert.equal(s.selected,'guide');if(s.dialog==='map-panel')await page.click('#close-map');assert.equal((await state()).running,true);
   check('Map: the glass room is an outline tinted by its air; its airlock opens a room card, is led to and returns to the journal');}
  // ---------- Growing behind a second wall, the airlock both ways, a confirmed breach ----------
- for(const [i,j,nx,nz] of [[60,42,0,-1],[60,44,0,1],[61,43,1,0]])for(const k of [0,1])await wallCell(i,k,j,nx,nz);await placeAt(ck(60,2,43),[62.9,43.5],[60,2.5,43.5]);
+ // The roof cell goes in front of the main room's east wall (level 2), aimed over the new 2-high wall from 4.3 m out (D35: its top is 2.5 m).
+ for(const [i,j,nx,nz] of [[60,42,0,-1],[60,44,0,1],[61,43,1,0]])for(const k of [0,1])await wallCell(i,k,j,nx,nz);await placeAt(ck(60,2,43),[64.3,43.5],[60,3,43.5]);
  rs=await rooms();assert.deepEqual(rs.map(r=>r.volume).sort((a,b)=>a-b),[2,27]);assert.equal(rs.find(r=>r.volume===2).q,0);check('A second shell built against the wall closes a small empty room of its own');
- // Diagnostics for a tap that CI has lost here before: where each pointer event of the click landed and what the window said.
- await page.evaluate(()=>{const log=window.__tapLog=[],name=t=>t instanceof Element?`${t.tagName.toLowerCase()}${t.id?'#'+t.id:''}.${[...t.classList].join('.')}:${(t.textContent??'').trim().slice(0,24)}`:String(t);for(const k of ['pointerdown','mousedown','pointerup','mouseup','click','pointercancel'])document.addEventListener(k,e=>log.push(`${k}@${Math.round(performance.now())} ${name(e.target)} (${Math.round(e.clientX)},${Math.round(e.clientY)})`),true);});
- const inBox=p=>p.x>56&&p.x<59&&p.z>42&&p.z<45;
- /** One real click on «Пройти шлюз», then the cycle must end on the other side; no second click. */
- const passAirlock=async inward=>{await page.evaluate(()=>{window.__tapLog.length=0;});await page.locator('#airlock-pass').click();
-  try{await page.waitForFunction(inward=>{const s=window.__vireon.snapshot(),p=s.player,inside=p.x>56&&p.x<59&&p.z>42&&p.z<45;return !s.world.base.passage&&inside===inward;},inward,{timeout:60000});}
-  catch(e){const why=await page.evaluate(()=>{const s=window.__vireon.snapshot(),r=document.getElementById('airlock-pass')?.getBoundingClientRect();return {taps:window.__tapLog,message:document.getElementById('production-message')?.textContent,player:{x:s.player.x,y:s.player.y,z:s.player.z},rooms:window.__vireon.getState().rooms,passage:s.world.base.passage,button:r&&[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]};});throw new Error('Airlock click did not lead '+(inward?'inside':'outside')+': '+JSON.stringify(why));}
-  await click('#close-production');};
- await openRoom(door,[57.5,48],[57.5,1.5,46]);await validate('airlock');await shot('airlock');const q0=(await rooms()).find(r=>r.volume===27).q;await passAirlock(true);assert.ok(inBox((await state()).position));check('One click on «Пройти шлюз» from outside cycles 6 s and sets the player down inside');
+ // ---------- D36: walking through the airlock module, both ways, with real presses ----------
+ const doorNow=async()=>(await state()).doors.find(d=>d.id===door),air=async()=>(await snapshot()).world.base.zones.find(z=>z.cell===rs.find(r=>r.volume===27).cell).q;
+ const inBox=p=>p.x>56&&p.x<59&&p.z>42&&p.z<45,inChamber=p=>p.x>57&&p.x<59&&p.z>45&&p.z<46;
+ /** Turns on the spot (no step) towards a point, then waits until the reticle rests on that door of the airlock. */
+ const aimDoor=async(face,point)=>{const p=(await state()).position;await look([p.x,p.z,p.y],point);await aimed(([id,f])=>{const s=window.__vireon.getState();return s.worldTarget===id&&s.struck?.face===f&&s.action==='door';},[door,face],'Not aimed at the '+face+' door');};
+ /** Holds W (a real key) until `done(position)` holds, then lets go and waits until the body stands still. */
+ const walk=async(done,what)=>{await page.keyboard.down('w');try{await page.waitForFunction(src=>new Function('p','return '+src)(window.__vireon.getState().position),done.toString().replace(/^p=>/,''),{timeout:30000});}catch(e){throw new Error('Walk did not reach '+what+': '+JSON.stringify((await state()).position));}finally{await page.keyboard.up('w');}
+  let last=null;await page.waitForFunction(()=>window.__vireon.getState().input.forward===0);for(;;){const p=(await state()).position;if(last&&Math.hypot(p.x-last.x,p.z-last.z)<1e-6)return p;last=p;await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));}};
+ // The distributor rests while the room air is counted to the milli-GU (only the room's own technical leak remains).
+ await configure(async([d])=>{const s=window.__vireon.snapshot();s.world.base.buildings.find(b=>b.id===d).enabled=false;window.__vireon.setState(s);},[dist]);
+ await slot(0);await look([58,47.4],[58,1.7,45.95]);await aimDoor('outer',[58,1.7,45.95]);
+ assert.equal(await page.locator('#aim-name').textContent(),'Внешняя дверь шлюза');assert.equal(await page.locator('#aim-meta').textContent(),'Закрыта · в камере 0 GU');assert.equal(await page.locator('#action').getAttribute('aria-label'),'Открыть');await shot('airlock-outside');
+ const q0=await air();await page.locator('#action').click();
+ await page.waitForFunction(id=>window.__vireon.getState().doors.find(d=>d.id===id).outer==='open',door);
+ let dn=await doorNow();assert.deepEqual([dn.outer,dn.inner,dn.pressure],['open','closed',0]);assert.ok(q0-await air()<1000,'opening the outer door takes no room air (only the room\'s own leak)');
+ check('Aimed at the outer door, one click «Открыть» slides it open (outside pressure: no fill)');
+ let p=await walk(p=>p.z<45.62,'the chamber');assert.ok(inChamber(p)&&p.z>45.36,JSON.stringify(p));assert.equal((await state()).chamber,door);
+ check('Holding W walks through the open outer doorway into the chamber; the closed inner leaf stops the body');
+ // Interlock: the inner door stays shut while the outer one is open.
+ await aimDoor('inner',[58,1.7,45.05]);assert.equal(await page.locator('#aim-meta').textContent(),'Закрыта: открыта другая дверь');
+ await page.keyboard.press('f');await page.waitForFunction(()=>window.__vireon.getState().toast.text==='Сначала закройте другую дверь');assert.equal((await doorNow()).inner,'closed');
+ await aimDoor('outer',[58,1.7,45.95]);assert.equal(await page.locator('#action').getAttribute('aria-label'),'Закрыть');await page.keyboard.press('f');
+ await page.waitForFunction(id=>window.__vireon.getState().doors.find(d=>d.id===id).outer==='closed',door);
+ // The inner door: the chamber fills from the room first (4 GU at the request, 3 s), then the leaves slide.
+ await aimDoor('inner',[58,1.7,45.05]);const q1=await air();await page.keyboard.press('f');
+ await page.waitForFunction(id=>window.__vireon.getState().doors.find(d=>d.id===id).inner==='cycling',door);dn=await doorNow();assert.equal(dn.pressure,4000);const dq=q1-await air();assert.ok(dq>=4000&&dq<4300,`the fill takes 4 GU of the room (plus its leak meanwhile): ${dq}`);
+ assert.match(await page.locator('#aim-meta').textContent(),/^Наполнение камеры из помещения · [1-4] с$/);await shot('airlock-filling');
+ await page.waitForFunction(id=>window.__vireon.getState().doors.find(d=>d.id===id).inner==='open',door,{timeout:20000});dn=await doorNow();assert.deepEqual([dn.outer,dn.inner,dn.pressure],['closed','open',4000]);
+ check('In the chamber: the other door is locked by the interlock; the outer door closes, the inner one charges the chamber with 4 GU of room air and opens');
+ p=await walk(p=>p.z<44.3,'the room');assert.ok(inBox(p),JSON.stringify(p));assert.equal((await state()).chamber,null);
+ await look([p.x,p.z,p.y],[58,1.6,45.05]);await shot('airlock-inside');
+ check('…and the player walks on into the room');
  // From inside: the wall between the room and the new shell goes with R and no question — the volumes merge, no air leaves.
- await slot(0);await look([58.2,44.2],[59,1.5,43.5]);await aimed(k=>window.__vireon.getState().struck?.key===k,ck(59,1,43),'Not aimed at the shared wall');const qBefore=(await rooms()).find(r=>r.volume===27).q;
+ await slot(0);await look([58.2,44.2],[59,2,43.5]);await aimed(k=>window.__vireon.getState().struck?.key===k,ck(59,1,43),'Not aimed at the shared wall');const qBefore=(await rooms()).find(r=>r.volume===27).q;
  await page.keyboard.press('r');await page.waitForFunction(k=>!window.__vireon.snapshot().world.base.glass.includes(k),ck(59,1,43),{timeout:5000});assert.equal((await state()).pendingRemove,'');rs=await rooms();assert.equal(rs.length,1);assert.equal(rs[0].volume,30);assert.ok(rs[0].q>=qBefore-.5&&q0>0,JSON.stringify({qBefore,rs}));
  check('Expanding behind a second wall: taking the wall between them out merges the rooms without losing air');
- await openRoom(door,[57.5,44.2],[57.5,1.5,45]);await passAirlock(false);assert.ok(!inBox((await state()).position));check('From inside the airlock is the target; one click leads back outside');
+ // Out again: into the charged chamber, the inner door shut, then the outer one vents the chamber outside (3 s) and slides.
+ const roomAir=async()=>(await snapshot()).world.base.zones[0].q;
+ await look([58,43.6],[58,1.7,46]);p=await walk(p=>p.z>45.38,'the chamber from the room');assert.ok(inChamber(p)&&p.z<45.64,JSON.stringify(p));assert.equal((await state()).chamber,door);
+ await aimDoor('inner',[58,1.7,45.05]);assert.equal(await page.locator('#action').getAttribute('aria-label'),'Закрыть');await page.keyboard.press('f');await page.waitForFunction(id=>window.__vireon.getState().doors.find(d=>d.id===id).inner==='closed',door);
+ await aimDoor('outer',[58,1.7,45.95]);const q2=await roomAir();await page.keyboard.press('f');
+ await page.waitForFunction(id=>window.__vireon.getState().doors.find(d=>d.id===id).outer==='cycling',door);assert.equal((await doorNow()).pressure,4000);assert.match(await page.locator('#aim-meta').textContent(),/^Сброс давления наружу · [1-4] с$/);await shot('airlock-venting');
+ await page.waitForFunction(id=>window.__vireon.getState().doors.find(d=>d.id===id).outer==='open',door,{timeout:20000});dn=await doorNow();assert.deepEqual([dn.outer,dn.inner,dn.pressure],['open','closed',0]);
+ assert.ok(q2-await roomAir()<1500,'venting the chamber takes nothing from the room (only its own leak)');
+ p=await walk(p=>p.z>46.6,'outside');assert.ok(!inBox(p)&&!inChamber(p),JSON.stringify(p));assert.equal((await state()).chamber,null);
+ // Taking the module back is refused while a door stands open; closed, it is the outer door again.
+ await aimDoor('outer',[58,1.7,45.95]);await page.keyboard.press('r');await page.waitForFunction(()=>window.__vireon.getState().toast.text==='Сначала закройте обе двери шлюза');assert.equal((await snapshot()).world.base.doors.length,1);
+ await page.keyboard.press('f');await page.waitForFunction(id=>window.__vireon.getState().doors.find(d=>d.id===id).outer==='closed',door);dn=await doorNow();assert.deepEqual([dn.outer,dn.inner,dn.pressure,dn.cycleMs],['closed','closed',0,0]);
+ check('From inside the player walks into the charged chamber, closes the inner door, the outer one vents the chamber and opens; he walks out, R is refused while it is open, F closes it');
+ await configure(async([d])=>{const s=window.__vireon.snapshot();s.world.base.buildings.find(b=>b.id===d).enabled=true;window.__vireon.setState(s);},[dist]);
  // Taking an outer block out vents the room: the first R asks, the second (within 3 s) confirms and the air is gone.
- await slot(0);const outer=ck(61,1,43);await look([62.9,43.5],[62,1.5,43.5]);await aimed(k=>window.__vireon.getState().struck?.key===k,outer,'Not aimed at the outer block');
+ await slot(0);const outer=ck(61,1,43);await look([62.9,43.5],[62,2,43.5]);await aimed(k=>window.__vireon.getState().struck?.key===k,outer,'Not aimed at the outer block');
  await page.keyboard.press('r');const ask=await state();assert.match(ask.pendingRemove,/Воздух уйдёт: \d+ GU/);assert.ok(ask.base.glass.includes(outer));assert.equal(ask.rooms.length,1);assert.equal(ask.glass.tint,true);
  // The confirmation lasts 3 s of page time: a screenshot here can outlast it on a loaded software renderer, so R comes first.
  await page.keyboard.press('r');await page.waitForFunction(k=>!window.__vireon.snapshot().world.base.glass.includes(k),outer,{timeout:5000});assert.deepEqual(await rooms(),[]);await shot('room-breach');

@@ -1,7 +1,7 @@
 import { countItem } from './inventory';
 import { allDeposits, depositLeft } from './resources';
 import { RECIPE_BY_ID, WORKBENCH_UPGRADE, type Building } from './production';
-import { allRooms, cellOf, habitableQ, habitableRoom, roomCenter, roomDoors, roomy, stationRoom, type Room, type RoomInfo } from './rooms';
+import { allRooms, cellOf, doorCenter, habitableQ, habitableRoom, roomCenter, roomDoors, roomy, stationRoom, type Room, type RoomInfo } from './rooms';
 export { roomy };
 import { ITEMS } from './defs';
 import { questStatus } from './quests';
@@ -35,7 +35,7 @@ export function nearestStation(g: GameState, kind: string, level?: number): Guid
 const has = (g: GameState, kind: string) => g.world.base.buildings.some(b => b.kind === kind);
 /** The compass goes to the nearest airlock or glass room (S4). */
 export function nearestShelter(g: GameState, rooms: RoomInfo[] = allRooms(g)): GuideTarget | null {
- const spots: GuideTarget[] = [...g.world.base.doors.map(d => ({ name: ITEMS.airlock.name, x: d.x + .5, z: d.z + .5, kind: 'station' as const })), ...rooms.map(r => { const c = roomCenter(r); return { name: 'Помещение', x: c.x, z: c.z, kind: 'area' as const }; })];
+ const spots: GuideTarget[] = [...g.world.base.doors.map(d => ({ name: ITEMS.airlock.name, ...doorCenter(d), kind: 'station' as const })), ...rooms.map(r => { const c = roomCenter(r); return { name: 'Помещение', x: c.x, z: c.z, kind: 'area' as const }; })];
  return spots.sort((a, b) => dist(g, a.x, a.z) - dist(g, b.x, b.z))[0] ?? null;
 }
 /** A room at least 3 × 3 inside and 3 high (the journal's box; any closed room still counts for the milestone). */
@@ -66,15 +66,15 @@ export function guideStep(g: GameState, id: QuestId): GuideStep {
  const steps: Record<QuestId, () => Omit<GuideStep, 'id'>> = {
   materials: () => ({ chapter: 0, title: 'Камень и волокно', item: 'fiber', recipes: ['grass_parts'],
    why: 'Камень и растительное волокно — основа первых станций. Трава отрастает, камня в долине много.',
-   how: ['Подойдите к каменной осыпи слева от капсулы и удерживайте «Добыть».', 'Соберите местную траву — её можно рвать руками.', 'Откройте крафт (B): 1 трава → 2 волокна и 1 пища.'],
+   how: ['Подойдите к каменной осыпи слева от капсулы и удерживайте «Добыть».', 'Соберите местную траву — её можно рвать руками.', 'Откройте мастерскую: 1 трава → 2 волокна и 1 пища.'],
    tasks: [material(g, 'stone', 8, D), material(g, 'grass', 2, D || inv(g, 'fiber') >= 4), material(g, 'fiber', 4, D)] }),
   bench: () => ({ chapter: 0, title: 'Верстак', item: 'workbench', recipes: ['craft_workbench'],
    why: 'На верстаке собираются металлические детали, генераторы и баллоны.',
-   how: ['В крафте (B) выберите «Верстак» и нажмите «Создать».', 'Выберите верстак в быстром доступе, наведите на ровную землю у базы и нажмите F.'],
+   how: ['В мастерской выберите «Верстак» и нажмите «Создать».', 'Выберите верстак в быстром доступе, наведите на ровную землю у базы и нажмите кнопку действия.'],
    tasks: bodyTasks(g, 'workbench', 'craft_workbench', BASE_AREA) }),
   kiln: () => ({ chapter: 0, title: 'Плавильная печь', item: 'kiln', recipes: ['craft_kiln'],
    why: 'Печь превращает руду в слитки, песок в стекло, а лёд — в воду. Топливо — волокно.',
-   how: ['Создайте печь в кармане (B) и установите рядом с верстаком.'],
+   how: ['Создайте печь в мастерской и установите рядом с верстаком.'],
    tasks: bodyTasks(g, 'kiln', 'craft_kiln', BASE_AREA) }),
   metals: () => ({ chapter: 1, title: 'Железо и медь', item: 'iron', recipes: ['smelt_iron_raw', 'smelt_copper_raw'],
    why: 'Слитки нужны почти для всех станций. Руду добывают мультитулом.',
@@ -94,7 +94,7 @@ export function guideStep(g: GameState, id: QuestId): GuideStep {
    tasks: bodyTasks(g, 'electrolyzer', 'craft_electrolyzer', nearestStation(g, 'biogenerator') ?? BASE_AREA) }),
   power: () => ({ chapter: 2, title: 'Энергосеть', item: 'cable', recipes: ['craft_wire', 'craft_cable'],
    why: 'Кабель передаёт энергию. Один кабель — до 4 м линии; длинная линия до 12 м тратит несколько.',
-   how: ['На верстаке: медь → провод, провод + волокно → 4 кабеля.', 'Выберите кабель в быстром доступе, наведите на генератор (F), затем на потребитель (F).', 'Подсказка у прицела покажет длину и сколько кабелей уйдёт.'],
+   how: ['На верстаке: медь → провод, провод + волокно → 4 кабеля.', 'Выберите кабель в быстром доступе и нажмите кнопку действия, наведя на генератор, затем на потребитель.', 'Подсказка у прицела покажет длину и сколько кабелей уйдёт.'],
    tasks: [material(g, 'cable', 2, D || g.world.base.links.some(l => l.kind === 'cable')), flag('Соединить станции кабелем', g.world.base.links.some(l => l.kind === 'cable') || D, nearestStation(g, 'biogenerator')), flag('Подать энергию', fact(g, 'system:power'), nearestStation(g, 'biogenerator'))] }),
   oxygen: () => ({ chapter: 2, title: 'Свой кислород', item: 'oxygen', recipes: ['melt_in_generator', 'electrolysis'],
    why: 'Лёд → вода в печи → кислород в генераторе. Это главный путь к безопасности.',
@@ -114,7 +114,7 @@ export function guideStep(g: GameState, id: QuestId): GuideStep {
    const made = inv(g, 'window') + g.world.base.glass.length, closed = rooms.some(roomy), door = D || rooms.some(r => roomy(r) && roomDoors(g, r).length > 0);
    return { chapter: 3, title: 'Стеклянное убежище', item: 'window', recipes: ['craft_window', 'craft_airlock'],
     why: 'Убежище строят сами: замкнутая коробка из стеклоблоков со шлюзом — дом, где можно дышать без баллонов. Убрали блок — воздух ушёл.',
-    how: ['На верстаке: 1 стекло + 1 железо → 4 стеклоблока; шлюз — 4 железа, 2 стекла и 4 волокна.', 'Выберите стеклоблок, наведите на грунт или на блок и нажмите F (удержание ставит ряд). Стены и крыша — стекло, пол — грунт.', 'До крыши прицел достаёт сверху: сложите у стены ступеньку из блоков, встаньте на неё и ставьте блоки на верх стены, затем крышу от края.', 'Шлюз ставится прямо на два нижних блока стены: они вернутся в рюкзак, а вход — «Пройти шлюз» в его окне.'],
+    how: ['На верстаке: 1 стекло + 1 железо → 4 стеклоблока; шлюз — 6 железа, 4 стекла и 4 волокна.', 'Выберите стеклоблок, наведите на грунт или на блок и нажмите кнопку действия (удержание ставит ряд). Стены и крыша — стекло, пол — грунт.', 'До крыши прицел достаёт сверху: сложите у стены ступеньку из блоков, встаньте на неё и ставьте блоки на верх стены, затем крышу от края.', 'Шлюз 2×2 встаёт прямо на четыре нижних блока ровной стены: они вернутся в рюкзак. Двери открывайте сами (кнопка действия на двери): наружную, войдите в камеру, закройте её, затем внутреннюю — камера наполнится из помещения.'],
     tasks: [{ ...material(g, 'window', 48, D || closed || made >= 48), have: Math.min(48, made), label: 'Наделайте стеклоблоков (1 стекло + 1 железо → 4)' }, flag('Постройте замкнутую стеклянную коробку на земле, хотя бы 3×3 внутри и высотой 3', closed || D, shelter ?? BASE_AREA), flag('Встройте шлюз в стену', door, shelter ?? BASE_AREA, 'craft_airlock')] };
   },
   distributor: () => ({ chapter: 3, title: 'Распределитель', item: 'distributor', recipes: ['craft_distributor'],
@@ -131,7 +131,7 @@ export function guideStep(g: GameState, id: QuestId): GuideStep {
    const room = (dist && stationRoom(g, dist)) ?? rooms[0], need = room ? habitableQ(room.volume) / 1000 : 216, have = room ? Math.floor(room.zone.q / 1000) : 0;
    return { chapter: 3, title: 'Дышащее убежище', item: 'airlock', recipes: ['craft_gas_pipe'],
     why: 'Нужно не меньше 8 GU кислорода на каждый м³ объёма, чистота воздуха ≥50% и температура −5…+40 °C. Тогда в помещении дышат без баллонов.',
-    how: ['Трубой O₂ соедините генератор кислорода с распределителем (до 12 м).', 'Кабелем подайте питание на распределитель.', 'Следите за шкалой воздуха в окне помещения: наведите на стеклоблок или шлюз и нажмите F.'],
+    how: ['Трубой O₂ соедините генератор кислорода с распределителем (до 12 м).', 'Кабелем подайте питание на распределитель.', 'Следите за воздухом: выберите сканер и просканируйте стеклоблок или шлюз, либо откройте окно помещения кнопкой действия.'],
     tasks: [flag('Труба: генератор кислорода → распределитель', pipe || D, nearestStation(g, 'electrolyzer'), 'craft_gas_pipe'), flag('Кабель к распределителю', cable || D, nearestStation(g, 'biogenerator')), { label: 'Воздух в помещении', have: Math.min(need, have), need, unit: 'GU', done: D || rooms.some(habitableRoom), target: D ? null : shelter }] };
   },
   wrench: () => ({ chapter: 4, title: 'Гаечный ключ', item: 'wrench', recipes: ['craft_wrench'],
@@ -140,7 +140,7 @@ export function guideStep(g: GameState, id: QuestId): GuideStep {
    tasks: [...inputs(g, 'craft_wrench', D), flag('Создать ключ', fact(g, 'item:wrench'), nearestStation(g, 'workbench'), 'craft_wrench')] }),
   bench2: () => ({ chapter: 4, title: 'Верстак II', item: 'workbench_2', recipes: ['upgrade'],
    why: 'Улучшенный верстак собирает очередь из 5 партий сам, если подключён к энергии.',
-   how: ['Выберите ключ в быстром доступе и нажмите F у верстака.', 'Проверьте материалы улучшения и нажмите «Улучшить».'],
+   how: ['Выберите ключ в быстром доступе и нажмите кнопку действия у верстака.', 'Проверьте материалы улучшения и нажмите «Улучшить».'],
    tasks: [...Object.entries(WORKBENCH_UPGRADE.inputs).map(([id, n]) => material(g, id, n, D)), flag('Ключ в руке', D || g.player.inventory[g.player.hotbar]?.itemId === 'wrench'), flag('Улучшить верстак', D, nearestStation(g, 'workbench', 1))] }),
   auto: () => ({ chapter: 4, title: 'Автосборка', item: 'workbench_2', recipes: [],
    why: 'Верстак II работает без вас: поставьте партии в очередь и займитесь делами.',
@@ -152,7 +152,7 @@ export function guideStep(g: GameState, id: QuestId): GuideStep {
    tasks: [flag('Пригодный воздух в помещении', rooms.some(habitableRoom) || D, shelter), flag('Автосборка при живом убежище', fact(g, 'system:base'), nearestStation(g, 'workbench', 2))] }),
   tool: () => ({ chapter: 5, title: 'Запасной мультитул', item: 'tool_stone', recipes: ['craft_tool_stone'], optional: true,
    why: 'Мультитул изнашивается. Запасной лучше сделать заранее; камень и песок можно собирать и руками.',
-   how: ['В кармане (B): 4 камня + 2 волокна.'],
+   how: ['В мастерской (карман): 4 камня + 2 волокна.'],
    tasks: [...inputs(g, 'craft_tool_stone', D), flag('Создать мультитул', fact(g, 'craft:craft_tool_stone'), null, 'craft_tool_stone')] }),
  };
  return { id, ...steps[id]() };

@@ -9,15 +9,17 @@ import { createGhost } from './stationModels';
 import { rayCells } from './glass';
 import { allDeposits, depositLeft, depositScale } from './game/resources';
 import { REACH } from './game/mining';
-import { cellKey, cellOf, doorFront, doorProblem, glassProblem, groundCell, placeDoor, placeGlass, roomsView, type RoomEdit } from './game/rooms';
+import { cellKey, cellOf, cellY, doorAlong, doorCenter, doorFront, doorKeys, doorProblem, glassProblem, groundCell, newDoor, placeDoor, placeGlass, roomsView, type Door, type DoorFace, type RoomEdit } from './game/rooms';
+import { chamberAt, faceHit } from './game/airlock';
 
-const OPEN_REACH = 3.7, LINK_REACH = LINK_RANGE + 2;
+const OPEN_REACH = 3.7, LINK_REACH = LINK_RANGE + 2, STACK_BAND = .25;
 /** Glass building: the aim ray walks the block grid up to 6 m; a room window opens from up to 4.5 m. */
 export const GLASS_AIM = 6, ROOM_REACH = 4.5;
 /** Quarter turn whose front (rot 0 = +z) points along a horizontal direction. */
 const rotOf = (x: number, z: number) => Math.abs(x) > Math.abs(z) ? (x > 0 ? 1 : 3) : (z >= 0 ? 0 : 2);
-/** The block (or airlock) the reticle rests on: `key` its cell, `normal` the struck face. */
-export type Struck = { key: number; door: string | null; distance: number; normal: [number, number, number] };
+/** The block (or airlock) the reticle rests on: `key` its cell (a module: its anchor), `normal` the struck face; `face`:
+ *  the airlock door aimed at (D36: the leaf plane the ray meets first, also from inside the chamber). */
+export type Struck = { key: number; door: string | null; face: DoorFace | null; distance: number; normal: [number, number, number] };
 const CAPSULE_BOX = (h: number) => new THREE.Box3(new THREE.Vector3(37.4, h, 36.9), new THREE.Vector3(42.6, h + 4.4, 43.2));
 const toNode = new THREE.Vector3();
 /**
@@ -47,7 +49,7 @@ export function createWorldInteraction(scene: THREE.Scene, camera: THREE.Camera)
  const wireMat = new THREE.LineDashedMaterial({ color: 0x68daeb, dashSize: .35, gapSize: .18, transparent: true, opacity: .95, depthTest: false });
  const wire = new THREE.Line(new THREE.BufferGeometry(), wireMat); wire.renderOrder = 10; scene.add(wire); wire.visible = false;
  const ray = new THREE.Raycaster(), direction = new THREE.Vector3(), hitPoint = new THREE.Vector3(), box = new THREE.Box3(), lo = new THREE.Vector3(), hi = new THREE.Vector3();
- let x = 0, z = 0, rot = 0, problem = '', source: string | null = null, selection = '', target: string | null = null, link = { valid: false, cost: 0, distance: 0, reason: '' };
+ let x = 0, z = 0, rot = 0, problem = '', source: string | null = null, selection = '', target: string | null = null, targetAt = Infinity, link = { valid: false, cost: 0, distance: 0, reason: '' };
  const isBody = (id: string) => (BUILDABLE as readonly string[]).includes(id), isCell = (id: string) => id === 'window' || id === 'airlock';
  // ---------- Glass building: the struck block, the target cell and its ghost ----------
  let struck: Struck | null = null, cell: number | null = null, cellRot = 0, support = -1;
@@ -55,30 +57,50 @@ export function createWorldInteraction(scene: THREE.Scene, camera: THREE.Camera)
  const okLine = new THREE.LineBasicMaterial({ color: 0x64e6bd, transparent: true, opacity: .95 }), badLine = new THREE.LineBasicMaterial({ color: 0xe76d62, transparent: true, opacity: .95 });
  const cellGhost = (h: number) => { const geo = new THREE.BoxGeometry(1.02, h + .02, 1.02), g = new THREE.Group(), fill = new THREE.Mesh(geo, okMat), edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), okLine); fill.renderOrder = edges.renderOrder = 6; g.add(fill, edges); g.visible = false; scene.add(g); return { g, fill, edges }; };
  const blockGhost = cellGhost(1), doorGhost = cellGhost(2), doorArrow = new THREE.Mesh(new THREE.ConeGeometry(.14, .32, 3), okMat);
- doorArrow.rotation.x = Math.PI / 2; doorArrow.position.set(0, -.92, .72); doorGhost.g.add(doorArrow);
+ // The module ghost is 2 × 2 × 1 (D36): the cell ghost stretched along its width; the arrow points out of the outer door.
+ doorGhost.fill.scale.x = doorGhost.edges.scale.x = 2.02 / 1.02; doorArrow.rotation.x = Math.PI / 2; doorArrow.position.set(0, -.92, .72); doorGhost.g.add(doorArrow);
  function showCell(id: string, key: number, valid: boolean) {
-  const gh = id === 'airlock' ? doorGhost : blockGhost, { i, k, j } = cellOf(key);
+  const gh = id === 'airlock' ? doorGhost : blockGhost, { i, k, j } = cellOf(key), c = id === 'airlock' ? doorCenter(newDoor('', i, k, j, cellRot)) : { x: i + .5, z: j + .5 };
   gh.fill.material = valid ? okMat : badMat; gh.edges.material = valid ? okLine : badLine; doorArrow.material = valid ? okMat : badMat;
-  gh.g.position.set(i + .5, k + (id === 'airlock' ? 1 : .5), j + .5); gh.g.rotation.y = id === 'airlock' ? cellRot * Math.PI / 2 : 0; gh.g.visible = true;
+  gh.g.position.set(c.x, cellY(k) + (id === 'airlock' ? 1 : .5), c.z); gh.g.rotation.y = id === 'airlock' ? cellRot * Math.PI / 2 : 0; gh.g.visible = true;
  }
- /** DDA over glass/door cells and the terrain ray-march; the nearer hit wins. */
- function strike(g: GameState, max: number) {
+ /** DDA over glass/door cells and the terrain ray-march; the nearer hit wins. `doors`: aim at airlock doors (not while
+  *  building, where a module is a cell like any other). */
+ function strike(g: GameState, max: number, doors = true) {
   const v = roomsView(g.world.base), hit = rayCells(camera.position, direction, max, (i, k, j) => { const key = cellKey(i, k, j); return v.glass.has(key) || v.doorAt.has(key); });
   let ground: THREE.Vector3 | null = null; const far = hit ? hit.distance : max;
   for (let d = .3; d <= far; d += .1) { const q = ray.ray.at(d, new THREE.Vector3()); if (q.y <= heightAt(q.x, q.z)) { ground = q; break; } }
-  struck = hit && !ground ? { key: cellKey(hit.i, hit.k, hit.j), door: v.doorAt.get(cellKey(hit.i, hit.k, hit.j))?.id ?? null, distance: hit.distance, normal: hit.normal } : null;
+  struck = hit && !ground ? { key: cellKey(hit.i, hit.k, hit.j), door: v.doorAt.get(cellKey(hit.i, hit.k, hit.j))?.id ?? null, face: null, distance: hit.distance, normal: hit.normal } : null;
+  // Airlock doors (D36): the module the eye is in (the ray starts in its chamber) and the one the ray struck; the leaf plane
+  // met first is the door aimed at. A module hit through its side still offers its nearer door.
+  if (!doors) return ground;
+  const inside = chamberAt(g, camera.position.x, camera.position.y, camera.position.z), struckDoor = struck?.door ? v.doorAt.get(struck.key) : undefined;
+  let best: { d: Door; face: DoorFace; distance: number } | null = null;
+  for (const d of new Set([inside, struckDoor])) { if (!d) continue; const f = faceHit(d, camera.position, direction, max); if (f && (!best || f.distance < best.distance)) best = { d, ...f }; }
+  if (best && (!struck || struck.door === best.d.id || best.distance <= struck.distance) && !(ground && ground.distanceTo(camera.position) < best.distance)) struck = { key: doorKeys(best.d)[0], door: best.d.id, face: best.face, distance: best.distance, normal: [0, 0, 0] };
   return ground;
  }
  function aimCell(g: GameState, id: string) {
-  const ground = strike(g, GLASS_AIM), v = roomsView(g.world.base);
+  const ground = strike(g, GLASS_AIM, false), v = roomsView(g.world.base);
   cell = null; support = -1;
   // Facing the struck face (side faces), else facing the viewer; Q adds quarter turns.
   const face = struck && struck.normal[1] === 0 ? rotOf(struck.normal[0], struck.normal[2]) : rotOf(-direction.x, -direction.z); cellRot = (face + rot) % 4;
   if (struck) {
    const n = struck.normal; support = struck.key;
-   // An airlock aimed at a wall block replaces it (and the one above or below): the lower of the two stays on the floor.
-   if (id === 'airlock' && !struck.door && n[1] === 0) cell = v.glass.has(struck.key - 1) ? struck.key - 1 : struck.key;
-   else { const c = cellOf(struck.key); cell = cellKey(c.i + n[0], c.k + n[1], c.j + n[2]); }
+   // An airlock aimed at a wall block replaces it with the block above or below (the lower stays on the floor) and the
+   // pair beside them on the side of the wall the reticle is nearer to (D36: 2 × 2); the other side when that one is refused.
+   if (id === 'airlock' && !struck.door && n[1] === 0) {
+    const low = v.glass.has(struck.key - 1) ? struck.key - 1 : struck.key, c = cellOf(low), a = doorAlong(cellRot), hit = ray.ray.at(struck.distance, new THREE.Vector3()), frac = a.x ? hit.x - c.i : hit.z - c.j;
+    const before = cellKey(c.i - a.x, c.k, c.j - a.z), options = frac < .5 ? [before, low] : [low, before];
+    cell = options.find(k => !doorProblem(g, k, cellRot)) ?? options[0];
+   }
+   else {
+    // S5 (D35): with the levels 0.5 m up the second row of a wall tops out at 2.5 m, above the eyes on the pad (2.1 m), so
+    // its top face cannot be seen from the ground. Aiming up at the top 25 cm of a side face whose top is above the eyes
+    // stacks the block on it (the ghost shows where); everywhere else a side face places the block in front of it.
+    const c = cellOf(struck.key), top = cellY(c.k + 1), up = id === 'window' && n[1] === 0 && direction.y > 0 && camera.position.y < top && camera.position.y + direction.y * struck.distance > top - STACK_BAND;
+    cell = up ? cellKey(c.i, c.k + 1, c.j) : cellKey(c.i + n[0], c.k + n[1], c.j + n[2]);
+   }
   } else if (ground) {
    const at = groundCell(v, Math.floor(ground.x), Math.floor(ground.z)); cell = at.cell; support = at.support;
   }
@@ -103,6 +125,7 @@ export function createWorldInteraction(scene: THREE.Scene, camera: THREE.Camera)
    box.set(lo.set(b.minX, b.minY, b.minZ), hi.set(b.maxX, b.maxY, b.maxZ));
    const hit = ray.ray.intersectBox(box, hitPoint); if (hit && hit.distanceTo(camera.position) < Math.min(best, OPEN_REACH)) { best = hit.distanceTo(camera.position); target = b.id; }
   }
+  targetAt = target ? best : Infinity;
   if (!target) {
    const inside = p.x > 37.5 && p.x < 42.5 && p.z > 37 && p.z < 43.1;
    const hit = ray.ray.intersectBox(CAPSULE_BOX(heightAt(40, 40)), hitPoint);
@@ -132,9 +155,11 @@ export function createWorldInteraction(scene: THREE.Scene, camera: THREE.Camera)
   const linking = id === 'cable' || id === 'gas_pipe';
   aim(g, linking ? LINK_REACH : OPEN_REACH);
   if (isCell(id)) { aimCell(g, id); return; }
-  // Blocks under the reticle: removal (R) from 6 m, the room window from 4.5 m; a station seen through the glass wins, and so does a nearer deposit.
+  // Blocks under the reticle: removal («Забрать», key R) from 6 m, the room window from 4.5 m; a station seen through the glass wins, and so does a nearer deposit.
   strike(g, GLASS_AIM); if (struck && struck.distance >= nearer) struck = null;
   if (!target && !linking && struck && struck.distance <= ROOM_REACH) target = struck.door ?? 'glass:' + struck.key;
+  // An airlock door is solid: it wins over a station behind it (glass does not, D31 aims through it).
+  else if (!linking && struck?.face && struck.distance <= ROOM_REACH && struck.distance < targetAt && target !== 'capsule') target = struck.door;
   if (isBody(id)) {
    let hit: THREE.Vector3 | undefined;
    for (let d = .5; d <= 12; d += .1) { const q = ray.ray.at(d, new THREE.Vector3()); if (q.y <= heightAt(q.x, q.z) + .12) { hit = q; break; } }
@@ -191,7 +216,7 @@ export function createWorldInteraction(scene: THREE.Scene, camera: THREE.Camera)
   get target() { return target; }, get building() { return isBody(selection); }, get linking() { return selection === 'cable' || selection === 'gas_pipe'; },
   get source() { return source; },
   get linkOk() { return !source || link.valid; },
-  get hint() { return !source ? 'Наведите на первую станцию · F' : link.reason ? link.reason : `${link.distance.toFixed(1)} м · ${link.cost} × ${ITEMS[selection]?.name ?? ''} · F`; },
+  get hint() { return !source ? 'Наведите на первую станцию и нажмите кнопку действия' : link.reason ? link.reason : `${link.distance.toFixed(1)} м · ${link.cost} × ${ITEMS[selection]?.name ?? ''}`; },
   get sourceName() { return source ? '' : ''; },
   portName,
   get problem() { return problem; },

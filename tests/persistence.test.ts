@@ -305,7 +305,7 @@ test('S2: immediate death/respawn saves preserve lost cargo and personal reserve
  assert.equal(reloaded.player.survival.emergencyMs, 83000);
  assert.equal(reloaded.world.capsuleMilliGU, 0); assert.equal(reloaded.player.bottles[0]!.milliGU, 0);
  assert.equal(reloaded.world.drops.length, 1);
- assert.equal(pickUp(reloaded, reloaded.world.drops[0].id), 5);
+ assert.equal(pickUp(reloaded, reloaded.world.drops[0].id), 6, 'the cargo holds the starting scanner too (S5)');
  assert.equal(reloaded.world.drops.length, 0);
  store.close();
 });

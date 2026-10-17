@@ -75,7 +75,5 @@ export function pickUp(state: GameState, dropId: string): number {
  return moved;
 }
 export const itemName = (id: string) => ITEMS[id]?.name ?? id;
-/** Aim label under the reticle (S4): what is left in the deposit and how many the player carries. */
-export const stockText = (left: number, amount: number, carried: number) => `Запас ${left}/${amount} · в рюкзаке ${carried}`;
 /** Durability warning for a tool at or below 10% of its maximum (a broken tool has its own message); '' otherwise. */
 export const wearText = (durability: number | undefined, max: number | undefined) => durability !== undefined && !!max && durability > 0 && durability <= max * .1 ? `Прочность ${durability}/${max}` : '';

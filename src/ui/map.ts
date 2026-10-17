@@ -1,9 +1,9 @@
 import { LANDMARKS, MIN, MAX, SIZE } from '../world';
-import { NODES, GRASS_PATCHES, bodyHalf, depositById, depositLeft, isVeinId, veinNode } from '../game/resources';
+import { GRASS_PATCHES, allDeposits, bodyHalf, depositById, depositLeft, isVeinId } from '../game/resources';
 import { stationStatus, type Tone } from '../game/stationStatus';
 import { endpoint } from '../game/production';
 import { stationName, stationRadius, nodeRadius, clampWaypoint, doorTarget, type Waypoint } from '../game/navigation';
-import { allRooms, cellKey, cellOf, doorRooms, habitableQ, habitableRoom, roomsView, type RoomInfo } from '../game/rooms';
+import { allRooms, cellKey, cellOf, doorAlong, doorRooms, habitableQ, habitableRoom, roomsView, widthOf, type RoomInfo } from '../game/rooms';
 import { reducedMotion } from '../motion';
 import { itemName } from '../game/mining';
 import type { GameState } from '../game/state';
@@ -45,10 +45,18 @@ const groupTone = (rooms: (RoomInfo | null | undefined)[]): Tone => { const r = 
 export function glassPrints(g: GameState): MapFootprint[] {
  const shapes = glassShapes(g); if (!shapes.length) return [];
  const info = allRooms(g), out: MapFootprint[] = shapes.map(s => ({ x: s.x, z: s.z, w: s.w, d: s.d, rot: 0, tone: groupTone(s.rooms.map(i => info[i])) }));
- for (const d of g.world.base.doors) { const r = doorRooms(g, d), t = doorTarget(d); out.push({ id: d.id, x: t.x, z: t.z, w: 1, d: 1, rot: 0, tone: roomTone([r.front, r.back]), label: t.name }); }
+ for (const d of g.world.base.doors) { const r = doorRooms(g, d), t = doorTarget(d), along = doorAlong(d.rot).x === 1; out.push({ id: d.id, x: t.x, z: t.z, w: along ? widthOf(d) : 1, d: along ? 1 : widthOf(d), rot: 0, tone: roomTone([r.front, r.back]), label: t.name }); }
  return out;
 }
 mapFootprintSources.push(glassPrints);
+/** S5: the glass columns themselves (one 1 m square per occupied column), drawn when zoomed in so single blocks show. */
+const COLUMNS = new WeakMap<object, { i: number; j: number }[]>();
+export function glassColumns(g: GameState) {
+ const v = roomsView(g.world.base), hit = COLUMNS.get(v); if (hit) return hit;
+ const seen = new Set<string>(), out: { i: number; j: number }[] = [];
+ for (const key of [...v.glass, ...v.doorAt.keys()]) { const c = cellOf(key), k = c.i + ',' + c.j; if (!seen.has(k)) { seen.add(k); out.push({ i: c.i, j: c.j }); } }
+ COLUMNS.set(v, out); return out;
+}
 type Layer = 'places' | 'resources' | 'stations';
 type Card = { kind: 'landmark' | 'node' | 'station' | 'drop' | 'point'; id: string; ids?: string[] };
 type Deps = {
@@ -82,7 +90,7 @@ export function createMap(d: Deps) {
  const host = el('map-view'), canvas = el<HTMLCanvasElement>('map'), ctx = canvas.getContext('2d')!;
  const layers = loadLayers();
  let w = 0, h = 0, dpr = 1, view: View = { cx: 40, cz: 40, zoom: 2 }, chosenZoom: number | null = null, card: Card | null = null, dirty = true, lastDraw = -Infinity, open = false;
- let anim: { from: View; to: View; t0: number } | null = null, hits: (Hit & { card: Card })[] = [], labelCount = 0, markerCount = 0, draws = 0, veinMarks = 0, glassMarks: Tone[] = [];
+ let anim: { from: View; to: View; t0: number } | null = null, hits: (Hit & { card: Card })[] = [], labelCount = 0, markerCount = 0, draws = 0, veinMarks = 0, glassMarks: Tone[] = [], columnMarks = 0, playerAt = { x: 0, y: 0 };
  // ---------- Relief raster: built in slices at idle, drawn under a transform ----------
  const N = rasterSize(CELL), raster = document.createElement('canvas'); raster.width = raster.height = N;
  const rctx = raster.getContext('2d')!, image = rctx.createImageData(N, N);
@@ -108,7 +116,8 @@ export function createMap(d: Deps) {
   dirty = true;
  };
  const centre = () => { const p = d.player(); setView({ cx: p.x, cz: p.z, zoom: view.zoom }, true); };
- const zoomBy = (f: number, sx = w / 2, sy = h / 2) => setView(zoomAt(view, w, h, sx, sy, f));
+ // A zoom during a glide («Ко мне», a card) applies to where the glide goes, so it does not strand the view half way.
+ const zoomBy = (f: number, sx = w / 2, sy = h / 2) => setView(zoomAt(anim?.to ?? view, w, h, sx, sy, f));
  // ---------- Cards and the drawer list ----------
  const drawer = el('map-drawer'), card$ = el('map-card'), list$ = el('landmark-list'), go = el<HTMLButtonElement>('map-go'), remove = el<HTMLButtonElement>('map-remove');
  function cardTarget(c: Card): { name: string; x: number; z: number; radius: number } | null {
@@ -136,14 +145,14 @@ export function createMap(d: Deps) {
    data.push(['Состояние', d.visited.has(l.id) ? 'Просканировано' : d.discovered.has(l.id) ? 'Найдено' : 'Не найдено']);
   } else if (card.kind === 'node') {
    const ids = card.ids ?? [card.id], n = depositById(g, card.id)!, left = ids.reduce((s, id) => s + depositLeft(g, id), 0), amount = ids.reduce((s, id) => s + (depositById(g, id)?.amount ?? 0), 0);
-   kind = (isVeinId(n.id) ? 'Новая жила · ' : 'Залежь · ') + MAT[n.material].name.toLowerCase(); text = left > 0 ? `Осталось ${left} / ${amount}${ids.length > 1 ? ` · ${ids.length} выхода рядом` : ''}` : n.regrowSeconds ? 'Всё собрано — растения отрастают в активное время.' : 'Запас исчерпан.';
+   kind = 'Залежь · ' + MAT[n.material].name.toLowerCase(); text = left > 0 ? `Осталось ${left} / ${amount}${ids.length > 1 ? ` · ${ids.length} выхода рядом` : ''}` : n.regrowSeconds ? 'Всё собрано — растения отрастают в активное время.' : 'Запас исчерпан.';
    if (n.regrowSeconds) data.push(['Отрастает', `1 растение за ${n.regrowSeconds} с`]);
    data.push(['Добыча', itemName(n.itemId)]); canGo = left > 0;
   } else if (card.kind === 'station' && card.id.startsWith('door-')) {
    // An airlock stands for its glass room: the room behind it (or in front), its volume and air.
    const door = g.world.base.doors.find(v => v.id === card!.id)!, sides = doorRooms(g, door), r = sides.back ?? sides.front;
    kind = 'Помещение · ' + (r ? habitableRoom(r) ? 'пригодно для дыхания' : 'мало воздуха' : 'не замкнуто');
-   text = r ? `Стеклянное помещение со шлюзом. Пройти: наведите на шлюз и нажмите F.` : 'Шлюз стоит в стене, но помещение за ним не замкнуто.';
+   text = r ? `Стеклянное помещение со шлюзом. Двери открываются по очереди: наведите на дверь и нажмите кнопку действия, затем пройдите в камеру.` : 'Шлюз стоит в стене, но помещение за ним не замкнуто.';
    if (r) data.push(['Объём', `${r.volume} м³`], ['Воздух', `${Math.floor(r.zone.q / 1000)} / ${habitableQ(r.volume) / 1000} GU`]);
   } else if (card.kind === 'station') {
    const b = g.world.base.buildings.find(v => v.id === card!.id)!, st = stationStatus(g, b); kind = 'Станция · ' + TONE_NAME[st.tone]; text = `${st.title}. ${st.hint}`;
@@ -185,16 +194,22 @@ export function createMap(d: Deps) {
  function diamond(x: number, y: number, r: number, fill: string | null, stroke: string) { ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y); ctx.closePath(); if (fill) { ctx.fillStyle = fill; ctx.fill(); } ctx.strokeStyle = stroke; ctx.lineWidth = 1.5; ctx.stroke(); }
  function clusters(g: GameState): DepositCluster[] {
   // A worked-out finite deposit is gone from the world and never refills (a new vein replaces it, D33): it leaves the map too;
-  // grass stays, it grows back.
-  return clusterDeposits(NODES.map(n => ({ id: n.id, material: n.material, x: n.x, z: n.z, left: g.world.nodes[n.id] ?? 0, amount: n.amount })).filter(n => n.material === 'grass' || n.left > 0), Math.max(3, 18 / view.zoom));
+  // grass stays, it grows back. S5 (D38): a new vein is drawn like any deposit — no halo, no «Новая жила» label.
+  return clusterDeposits(allDeposits(g).map(n => ({ id: n.id, material: n.material, x: n.x, z: n.z, left: depositLeft(g, n.id), amount: n.amount })).filter(n => n.material === 'grass' || n.left > 0), Math.max(3, 18 / view.zoom));
  }
  function draw(now: number) {
   const g = d.game(); if (!g || !w) return;
   if (anim) { const k = Math.min(1, (now - anim.t0) / 300), e = k * k * (3 - 2 * k); view = { cx: anim.from.cx + (anim.to.cx - anim.from.cx) * e, cz: anim.from.cz + (anim.to.cz - anim.from.cz) * e, zoom: anim.from.zoom + (anim.to.zoom - anim.from.zoom) * e }; if (k >= 1) anim = null; }
-  draws++; dirty = false; lastDraw = now; hits = []; veinMarks = 0; glassMarks = []; const labels: Lbl[] = [];
-  const S = (x: number, z: number) => toScreen(view, w, h, x, z), z = view.zoom, p = d.player(), pp = S(p.x, p.z);
+  draws++; dirty = false; lastDraw = now; hits = []; veinMarks = 0; glassMarks = []; columnMarks = 0; const labels: Lbl[] = [];
+  const S = (x: number, z: number) => toScreen(view, w, h, x, z), z = view.zoom, p = d.player(), pp = S(p.x, p.z); playerAt = pp;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = '#061518'; ctx.fillRect(0, 0, w, h);
-  const tl = S(MAX, MAX); ctx.imageSmoothingEnabled = true; ctx.drawImage(raster, tl.x, tl.y, SIZE * z, SIZE * z);
+  const tl = S(MAX, MAX); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(raster, tl.x, tl.y, SIZE * z, SIZE * z);
+  // S5: zoomed in, a faint 1 m grid (stronger every 4 m) over the softened 1 m relief gives blocks and bodies a scale.
+  if (z >= 8) { const a = toWorld(view, w, h, w, h), b = toWorld(view, w, h, 0, 0), k = Math.min(1, (z - 8) / 6);
+   for (const [step, alpha] of [[1, .07], [4, .14]] as const) { ctx.strokeStyle = `rgba(127,230,218,${alpha * k})`; ctx.beginPath();
+    for (let x = Math.ceil(Math.max(MIN, a.x) / step) * step; x <= Math.min(MAX, b.x); x += step) { const s = S(x, MIN), e = S(x, MAX); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); }
+    for (let q = Math.ceil(Math.max(MIN, a.z) / step) * step; q <= Math.min(MAX, b.z); q += step) { const s = S(MIN, q), e = S(MAX, q); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); }
+    ctx.stroke(); } }
   ctx.strokeStyle = 'rgba(127,230,218,.12)'; ctx.lineWidth = 1; ctx.beginPath();
   for (let v = MIN; v <= MAX; v += 80) { const a = S(v, MIN), b = S(v, MAX), c = S(MIN, v), e = S(MAX, v); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.moveTo(c.x, c.y); ctx.lineTo(e.x, e.y); }
   ctx.stroke();
@@ -206,6 +221,7 @@ export function createMap(d: Deps) {
    for (const l of base.links) { const a = endpoint(g, l.from), b = endpoint(g, l.to); if (!a || !b) continue; const s = S(a.x, a.z), e = S(b.x, b.z); ctx.strokeStyle = l.kind === 'cable' ? 'rgba(255,196,110,.75)' : 'rgba(127,230,218,.8)'; ctx.lineWidth = 1.5; ctx.setLineDash(l.kind === 'cable' ? [] : [4, 3]); ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke(); }
    ctx.setLineDash([]);
    const prints: MapFootprint[] = [...mapFootprintSources.flatMap(f => f(g))]; glassMarks = prints.map(f => f.tone);
+   if (z >= 5) { ctx.fillStyle = 'rgba(166,226,236,.30)'; ctx.strokeStyle = 'rgba(214,246,250,.55)'; ctx.lineWidth = 1; for (const c of glassColumns(g)) { const s = S(c.i + 1, c.j + 1); if (s.x + z <= 0 || s.y + z <= 0 || s.x >= w || s.y >= h) continue; columnMarks++; ctx.fillRect(s.x, s.y, z, z); ctx.strokeRect(s.x + .5, s.y + .5, z - 1, z - 1); } }
    for (const b of base.buildings) { const half = bodyHalf(b.kind); prints.push({ id: b.id, x: b.x, z: b.z, w: half * 2, d: half * 2, rot: b.rot, tone: stationStatus(g, b).tone, label: stationName(b) }); }
    for (const f of prints) {
     const s = S(f.x, f.z), fw = Math.max(10, f.w * z), fd = Math.max(10, f.d * z), c = TONE[f.tone]; markers++;
@@ -218,23 +234,13 @@ export function createMap(d: Deps) {
    for (const gp of GRASS_PATCHES) { const s = S(gp.x, gp.z); ctx.beginPath(); ctx.ellipse(s.x, s.y, Math.max(3, gp.rx * z), Math.max(3, gp.rz * z), 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
    for (const c of clusters(g)) {
-    const s = S(c.x, c.z), m = MAT[c.material], empty = c.left <= 0, r = 8; markers++;
+    const s = S(c.x, c.z), m = MAT[c.material], empty = c.left <= 0, r = 8; markers++; veinMarks += c.ids.filter(isVeinId).length;
     if (s.x < -20 || s.y < -20 || s.x > w + 20 || s.y > h + 20) continue;
     ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI * 2); ctx.fillStyle = empty ? 'rgba(6,21,24,.85)' : m.color; ctx.fill(); ctx.strokeStyle = empty ? 'rgba(170,185,182,.8)' : 'rgba(6,21,24,.9)'; ctx.lineWidth = 1.5; ctx.stroke();
     ctx.font = '700 9px system-ui,sans-serif'; ctx.fillStyle = empty ? 'rgba(170,185,182,.9)' : '#0a1a1c'; ctx.fillText(m.glyph, s.x, s.y + .5);
     const lead = c.ids.slice().sort((a, b) => (g.world.nodes[b] ?? 0) - (g.world.nodes[a] ?? 0))[0];
     hits.push({ id: lead, x: s.x, y: s.y, priority: 20, card: { kind: 'node', id: lead, ids: c.ids } });
     if (z >= 2.2) labels.push({ id: lead, text: empty ? 'пусто' : String(c.left), color: empty ? '#9aa9a6' : m.color, priority: 20, cx: s.x, y: s.y + r + 2, small: true });
-   }
-   // S4 (D33): new veins stand apart from the clusters, with a halo and the «Новая жила» label.
-   for (const v of g.world.veins) {
-    const n = veinNode(v), s = S(n.x, n.z), m = MAT[v.material], r = 8; markers++; veinMarks++;
-    if (s.x < -20 || s.y < -20 || s.x > w + 20 || s.y > h + 20) continue;
-    ctx.beginPath(); ctx.arc(s.x, s.y, r + 4, 0, Math.PI * 2); ctx.strokeStyle = m.color; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]); ctx.stroke(); ctx.setLineDash([]);
-    ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI * 2); ctx.fillStyle = m.color; ctx.fill(); ctx.strokeStyle = 'rgba(6,21,24,.9)'; ctx.stroke();
-    ctx.font = '700 9px system-ui,sans-serif'; ctx.fillStyle = '#0a1a1c'; ctx.fillText(m.glyph, s.x, s.y + .5);
-    hits.push({ id: v.id, x: s.x, y: s.y, priority: 30, card: { kind: 'node', id: v.id } });
-    labels.push({ id: v.id, text: 'Новая жила', sub: z >= 2.2 ? String(v.amount) : undefined, color: m.color, priority: 30, cx: s.x, y: s.y + r + 6 });
    }
    ctx.textBaseline = 'alphabetic';
   }
@@ -353,7 +359,7 @@ export function createMap(d: Deps) {
    return true;
   },
   showCard: (c: Card | null) => showCard(c),
-  debug: () => ({ zoom: (anim?.to ?? view).zoom, center: { x: (anim?.to ?? view).cx, z: (anim?.to ?? view).cz }, layers: { ...layers }, card: card ? { kind: card.kind, id: card.id } : null, raster: rows / N, draws, markers: markerCount, veins: veinMarks, structures: glassMarks, labels: labelCount, size: { w, h, dpr, backing: canvas.width } }),
+  debug: () => ({ zoom: (anim?.to ?? view).zoom, center: { x: (anim?.to ?? view).cx, z: (anim?.to ?? view).cz }, layers: { ...layers }, card: card ? { kind: card.kind, id: card.id } : null, raster: rows / N, draws, markers: markerCount, veins: veinMarks, structures: glassMarks, columns: columnMarks, player: { ...playerAt }, gliding: !!anim, labels: labelCount, size: { w, h, dpr, backing: canvas.width } }),
  };
  function updateVitals() {
   const v = d.vitals(), o2 = el('map-o2'), hp = el('map-hp');

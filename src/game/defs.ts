@@ -36,15 +36,16 @@ export const BUILDABLE = ['workbench', 'kiln', 'biogenerator', 'electrolyzer', '
 export type BuildingKind = typeof BUILDABLE[number];
 const SPECIAL: Record<string, string> = {
  wrench: 'Многоразовый ключ: выберите в быстром доступе и взаимодействуйте с верстаком для улучшения.',
+ scanner: 'Выберите в быстром доступе и наведите на место, залежь, станцию или помещение — кнопка действия покажет данные. Не расходуется.',
  cable: 'Выберите «Соединить» и отметьте два порта станций. Дальность одного участка — до 4 м.',
  gas_pipe: 'Выберите «Соединить» и отметьте два порта станций. Дальность одного участка — до 4 м.',
  window: 'Прозрачный герметичный блок 1 м. Стены и крыша помещений.',
- airlock: 'Дверь 1×2 клетки: встраивается в стену помещения. Ручной цикл 6 с расходует 4 GU воздуха.',
- dome: 'Купол прежней версии. Его больше не ставят: разберите в кармане (B) на 64 стеклоблока и шлюз.',
+ airlock: 'Модуль 2×2 клетки с двумя раздвижными дверями и камерой: встраивается в ровную стену помещения. Пустая камера наполняется из помещения (до 4 GU), а перед выходом наружу этот заряд сбрасывается.',
+ dome: 'Купол прежней версии. Его больше не ставят: разберите в кармане на 64 стеклоблока и шлюз.',
 };
-for (const id of ['water','wrench','grass', 'fiber', 'sand', 'iron', 'copper', 'glass', 'wire', 'circuit', ...BUILDABLE, 'window', 'airlock', 'dome', 'cable', 'gas_pipe']) {
+for (const id of ['water','wrench','scanner','grass', 'fiber', 'sand', 'iron', 'copper', 'glass', 'wire', 'circuit', ...BUILDABLE, 'window', 'airlock', 'dome', 'cable', 'gas_pipe']) {
  const d = catalog.items[id as keyof typeof catalog.items];
- ITEMS[id] = def({ id, name: d.name, short: d.name, stack: d.stack, kind: d.kind as ItemDef['kind'], category: id === 'wrench' ? 'tool' : d.kind === 'placeable' && id !== 'dome' ? 'building' : 'resource', description: SPECIAL[id] ?? (d.kind === 'placeable' ? 'Выберите в быстром доступе и разместите перед собой. Новый корпус не содержит топлива, воды или кислорода.' : 'Материал для ранних рецептов производства.') });
+ ITEMS[id] = def({ id, name: d.name, short: d.name, stack: d.stack, kind: d.kind as ItemDef['kind'], category: id === 'wrench' || id === 'scanner' ? 'tool' : d.kind === 'placeable' && id !== 'dome' ? 'building' : 'resource', description: SPECIAL[id] ?? (d.kind === 'placeable' ? 'Выберите в быстром доступе и разместите перед собой. Новый корпус не содержит топлива, воды или кислорода.' : 'Материал для ранних рецептов производства.') });
 }
 /** Basic suit set worn at start (SYSTEMS §1). */
 export const BASIC_SUIT: Record<SuitPart, string> = { helmet: 'suit_helmet', chest: 'suit_chest', legs: 'suit_legs', boots: 'suit_boots' };

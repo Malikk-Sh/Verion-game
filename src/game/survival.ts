@@ -1,5 +1,6 @@
 import { CAPSULE_CAPACITY } from './production';
-import { breathingRoom, capacityOf, cyclingRoom } from './rooms';
+import { breathingRoom, capacityOf } from './rooms';
+import { breathingChamber, chamberRoom, shelteredAir, CHAMBER_Q } from './airlock';
 import { TANKS } from './defs';
 import { emptyInventory, removeItems, type Slot } from './inventory';
 import { oxygenGU, oxygenCapacityGU, wornParts } from './backpack';
@@ -14,9 +15,9 @@ const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(ma
 const elapsedAfter = (before: number, elapsed: number, grace: number) => Math.max(0, before + elapsed - grace) - Math.max(0, before - grace);
 
 /** Advances only accepted active time. Oxygen is conserved even across source exhaustion. */
-/* The room the player is entering through an airlock (rooms.ts cyclingRoom). Entry is paid with the full 4 GU of room
- * air when the cycle starts (beginPassage), and that charge carries the breath for the 6 s: a paid passage is never a
- * suffocation trap. Leaving needs no cover: the player is still inside the room and breathes it (or their tanks). */
+/* S5 (D36): in an airlock chamber the player breathes the habitable room an open door leads to (airlock.ts chamberRoom),
+ * else a chamber charged with the full 4 GU: that charge, paid by the room when the chamber was filled, carries the breath
+ * (nothing is drawn), so standing in a charged chamber is never a suffocation trap. Otherwise the tanks, as outside. */
 export function survivalTick(state: GameState, dt: number, insideCapsule: boolean, running = false): SurvivalEvent {
   if (state.player.vitals.health <= 0) return 'death';
   const ms = Math.max(0, Math.round(dt * 1000));
@@ -34,7 +35,7 @@ export function survivalTick(state: GameState, dt: number, insideCapsule: boolea
   s.starvationMs = v.satiety === 0 ? Math.min(TIMER_MAX, s.starvationMs + starving) : 0;
 
   // Personal emergency air replaces consumption; it cannot refill any transferable source.
-  const lock = !!cyclingRoom(state);
+  const room = breathingRoom(state) ?? chamberRoom(state), lock = !room && !!breathingChamber(state);
   const emergency = lock ? 0 : Math.min(ms, s.emergencyMs);
   s.emergencyMs -= emergency;
   let missing = lock ? 0 : ms - emergency;
@@ -42,7 +43,6 @@ export function survivalTick(state: GameState, dt: number, insideCapsule: boolea
     const used = Math.min(state.world.capsuleMilliGU, missing);
     state.world.capsuleMilliGU -= used; missing -= used;
   }
-  const room = breathingRoom(state);
   if (room && missing > 0) { const used = Math.min(room.zone.q, missing); room.zone.q -= used; missing -= used; }
   if (wornParts(state) === 4) {
     for (const b of state.player.bottles) if (b && missing > 0) {
@@ -117,8 +117,9 @@ export function respawnAtCapsule(state: GameState, y: number) {
 export function accessibleOxygen(state: GameState, insideCapsule: boolean) {
   const emergency = state.player.survival.emergencyMs;
   if (emergency > 0) return { amount: emergency / 1000, capacity: EMERGENCY_MS / 1000, unit: 'с', emergency: true };
-  const room = breathingRoom(state) ?? cyclingRoom(state);
+  const room = breathingRoom(state) ?? chamberRoom(state), chamber = room ? null : breathingChamber(state);
   if (room) return { amount: room.zone.q / 1000, capacity: capacityOf(room.volume) / 1000, unit: 'GU', emergency: false };
+  if (chamber) return { amount: chamber.pressure / 1000, capacity: CHAMBER_Q / 1000, unit: 'GU', emergency: false };
   const sealed = wornParts(state) === 4;
   return {
     amount: (sealed ? oxygenGU(state) : 0) + (insideCapsule ? state.world.capsuleMilliGU / 1000 : 0),
@@ -128,13 +129,13 @@ export function accessibleOxygen(state: GameState, insideCapsule: boolean) {
 }
 export const tankCapacity = (slot: NonNullable<Slot>) => TANKS[slot.itemId].capacity / 1000;
 /** True when taking worn tank `b` off — `incoming` takes its place — would leave nothing to breathe right now (S4): the
- * suit is sealed, no emergency air, capsule gas, breathable room or paid airlock cycle covers the player, the other worn
+ * suit is sealed, no emergency air, capsule gas, breathable room or charged airlock chamber covers the player, the other worn
  * tank is empty, the incoming tank brings no gas and the removed one still had some. */
 /** Warning for a tankGap move: the real grace left (the suffocation timer resets only after 2 s of continuous breathing). */
 export function lastAirText(state: GameState) { const s = state.player.survival, left = s.recoveryMs >= 2000 ? 5000 : Math.max(0, 5000 - s.suffocationMs); return `Это последний воздух: без баллона удушье ${left >= 1000 ? `через ${Math.floor(left / 1000)} с` : 'сразу'}. Повторите, чтобы снять.`; }
 export function tankGap(state: GameState, insideCapsule: boolean, b: 0 | 1, incoming: Slot = null): boolean {
   if (wornParts(state) < 4 || state.player.survival.emergencyMs > 0) return false;
-  if ((insideCapsule && state.world.capsuleMilliGU > 0) || breathingRoom(state) || cyclingRoom(state)) return false;
+  if ((insideCapsule && state.world.capsuleMilliGU > 0) || shelteredAir(state)) return false;
   if ((state.player.bottles[b ? 0 : 1]?.milliGU ?? 0) > 0 || (incoming?.milliGU ?? 0) > 0) return false;
   return (state.player.bottles[b]?.milliGU ?? 0) > 0;
 }

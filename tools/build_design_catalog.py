@@ -174,6 +174,7 @@ bottle_3|Баллон III
 canister|Канистра жидкости
 gas_canister|Канистра газа
 wrench|Гаечный ключ
+scanner|Сканер
 tool_stone|Каменный мультитул
 pick_iron|Железная кирка
 pick_steel|Стальная кирка
@@ -190,7 +191,7 @@ turret|Защитная турель
 ammo|Боеприпасы турели
 beacon|Навигационный маяк'''
 for line in objects.splitlines():
- i,n=line.split('|'); item(i,n,'equipment' if i.startswith(('suit','bottle','underwear','pick','drill','sword','jetpack','tool_')) or i in ['wrench','grapple','claws','canister','gas_canister','rocket_1','rocket_2','rocket_3','rover','trailer'] else 'placeable',1 if i.startswith(('suit','bottle','underwear','pick','drill','sword','jetpack','tool_','rocket')) or i in ['wrench','grapple','claws','canister','gas_canister','rover','trailer'] else 16)
+ i,n=line.split('|'); item(i,n,'equipment' if i.startswith(('suit','bottle','underwear','pick','drill','sword','jetpack','tool_')) or i in ['wrench','scanner','grapple','claws','canister','gas_canister','rocket_1','rocket_2','rocket_3','rover','trailer'] else 'placeable',1 if i.startswith(('suit','bottle','underwear','pick','drill','sword','jetpack','tool_','rocket')) or i in ['wrench','scanner','grapple','claws','canister','gas_canister','rover','trailer'] else 16)
 
 def R(id,station,inp,out,t=5,power=0,tech='start',scope='core',note=''):
  recipes.append(dict(id=id,station=station,inputs=inp,outputs=out,seconds=t,EU_per_second=power,tech=tech,scope=scope,note=note))
@@ -251,7 +252,7 @@ C('solar_adv','fabricator',{'solar':1,'velite':4,'circuit_adv':1},tech='velite')
 C('battery_adv','fabricator',{'battery':1,'velite':4,'circuit_adv':1},tech='velite')
 C('room','workbench',{'iron':8,'glass':4},t=20)
 C('bulkhead','workbench',{'iron':2,'seal':1})
-C('airlock','workbench',{'iron':4,'glass':2,'fiber':4},note='S4: ручной шлюз помещения 1×2 клетки (цикл 6 с, 4 GU). Привод и уплотнитель — для будущего электрического шлюза.')
+C('airlock','workbench',{'iron':6,'glass':4,'fiber':4},t=10,note='S5 (D36): проходной шлюз-модуль 2×1×2 клетки с двумя раздвижными дверями и камерой; двери открывает игрок, камера наполняется из помещения (4 GU, 3 с) и сбрасывает давление наружу. Привод и уплотнитель — для будущего электрического шлюза.')
 C('wall','workbench',{'iron':1},count=4)
 C('floor','workbench',{'iron':1},count=4)
 C('window','workbench',{'glass':1,'iron':1},t=4,count=4,note='S4: прозрачный герметичный блок 1 м — стены и крыша помещений любой формы.')

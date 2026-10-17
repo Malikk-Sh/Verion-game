@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { strikeCount, impactAt, impactsBy, impactTick, strikePhase, swingPose, hitStopFraction, crackStage, kickEnvelope, STRIKE_S, REDUCED_SWING } from '../src/strikes.ts';
 import { HAPTICS, hapticPattern, createHaptics } from '../src/haptics.ts';
-import { mineTick, ticksFor, stockText, wearText, type Mining } from '../src/game/mining.ts';
+import { mineTick, ticksFor, wearText, type Mining } from '../src/game/mining.ts';
 import { depositScale } from '../src/game/resources.ts';
 import { HAND_MINING, MATERIALS } from '../src/game/defs.ts';
 import { newGame } from '../src/game/state.ts';
@@ -75,8 +75,7 @@ test('Haptic patterns are gated by the setting, support and a hidden page; failu
  const refused = createHaptics({ vibrate: () => false }, doc); assert.equal(refused.play('strike'), false); assert.equal(refused.played, 0);
 });
 
-test('Aim label shows stock and carried count; durability warning at 10% or less', () => {
- assert.equal(stockText(31, 32, 5), 'Запас 31/32 · в рюкзаке 5');
+test('Aim label durability warning at 10% or less (S5: the stock moved to the scanner readout)', () => {
  assert.equal(wearText(16, 160), 'Прочность 16/160'); assert.equal(wearText(1, 160), 'Прочность 1/160');
  assert.equal(wearText(17, 160), ''); assert.equal(wearText(0, 160), '', 'a broken tool has its own message'); assert.equal(wearText(undefined, 160), ''); assert.equal(wearText(5, undefined), '');
 });

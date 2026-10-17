@@ -6,7 +6,8 @@ import { MIN, MAX, SIZE } from '../world';
  * A view is the world point at the viewport centre and the scale in CSS px per metre.
  */
 export type View = { cx: number; cz: number; zoom: number };
-export const MAX_ZOOM = 6;
+/** S5: 24 CSS px per metre at most — single 1 m glass blocks and station bodies read clearly. */
+export const MAX_ZOOM = 24;
 /** Zoom that shows the whole 560 m square with a small margin. */
 export const fitZoom = (w: number, h: number) => Math.max(.05, Math.min(w, h) / (SIZE * 1.04));
 /** «Долина»: 160 m fill the viewport height (the opening view), never below the whole-area zoom. */

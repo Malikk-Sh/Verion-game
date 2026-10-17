@@ -33,7 +33,11 @@ try {
  assert.equal(await page.locator('vite-error-overlay').count(),0);await page.waitForTimeout(1500);assert.ok((await state()).drawCalls>0,'Gameplay must perform real WebGL draw calls');await page.screenshot({path:'artifacts/b4-welcome.png'});check('Development page loads, WebGL2 initializes, no error overlay');
  await page.click('#title-settings');assert.equal((await state()).dialog,'settings');assert.equal(await page.locator('#settings').isVisible(),true);await page.screenshot({path:'artifacts/b4-title-settings.png'});await page.click('#settings-back');assert.equal((await state()).dialog,'welcome');check('Settings open from the title screen and return to it');
  await page.click('#start');await page.waitForFunction(()=>window.__vireon.getState().running);assert.equal((await state()).version,'S3');
- await page.keyboard.press('KeyE');assert.equal((await state()).dialog,'info-panel');assert.ok((await state()).visited.includes('capsule'));await page.click('#close-info');check('Inspection opens a real landmark card and records visit');
+ // S5 (D37): no scan action without the scanner; the starting scanner on quick slot 3 scans the place with the action button.
+ assert.notEqual((await state()).action,'scan');await page.keyboard.press('KeyE');assert.equal((await state()).dialog,'','E does nothing without the scanner');assert.equal((await state()).visited.includes('capsule'),false);
+ await page.locator('#hotbar-slots .cell').nth(2).click();await page.waitForFunction(()=>window.__vireon.getState().hotbar===2&&window.__vireon.getState().action==='scan');assert.equal(await page.locator('#hotbar-name').textContent(),'Сканер');
+ await page.click('#action');let s0=await state();assert.equal(s0.dialog,'info-panel');assert.ok(s0.visited.includes('capsule'));assert.equal(await page.locator('#info-title').textContent(),'Посадочная капсула');assert.equal(await page.locator('#scan-sweep').isHidden(),false,'the scan sweep plays');
+ await page.screenshot({path:'artifacts/s5-scan-landmark.png'});await page.click('#close-info');await page.locator('#hotbar-slots .cell').nth(0).click();await page.waitForFunction(()=>window.__vireon.getState().hotbar===0);check('Scanner: the place is scanned only with the scanner selected (action button), with a sweep; the card records the visit');
  assert.equal((await state()).grassCount,244);check('Scene contains 244 tufts, versus 1218 in B1');
  const before=await state();await page.keyboard.down('KeyW');await page.waitForFunction(z=>window.__vireon.getState().position.z>z+5,before.position.z,{timeout:240000});await page.keyboard.up('KeyW');
  await page.screenshot({path:'artifacts/b4-day.png'});check('Keyboard movement exits capsule into valley');
@@ -63,6 +67,12 @@ try {
  const z0=m.zoom;await page.click('#map-zoom-in');assert.ok(near((await state()).map.zoom,z0*1.6,1e-6));await page.click('#map-zoom-out');assert.ok(near((await state()).map.zoom,z0,1e-6));
  await page.keyboard.press('ArrowLeft');m=(await state()).map;assert.ok(near(m.center.x,pos.x+60/z0,1e-6),'arrow keys pan');await page.click('#map-center');m=(await state()).map;assert.ok(near(m.center.x,pos.x)&&near(m.center.z,pos.z),'«Ко мне» recentres');
  const box=await page.locator('#map').boundingBox();await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.wheel(0,-400);assert.ok((await state()).map.zoom>z0*1.5,'the wheel zooms in');
+ // S5: «+» goes on to 24 px per metre (single glass blocks and station bodies), each click ×1.6 up to the cap, then stays.
+ {let zk=(await state()).map.zoom;while(zk<24){await page.click('#map-zoom-in');zk=Math.min(24,zk*1.6);assert.ok(near((await state()).map.zoom,zk,1e-6),'zoom step '+zk);}await page.click('#map-zoom-in');m=(await state()).map;assert.equal(m.zoom,24,'the maximum zoom is 24 px/m');
+  // «Ко мне» at 24 px/m glides back onto the player: once the glide ends, the player cone is drawn at the canvas centre.
+  await page.click('#map-center');await page.waitForFunction(()=>{const m=window.__vireon.getState().map;return !m.gliding&&m.draws>0;});const d0=(await state()).map.draws;await page.waitForFunction(k=>window.__vireon.getState().map.draws>k,d0);
+  m=(await state()).map;const me=(await state()).position;assert.equal(m.zoom,24);assert.ok(near(m.center.x,me.x)&&near(m.center.z,me.z),'«Ко мне» keeps the 24 px/m zoom');assert.ok(near(m.player.x,m.size.w/2,.5)&&near(m.player.y,m.size.h/2,.5),'the player cone is drawn at the centre: '+JSON.stringify(m.player));
+  await page.screenshot({path:'artifacts/s5-map-max.png'});}
  await page.click('#map-fit');m=(await state()).map;assert.ok(near(m.center.x,80)&&near(m.center.z,80)&&near(m.zoom,Math.min(m.size.w,m.size.h)/(560*1.04),1e-6),'«Весь участок» shows the whole square');
  const draws=async()=>(await state()).map.draws,nextDraw=async n=>page.waitForFunction(k=>window.__vireon.getState().map.draws>k,n);
  await nextDraw(await draws());const allMarkers=(await state()).map.markers;
