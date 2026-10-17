@@ -152,9 +152,11 @@ try{
   m=(await state()).map;assert.equal(m.card,null);q=at(door.x+1,door.z+.5);await page.mouse.click(q.x,q.y);
   assert.deepEqual((await state()).map.card,{kind:'station',id:door.id});assert.equal(await page.locator('#map-go').innerText(),'Ведём · закрыть');
   // S5: at the maximum 24 px/m every glass column of the room is a 1 m square, and the airlock still opens with one tap.
-  // A drag brings the airlock to the middle (a drag pans, never taps); each wheel notch zooms about it to an exact factor.
+  // A drag (at least 60 px, well past the 6 px tap slop, from the airlock's current place on the map) brings it towards
+  // the middle and pans, never taps; each wheel notch zooms about it to an exact factor. The drag is dispatched in one
+  // task: on a busy software renderer separate mouse steps can arrive after the 550 ms long press, which opens the card.
   {await page.click('#map-back');assert.equal((await state()).map.card,null);
-   q=at(door.x+.5,door.z+.5);await page.mouse.move(q.x,q.y);await page.mouse.down();await page.mouse.move(mb.x+mb.width/2,mb.y+mb.height/2,{steps:6});await page.mouse.up();assert.equal((await state()).map.card,null,'a drag pans, it does not open a card');
+   m=(await state()).map;q=at(door.x+.5,door.z+.5);const mid={x:mb.x+mb.width/2,y:mb.y+mb.height/2},far=Math.hypot(mid.x-q.x,mid.y-q.y)>=60,to=far?mid:{x:q.x+(q.x>mid.x?-80:80),y:q.y};await page.evaluate(([a,b])=>{const c=document.getElementById('map'),ev=(t,x,y)=>c.dispatchEvent(new PointerEvent(t,{pointerId:7,pointerType:'touch',isPrimary:true,bubbles:true,clientX:x,clientY:y}));ev('pointerdown',a.x,a.y);for(let i=1;i<=6;i++)ev('pointermove',a.x+(b.x-a.x)*i/6,a.y+(b.y-a.y)*i/6);ev('pointerup',b.x,b.y);},[q,to]);assert.equal((await state()).map.card,null,'a drag pans, it does not open a card');
    while((m=(await state()).map).zoom<24){const want=Math.min(24,m.zoom*Math.exp(.6));q=at(door.x+.5,door.z+.5);await page.mouse.move(q.x,q.y);await page.mouse.wheel(0,-400);assert.ok(Math.abs((await state()).map.zoom-want)<1e-6,'one wheel notch zooms to '+want);}
    await page.waitForFunction(k=>window.__vireon.getState().map.draws>k,(await state()).map.draws);m=(await state()).map;
    const cols=new Set([...(await snapshot()).world.base.glass.map(k=>Math.floor(k/128)),(door.x+256)*1024+door.z+256]);assert.equal(m.columns,cols.size,'every glass column of the room is drawn at 24 px/m');
