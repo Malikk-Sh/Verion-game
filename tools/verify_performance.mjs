@@ -65,13 +65,13 @@ try{
   const yaws=[0,Math.PI/2,Math.PI,-Math.PI/2],inside=async()=>{const out=[];for(const yaw of yaws){await page.evaluate(yaw=>window.__vireon.teleport(57.5,43.2,yaw,-.05),yaw);await settle();out.push(await drawn());}return out;};
   for(const quality of ['low','high']){
    if((await state()).running)await click('#pause-button');await click('#settings-button');while((await state()).quality!==quality)await click('#quality-toggle');await click('#settings-back');await click('#resume');
-   await room(false);const bare=await inside(),compiled=Math.max(...bare.map(v=>v.programs));
-   await room(true);const glass=await inside();await shot('room-inside-'+quality);
+   await room(false);const bare=await inside(),compiled=Math.max(...bare.map(v=>v.programs)),names=await page.evaluate(()=>window.__vireon.programNames());
+   await room(true);const glass=await inside(),added=(await page.evaluate(()=>window.__vireon.programNames())).filter(n=>!names.includes(n));await shot('room-inside-'+quality);
    await page.evaluate(()=>window.__vireon.teleport(61.8,49.6,Math.atan2(57.5-61.8,43.5-49.6),-.18));await settle();const outside=await drawn();await shot('room-outside-'+quality);await room(false);
    report[quality+'Room']={inside:glass.map(v=>v.drawCalls),bare:bare.map(v=>v.drawCalls),outside:outside.drawCalls,programs:{bare:compiled,inside:glass.map(v=>v.programs)},glass:glass[0].glass};
    assert.equal(glass[0].rooms.length,1);assert.equal(glass[0].glass.meshes,1,'all glass is one mesh');assert.equal(glass[0].glass.castShadow,false,'glass never casts a shadow');
    glass.forEach((v,i)=>assert.ok(v.drawCalls-bare[i].drawCalls<=15,`${quality}: glass adds ${v.drawCalls-bare[i].drawCalls} draw calls looking ${i*90}°`));
-   assert.ok(glass.every(v=>v.programs<=compiled),`${quality}: building and entering the room compiled a shader (${JSON.stringify(report[quality+'Room'].programs)})`);
+   assert.ok(glass.every(v=>v.programs<=compiled),`${quality}: building and entering the room compiled a shader (${JSON.stringify(report[quality+'Room'].programs)}; new: ${added.join(', ')})`);
    if(quality==='low')glass.forEach((v,i)=>assert.ok(v.drawCalls<=150,`Low draw calls inside the room ${v.drawCalls} > 150 looking ${i*90}°`));
   }
   await click('#pause-button');check('A 3×3×3 glass room with an airlock: inside, the glass adds ≤15 draw calls in every direction, one mesh, no shadow, no shader compile on building or entering; Low ≤150');}
