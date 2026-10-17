@@ -5,7 +5,7 @@ import { ITEMS, TANKS } from './defs';
 import { ELECTROLYZER_O2, GEN_BUFFER, PORT_O2, RECIPE_BY_ID, type Building } from './production';
 import { stationStatus } from './stationStatus';
 import { stationName } from './navigation';
-import { habitableQ, habitableRoom, type RoomInfo } from './rooms';
+import { habitableQ, habitableRoom, type Door, type RoomInfo } from './rooms';
 import { HOTBAR_SIZE, type GameState } from './state';
 /**
  * Scanner (S5, D37): a starting tool that is never used up (stack 1). Scanning is no longer an always-present action:
@@ -56,10 +56,13 @@ export function scanStation(g: GameState, b: Building): ScanReading {
  if (b.kind === 'workbench' && b.level === 2) rows.push(['Очередь', String(b.queue.length)]);
  return { kind: 'Станция', title: stationName(b), text: st.hint, rows };
 }
-/** A glass room (or a structure that does not close a room yet: `room` null). */
-export function scanRoom(room: RoomInfo | null, door = false): ScanReading {
- if (!room) return { kind: door ? 'Шлюз' : 'Стеклоблок', title: 'Не замкнуто', text: 'Стены и крыша ещё не закрывают воздух: найдите щель или поставьте шлюз.', rows: [] };
+/** A glass room (or a structure that does not close a room yet: `room` null); scanned at an airlock module (D36) the
+ *  reading adds its chamber and both doors. */
+export function scanRoom(room: RoomInfo | null, door?: Door): ScanReading {
+ const doorRows: [string, string][] = door ? door.width === 2 ? [['Камера', `${gu(door.pressure)} GU`], ['Двери', `наружная ${doorWord(door.outer)}, внутренняя ${doorWord(door.inner)}`]] : [['Шлюз', 'прежней версии']] : [];
+ if (!room) return { kind: door ? 'Шлюз' : 'Стеклоблок', title: 'Не замкнуто', text: 'Стены и крыша ещё не закрывают воздух: найдите щель или поставьте шлюз.', rows: doorRows };
  const ok = habitableRoom(room), z = room.zone;
- const rows: [string, string][] = [['Объём', `${room.volume} м³`], ['Воздух', `${gu(z.q)} GU · нужно ${habitableQ(room.volume) / 1000}`], ['Чистота', `${Math.round(z.purity * 100)} %`], ['Температура', `${Math.round(z.temperature)} °C`], ['Дышать', ok ? 'можно' : 'нельзя']];
+ const rows: [string, string][] = [['Объём', `${room.volume} м³`], ['Воздух', `${gu(z.q)} GU · нужно ${habitableQ(room.volume) / 1000}`], ['Чистота', `${Math.round(z.purity * 100)} %`], ['Температура', `${Math.round(z.temperature)} °C`], ['Дышать', ok ? 'можно' : 'нельзя'], ...doorRows];
  return { kind: door ? 'Шлюз · помещение' : 'Помещение', title: 'Стеклянное помещение', text: ok ? 'Воздух пригоден: внутри можно дышать без баллона.' : 'Воздух непригоден: подключите распределитель кислорода и закройте щели.', rows };
 }
+const doorWord = (s: Door['outer']) => s === 'open' ? 'открыта' : s === 'cycling' ? 'в цикле' : 'закрыта';

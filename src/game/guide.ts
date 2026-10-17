@@ -1,7 +1,7 @@
 import { countItem } from './inventory';
 import { allDeposits, depositLeft } from './resources';
 import { RECIPE_BY_ID, WORKBENCH_UPGRADE, type Building } from './production';
-import { allRooms, cellOf, habitableQ, habitableRoom, roomCenter, roomDoors, roomy, stationRoom, type Room, type RoomInfo } from './rooms';
+import { allRooms, cellOf, doorCenter, habitableQ, habitableRoom, roomCenter, roomDoors, roomy, stationRoom, type Room, type RoomInfo } from './rooms';
 export { roomy };
 import { ITEMS } from './defs';
 import { questStatus } from './quests';
@@ -35,7 +35,7 @@ export function nearestStation(g: GameState, kind: string, level?: number): Guid
 const has = (g: GameState, kind: string) => g.world.base.buildings.some(b => b.kind === kind);
 /** The compass goes to the nearest airlock or glass room (S4). */
 export function nearestShelter(g: GameState, rooms: RoomInfo[] = allRooms(g)): GuideTarget | null {
- const spots: GuideTarget[] = [...g.world.base.doors.map(d => ({ name: ITEMS.airlock.name, x: d.x + .5, z: d.z + .5, kind: 'station' as const })), ...rooms.map(r => { const c = roomCenter(r); return { name: 'Помещение', x: c.x, z: c.z, kind: 'area' as const }; })];
+ const spots: GuideTarget[] = [...g.world.base.doors.map(d => ({ name: ITEMS.airlock.name, ...doorCenter(d), kind: 'station' as const })), ...rooms.map(r => { const c = roomCenter(r); return { name: 'Помещение', x: c.x, z: c.z, kind: 'area' as const }; })];
  return spots.sort((a, b) => dist(g, a.x, a.z) - dist(g, b.x, b.z))[0] ?? null;
 }
 /** A room at least 3 × 3 inside and 3 high (the journal's box; any closed room still counts for the milestone). */
@@ -114,7 +114,7 @@ export function guideStep(g: GameState, id: QuestId): GuideStep {
    const made = inv(g, 'window') + g.world.base.glass.length, closed = rooms.some(roomy), door = D || rooms.some(r => roomy(r) && roomDoors(g, r).length > 0);
    return { chapter: 3, title: 'Стеклянное убежище', item: 'window', recipes: ['craft_window', 'craft_airlock'],
     why: 'Убежище строят сами: замкнутая коробка из стеклоблоков со шлюзом — дом, где можно дышать без баллонов. Убрали блок — воздух ушёл.',
-    how: ['На верстаке: 1 стекло + 1 железо → 4 стеклоблока; шлюз — 4 железа, 2 стекла и 4 волокна.', 'Выберите стеклоблок, наведите на грунт или на блок и нажмите кнопку действия (удержание ставит ряд). Стены и крыша — стекло, пол — грунт.', 'До крыши прицел достаёт сверху: сложите у стены ступеньку из блоков, встаньте на неё и ставьте блоки на верх стены, затем крышу от края.', 'Шлюз ставится прямо на два нижних блока стены: они вернутся в рюкзак, а вход — «Пройти шлюз» в его окне.'],
+    how: ['На верстаке: 1 стекло + 1 железо → 4 стеклоблока; шлюз — 6 железа, 4 стекла и 4 волокна.', 'Выберите стеклоблок, наведите на грунт или на блок и нажмите кнопку действия (удержание ставит ряд). Стены и крыша — стекло, пол — грунт.', 'До крыши прицел достаёт сверху: сложите у стены ступеньку из блоков, встаньте на неё и ставьте блоки на верх стены, затем крышу от края.', 'Шлюз 2×2 встаёт прямо на четыре нижних блока ровной стены: они вернутся в рюкзак. Двери открывайте сами (кнопка действия на двери): наружную, войдите в камеру, закройте её, затем внутреннюю — камера наполнится из помещения.'],
     tasks: [{ ...material(g, 'window', 48, D || closed || made >= 48), have: Math.min(48, made), label: 'Наделайте стеклоблоков (1 стекло + 1 железо → 4)' }, flag('Постройте замкнутую стеклянную коробку на земле, хотя бы 3×3 внутри и высотой 3', closed || D, shelter ?? BASE_AREA), flag('Встройте шлюз в стену', door, shelter ?? BASE_AREA, 'craft_airlock')] };
   },
   distributor: () => ({ chapter: 3, title: 'Распределитель', item: 'distributor', recipes: ['craft_distributor'],

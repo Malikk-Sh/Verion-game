@@ -63,7 +63,7 @@ export function createProductionPanel(host: Host) {
   panel.classList.toggle('redraw', !fresh); fresh = false;
   const title = structure ? (door ? 'Шлюз' : 'Стеклянное помещение') : station === 'hand' ? 'Мастерская' : b?.kind === 'workbench' ? 'Верстак ' + (b.level === 2 ? 'II' : 'I') : station === 'capsule' ? 'Капсула' : station.startsWith('crate-') ? 'Ящик снабжения' : b ? ITEMS[b.kind].name : 'Станция';
   panel.querySelector('h2')!.textContent = title;
-  el('production-kicker').textContent = structure ? (door ? 'Вход в помещение · цикл 6 с' : 'Стеклоблоки · герметичность') : station === 'hand' ? 'Карманный крафт · где угодно' : station === 'capsule' ? 'Кислородный порт' : station.startsWith('crate-') ? '24 ячейки · хранение' : b ? KICKER[b.kind] ?? '' : '';
+  el('production-kicker').textContent = structure ? (door ? 'Вход в помещение · две двери и камера' : 'Стеклоблоки · герметичность') : station === 'hand' ? 'Карманный крафт · где угодно' : station === 'capsule' ? 'Кислородный порт' : station.startsWith('crate-') ? '24 ячейки · хранение' : b ? KICKER[b.kind] ?? '' : '';
   const icon = el('production-icon'), iconId = structure ? (door ? 'airlock' : 'window') : station === 'hand' ? 'fiber' : station === 'capsule' ? 'oxygen' : station.startsWith('crate-') ? 'stone' : b ? (b.kind === 'workbench' && b.level === 2 ? 'workbench_2' : b.kind) : 'workbench';
   if (icon.dataset.item !== iconId) { icon.dataset.item = iconId; icon.replaceChildren(itemArt(iconId)); }
   tabs(g, craft);

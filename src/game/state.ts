@@ -2,17 +2,22 @@ import { electricPort, runsOn } from './production';
 import { heightAt, stationY, worldColliders, type Box } from '../world';
 import { freshBase, RECIPE_BY_ID, LINK_RANGE, MAX_REPEAT, GEN_BUFFER, FIBER_EU, ELECTROLYZER_O2, PORT_O2, CAPSULE_CAPACITY, type BaseState, type Job, type Building, type Link } from './production';
 import { BASIC_SUIT, BUILDABLE, CONTENT_VERSION, GENERATOR_VERSION, ITEMS, LEGACY_CONTENT_VERSIONS, SUIT_PARTS, TANKS, TOOLS, type SuitPart } from './defs';
-import { emptyInventory, INVENTORY_SIZE, type Slot } from './inventory';
+import { addItems, emptyInventory, INVENTORY_SIZE, type Slot } from './inventory';
 import { NODES, NODE_BY_ID, LATER_NODES, S3_NODES, nodeCovered, bodyHalf, VEIN_MATERIALS, VEIN_SPOT_BY_ID, veinSizeRange, type Vein, type Respawn, type VeinMaterial } from './resources';
 import { covers, veinDelay, VEIN_CAP, VEIN_TOTAL, RESPAWN_MAX, VEIN_DELAY_RANGE } from './nature';
-import { CYCLE_TICKS, START_OFFSET_TICKS } from './daycycle';
+import { CYCLE_TICKS, START_OFFSET_TICKS, isDay, phaseSeconds } from './daycycle';
 import { freshQuestProgress, QUEST_FACTS, type QuestProgress } from './questFacts';
 import { QUEST_IDS, type QuestId } from './questCatalog';
-import { bodyInSolid, doorFits, landingCells, stationBox, cellKey, cellOf, capacityOf, deriveRooms, doorFront, doorKeys, groundRoom, landingAt, lowestAir, storable, STORE_MARGIN, shellOf, CELL_MAX, CELL_MIN, DOOR_LIMIT, GLASS_LIMIT, LEVEL_MAX, LEVEL_MIN, PASSAGE_MS, ROOM_LIMIT, ROOM_MAX, type Door, type Zone } from './rooms';
+import { bodyInSolid, carry, groundV8, levelAt, doorFits, landingCells, stationBox, cellKey, cellOf, capacityOf, deriveRooms, doorAlong, doorCenter, doorFront, doorKeys, groundRoom, landingAt, newDoor, lowestAir, storable, STORE_MARGIN, shellOf, CELL_MAX, CELL_MIN, DOOR_LIMIT, GLASS_LIMIT, LEVEL_MAX, LEVEL_MIN, ROOM_LIMIT, ROOM_MAX, type Door, type DoorState, type Zone } from './rooms';
+import { CHAMBER_Q, EQUALIZE_MS, SLIDE_MS } from './airlock';
 /**
  * Complete persistent game state. Plain JSON only: no class instances, GPU objects or
  * functions (TECHNICAL §2). Revision numbers live in save manifests.
  *
+ * State version 9 (S5) has two field-based steps:
+ * - D35 raises the vertical cell lattice by 0.5 m (level k spans y ∈ [k + 0.5, k + 1.5)) so blocks rest flush on the
+ *   build pad; keys stay, rooms are re-derived and their air carried over (toShiftedLevels);
+ * - D36 turns every door into a walk-through airlock module with its own doors and chamber; the S4 passage retires (toModules).
  * State version 8 (S4) has two parts, each added by a field-based step so that every S4 preview file loads:
  * - glass rooms (D31) replace the prefab dome: `base.glass`, `base.doors`, `base.zones` and a passage through a door;
  *   buildings lose their per-body zone/shell (toGlassRooms);
@@ -25,9 +30,9 @@ import { bodyInSolid, doorFits, landingCells, stationBox, cellKey, cellOf, capac
  * the first inventory row — not a separate container), display-only vitals and the day-phase
  * offset. Version 1/2 saves (including content 1.0.0) are migrated by sanitizeState() without loss.
  */
-export const STATE_VERSION = 8;
-/** Last version produced by the pre-S3 migration chain, and the S3 version. */
-const V6 = 6, V7 = 7;
+export const STATE_VERSION = 9;
+/** Last version produced by the pre-S3 migration chain, the S3 version and the S4 version (integer levels). */
+const V6 = 6, V7 = 7, V8 = 8;
 export const HOTBAR_SIZE = 6;
 export type ItemStack = NonNullable<Slot>;
 export type Drop = { id: string; x: number; z: number; items: ItemStack[] };
@@ -86,7 +91,7 @@ function entry(v: unknown, p: string, maxCount?: number,allowPacked=true): ItemS
  if (o.milliGU !== undefined) { if (!tank) throw new InvalidState(p, 'газ у не-баллона'); s.milliGU = int(o.milliGU, p + '.milliGU', 0, tank.capacity); }
  if (tool && s.durability === undefined) throw new InvalidState(p, 'нет прочности инструмента');
  if (tank && s.milliGU === undefined) throw new InvalidState(p, 'нет остатка газа');
- if(o.packed!==undefined){if(!allowPacked||!(BUILDABLE as readonly string[]).includes(itemId)||s.count!==1)throw new InvalidState(p,'неверный упакованный корпус');const body=obj(o.packed,p+'.packed');if(body.kind!==itemId)throw new InvalidState(p,'корпус не совпадает с предметом');const parsed=validateBase({buildings:[{...body,id:'build-1',x:0,y:0,z:0}],links:[],nextId:2,hand:null,handQueue:[],glass:[],doors:[],zones:[],passage:null}).buildings[0];const {id,x,y,z,...packed}=parsed;s.packed=packed;}
+ if(o.packed!==undefined){if(!allowPacked||!(BUILDABLE as readonly string[]).includes(itemId)||s.count!==1)throw new InvalidState(p,'неверный упакованный корпус');const body=obj(o.packed,p+'.packed');if(body.kind!==itemId)throw new InvalidState(p,'корпус не совпадает с предметом');const parsed=validateBase({buildings:[{...body,id:'build-1',x:0,y:0,z:0}],links:[],nextId:2,hand:null,handQueue:[],glass:[],doors:[],zones:[]}).buildings[0];const {id,x,y,z,...packed}=parsed;s.packed=packed;}
  return s;
 }
 const slot = (v: unknown, p: string,allowPacked=true): Slot => v === null ? null : entry(v, p,undefined,allowPacked);
@@ -150,7 +155,69 @@ export function migrateRaw(raw:unknown):unknown{
  // S4 steps key on the fields, not on the number: a v7 save, a rooms preview v8 file (no vein fields) and a veins
  // preview v8 file (still a dome, no glass fields) all reach the same v8 before strict validation.
  const rooms=isObj(v7)&&isObj(v7.meta)&&needsGlass(v7)?toGlassRooms(v7):v7;
- return isObj(rooms)&&isObj(rooms.meta)&&(rooms.meta.stateVersion===V7||lacksVeins(rooms))?toVeins(rooms):rooms;
+ // The glass step builds on the raised levels and lifts the version past 8: only glass saved by S4 still needs the shift.
+ const levels=isObj(rooms)&&isObj(rooms.meta)&&needsShift(rooms)?toShiftedLevels(rooms):rooms;
+ // Then every door still without a `width` (S4, or just converted from a dome) becomes a module (D36).
+ const modules=isObj(levels)&&isObj(levels.meta)&&needsModules(levels)?toModules(levels):levels;
+ return isObj(modules)&&isObj(modules.meta)&&(modules.meta.stateVersion===V7||lacksVeins(modules))?toVeins(modules):modules;
+}
+/** The module step: a door saved before D36 (no `width`) or the retired S4 passage field. */
+const needsModules=(r:Obj)=>{const b=isObj(r.world)&&isObj(r.world.base)?r.world.base:null;return !!b&&('passage' in b||Array.isArray(b.doors)&&b.doors.some(d=>isObj(d)&&!('width' in d)));};
+/**
+ * S4 doors → S5 airlock modules (D36). A door becomes a module two cells wide when the wall cells beside it along the wall
+ * (first the +x/+z side, then the other) are glass at both of its levels and the wider module fits by the rules of a new
+ * one (doorFits: both landings clear of glass, modules, ground, stations, rocks, deposits and veins of this save, and off
+ * the landings of other modules): that glass becomes the module's second column and returns to the backpack (a pile at
+ * the module when the backpack is full). Otherwise it stays a legacy module one cell wide with the same doors. Glass and
+ * module cells are both solid, so every room and its air stay exactly as they were. Both doors start closed with the
+ * chamber at outside pressure. A passage still running in the save ends as it used to: the player stands on the landing
+ * it was leading to. Idempotent; never lowers the version.
+ */
+export function toModules(r:Obj):Obj{
+ const next=structuredClone(r),world=obj(next.world,'world'),base=obj(world.base,'world.base'),pl=obj(next.player,'player'),m=obj(next.meta,'meta');
+ const pass=base.passage;delete base.passage;
+ const doors=Array.isArray(base.doors)?base.doors:[],num=(v:unknown)=>typeof v==='number'&&Number.isInteger(v);
+ // Malformed fields are left to strict validation (which rejects them).
+ if(Array.isArray(base.glass)&&base.glass.every(num)&&doors.every(d=>isObj(d)&&['x','y','z','rot'].every(k=>num(d[k])))){
+  const glass=new Set(base.glass as number[]),list=doors as Door[],colliders=worldColliders(isObj(world.nodes)?world.nodes:{},Array.isArray(world.veins)?world.veins:[]);
+  const stations=(Array.isArray(base.buildings)?base.buildings:[]).filter(isObj).map(b=>stationBox({kind:String(b.kind),level:Number(b.level),x:Number(b.x),y:Number(b.y),z:Number(b.z)}));
+  let returned=0,at:{x:number;z:number}|null=null;const moved:{d:Door;side:'front'|'back'}[]=[];
+  for(const d of list){if(Object.hasOwn(d,'width'))continue;
+   const rot=((Number(d.rot)%4)+4)%4,a=doorAlong(rot),others=list.filter(o=>o!==d),taken=new Set(others.flatMap(o=>doorKeys(o))),reserved=new Set(others.flatMap(o=>[...landingCells(o,'front'),...landingCells(o,'back')]));
+   const wide=[newDoor(d.id,d.x,d.y,d.z,rot),newDoor(d.id,d.x-a.x,d.y,d.z-a.z,rot)].find(c=>{const mine=new Set(doorKeys(c)),extra=doorKeys(c).filter(k=>!doorKeys(d).includes(k));
+    return extra.every(k=>glass.has(k))&&doorFits(k=>(glass.has(k)&&!mine.has(k))||taken.has(k),c,stations,reserved,colliders);});
+   // A player the dome step set down on this door's landing (its centre) moves to the centre of the wider landing.
+   const f=doorFront(rot),side=(['front','back'] as const).find(v=>{const s=v==='front'?1:-1;return Math.abs(Number(pl.x)-(d.x+.5+f.x*s))<1e-9&&Math.abs(Number(pl.z)-(d.z+.5+f.z*s))<1e-9;});
+   if(wide){for(const k of doorKeys(wide))if(glass.delete(k))returned++;Object.assign(d,wide);at??=doorCenter(d);if(side)moved.push({d,side});}
+   else Object.assign(d,newDoor(d.id,d.x,d.y,d.z,rot,1));
+  }
+  base.glass=[...glass].sort((p,q)=>p-q);
+  if(returned&&Array.isArray(pl.inventory)){const left=addItems(pl.inventory as Slot[],'window',returned);if(left){const drops=Array.isArray(world.drops)?world.drops:(world.drops=[]),id=Number(world.nextDropId);(drops as unknown[]).push({id:'drop-'+id,x:at!.x,z:at!.z,items:[{itemId:'window',count:left}]});world.nextDropId=id+1;}}
+  const view=deriveRooms(base.glass as number[],list);for(const v of moved)Object.assign(pl,landingAt(view,v.d,v.side));
+  if(isObj(pass)&&typeof pass.doorId==='string'){const d=list.find(v=>v.id===pass.doorId);if(d)Object.assign(pl,landingAt(view,d,pass.direction==='in'?'back':'front'));}
+ }
+ m.stateVersion=Math.max(Number(m.stateVersion),STATE_VERSION);return next;
+}
+/** The level step: a v8 save that already holds the room fields (its keys are on the old integer levels). */
+const needsShift=(r:Obj)=>{const b=isObj(r.world)&&isObj(r.world.base)?r.world.base:null;return Number(obj(r.meta,'meta').stateVersion)===V8&&!!b&&['glass','doors','zones'].every(k=>k in b);};
+/**
+ * v8 → v9 (S5, D35): the levels rise 0.5 m (cellY). Every key stays, so a structure on the flat 0.5 m pad keeps its rooms
+ * exactly and now rests flush on it; the rooms are re-derived with the new ground rule (groundV8 → isGround). On a slope
+ * a cell that was ground under the old rule may become air: the gas of every old zone is carried by cell overlap in whole
+ * milli-GU like an edit (carry): a share reaching a room stays, only a share whose cells became outside leaves. A player
+ * whose body now meets the raised glass (standing on a roof) rises with it. Idempotent on the version; never lowers it.
+ */
+export function toShiftedLevels(r:Obj):Obj{
+ const next=structuredClone(r),world=obj(next.world,'world'),base=obj(world.base,'world.base'),pl=obj(next.player,'player'),m=obj(next.meta,'meta');
+ const glass=base.glass,doors=base.doors,zones=base.zones,num=(v:unknown)=>typeof v==='number'&&Number.isInteger(v);
+ // Malformed fields are left to strict validation (which rejects them); a well-formed layout is carried over.
+ if(Array.isArray(glass)&&glass.every(num)&&Array.isArray(doors)&&doors.every(d=>isObj(d)&&['x','y','z','rot'].every(k=>num(d[k])))&&Array.isArray(zones)&&zones.every(z=>isObj(z)&&['cell','q'].every(k=>num(z[k])))){
+  const list=doors as Door[],before=deriveRooms(glass as number[],list,groundV8),after=deriveRooms(glass as number[],list);
+  const day=isDay(phaseSeconds(Number(m.activeTicks)||0,Number(world.dayOffsetTicks)||0));
+  base.zones=carry(before,zones as Zone[],after,day?10:-10).zones;
+  const x=Number(pl.x),y=Number(pl.y),z=Number(pl.z);if(bodyInSolid(after,x,y,z)&&!bodyInSolid(after,x,y+.5,z))pl.y=y+.5;
+ }
+ m.stateVersion=Math.max(Number(m.stateVersion),STATE_VERSION);return next;
 }
 /** The glass step: a v7 save, or any later save still without the room fields (a v8 file from a preview that kept the
  *  dome) converts; a save that has them is never touched again. */
@@ -268,7 +335,7 @@ export function domesToGlass(base:Obj,player:Obj,colliders:readonly Box[]){
  // The shell reaches 1 m past the old walls: a player saved beside the dome (often right at its airlock) would stand in glass.
  else if(made.length&&bodyInSolid(view,px,py,pz)){
   const m=made.reduce((a,b)=>Math.hypot(b.x-px,b.z-pz)<Math.hypot(a.x-px,a.z-pz)?b:a);
-  Object.assign(player,landingAt(view,m.door,m.interior.has(cellKey(Math.floor(px),Math.floor(py+1),Math.floor(pz)))?'back':'front'));
+  Object.assign(player,landingAt(view,m.door,m.interior.has(cellKey(Math.floor(px),levelAt(py+1),Math.floor(pz)))?'back':'front'));
  }
 }
 function toV6(r:Obj):Obj{
@@ -380,8 +447,13 @@ function validateBase(value: unknown, legacy = false): BaseState {
  const list=(k:string,max:number)=>legacy&&raw[k]===undefined?[]:arr(raw[k],'base.'+k,max);
  const glass=list('glass',GLASS_LIMIT).map(v=>{const k=int(v,'base.glass',0,2**27-1),c=cellOf(k);if(!storable(c.i,c.k,c.j))throw new InvalidState('base.glass','клетка вне участка');return k;});
  for(let i=1;i<glass.length;i++)if(glass[i]<=glass[i-1])throw new InvalidState('base.glass','ключи не упорядочены или повторяются');
- const solid=new Set(glass),doors=list('doors',DOOR_LIMIT).map((v):Door=>{const o=obj(v,'door'),d={id:register(o.id,'door.id','door'),x:int(o.x,'door.x',CELL_MIN-STORE_MARGIN,CELL_MAX+STORE_MARGIN),y:int(o.y,'door.y',LEVEL_MIN,LEVEL_MAX-1),z:int(o.z,'door.z',CELL_MIN-STORE_MARGIN,CELL_MAX+STORE_MARGIN),rot:int(o.rot,'door.rot',0,3)};
-  for(const k of doorKeys(d)){if(solid.has(k))throw new InvalidState('base.doors','шлюз пересекает стекло или другой шлюз');solid.add(k);}return d;});
+ const face=(v:unknown,p:string)=>{if(v!=='closed'&&v!=='cycling'&&v!=='open')throw new InvalidState(p,'неверное состояние двери');return v as DoorState;};
+ const solid=new Set(glass),doors=list('doors',DOOR_LIMIT).map((v):Door=>{const o=obj(v,'door'),width=o.width;if(width!==1&&width!==2)throw new InvalidState('door.width','ширина шлюза 1 или 2');
+  const d:Door={id:register(o.id,'door.id','door'),x:int(o.x,'door.x',CELL_MIN-STORE_MARGIN,CELL_MAX+STORE_MARGIN),y:int(o.y,'door.y',LEVEL_MIN,LEVEL_MAX-1),z:int(o.z,'door.z',CELL_MIN-STORE_MARGIN,CELL_MAX+STORE_MARGIN),rot:int(o.rot,'door.rot',0,3),width,outer:face(o.outer,'door.outer'),inner:face(o.inner,'door.inner'),pressure:int(o.pressure,'door.pressure',0,CHAMBER_Q),cycleMs:int(o.cycleMs,'door.cycleMs',0,EQUALIZE_MS+SLIDE_MS)};
+  // Interlock (D36): at most one door is not closed; a cycle runs exactly while one door is cycling.
+  if(d.outer!=='closed'&&d.inner!=='closed')throw new InvalidState('base.doors','обе двери шлюза не закрыты');
+  if((d.outer==='cycling'||d.inner==='cycling')!==(d.cycleMs>0))throw new InvalidState('door.cycleMs','неверный цикл шлюза');
+  for(const k of doorKeys(d)){const c=cellOf(k);if(!storable(c.i,c.k,c.j))throw new InvalidState('base.doors','шлюз вне участка');if(solid.has(k))throw new InvalidState('base.doors','шлюз пересекает стекло или другой шлюз');solid.add(k);}return d;});
  const nextId=int(raw.nextId,'base.nextId',1,Number.MAX_SAFE_INTEGER);if(generationIds.some(n=>n>=nextId))throw new InvalidState('base.nextId','счётчик не больше существующих ID');
  const view=deriveRooms(glass,doors);if(view.rooms.length>ROOM_LIMIT)throw new InvalidState('base.zones','больше '+ROOM_LIMIT+' помещений');
  // A zone whose room no longer exists drops its gas (not an error); a room without a zone starts empty.
@@ -390,11 +462,10 @@ function validateBase(value: unknown, legacy = false): BaseState {
   const z:Zone={cell,q:int(o.q,'zone.q',0,capacityOf(ROOM_MAX)),temperature:num(o.temperature,'zone.temperature',-150,150),purity:num(o.purity,'zone.purity',0,1),lossRemainder:int(o.lossRemainder,'zone.lossRemainder',0,999)};
   const room=view.rooms.find(r=>r.cell===cell);if(!room)continue;if(z.q>capacityOf(room.volume))throw new InvalidState('zone.q','воздуха больше вместимости помещения');zones.push(z);}
  for(const r of view.rooms)if(!zoneCells.has(r.cell))zones.push({cell:r.cell,q:0,temperature:10,purity:0,lossRemainder:0});
- let passage:BaseState['passage']=null;if(raw.passage!==null&&!(legacy&&raw.passage===undefined)){const o=obj(raw.passage,'base.passage');
-  if(legacy&&'domeId' in o){const domeId=str(o.domeId,'passage.domeId',32,ID);if(!buildings.some(b=>b.id===domeId&&(b.kind as string)==='dome')||(o.direction!=='in'&&o.direction!=='out'))throw new InvalidState('passage','неверный шлюз');passage={domeId,direction:o.direction,remainingMs:int(o.remainingMs,'passage.remainingMs',0,PASSAGE_MS)} as unknown as BaseState['passage'];}
-  else{const doorId=str(o.doorId,'passage.doorId',32,ID);if(!doors.some(d=>d.id===doorId)||(o.direction!=='in'&&o.direction!=='out')||typeof o.paid!=='boolean')throw new InvalidState('passage','неверный шлюз');passage={doorId,direction:o.direction,remainingMs:int(o.remainingMs,'passage.remainingMs',0,PASSAGE_MS),paid:o.paid};}}
+ // Only a v2/v3 save mid-migration still carries a passage through a dome (toGlassRooms ends it); S5 has no passage.
+ let passage:unknown=null;if(legacy&&isObj(raw.passage)){const o=raw.passage,domeId=str(o.domeId,'passage.domeId',32,ID);if(!buildings.some(b=>b.id===domeId&&(b.kind as string)==='dome')||(o.direction!=='in'&&o.direction!=='out'))throw new InvalidState('passage','неверный шлюз');passage={domeId,direction:o.direction,remainingMs:int(o.remainingMs,'passage.remainingMs',0,6000)};}
  const handQueue=queue(raw.handQueue,'hand');if(!legacy&&handQueue.length)throw new InvalidState('handQueue','ручная очередь недоступна');
- return {buildings,links,nextId,hand:job(raw.hand,'hand'),handQueue,glass,doors,zones,passage};
+ const base:BaseState={buildings,links,nextId,hand:job(raw.hand,'hand'),handQueue,glass,doors,zones};if(legacy)(base as BaseState&{passage:unknown}).passage=passage;return base;
 }
 
 /** S4 veins (D33): only checked spots, the right material, unique ids below the counter, stock within the size range and the caps. */

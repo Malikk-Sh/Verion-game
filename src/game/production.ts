@@ -5,7 +5,8 @@ import { BUILDABLE, ITEMS, TANKS, TOOLS, type BuildingKind } from './defs';
 import { addItems, countItem, emptyInventory, firstEmpty, removeItems, type Slot } from './inventory';
 import { dropItems } from './mining';
 import type { GameState, ItemStack } from './state';
-import { advancePassage, anyHabitable, capacityOf, distributorDemand, roomsTick, stationRoom, type Door, type Passage, type Zone } from './rooms';
+import { anyHabitable, capacityOf, distributorDemand, roomsTick, stationRoom, type Door, type Zone } from './rooms';
+import { airlockTick } from './airlock';
 export type Recipe = { id: string; station: string; inputs: Record<string, number>; outputs: Record<string, number>; seconds: number; EU_per_second: number };
 export const RECIPES: Recipe[] = catalog.recipes as unknown as Recipe[];
 export const RECIPE_BY_ID = new Map(RECIPES.map(r => [r.id, r]));
@@ -21,10 +22,10 @@ export const MAX_REPEAT = 99;
 /** `rot`: quarter turns around +y (0 = facing +z). */
 export type Building = { id: string; kind: BuildingKind; level: 1 | 2; rot: number; x: number; y: number; z: number; input: Slot[]; output: Slot[]; job: Job | null; queue: string[]; enabled: boolean; lowPriority: boolean; energy: number; fuel: number; water: number; oxygen: number };
 export type Link = { id: string; kind: 'cable' | 'gas_pipe'; from: string; to: string };
-/** S4 (D31): `glass` — sorted unique cell keys of glass blocks; `doors` — airlocks (1×2 cells); `zones` — the air of each
- * closed room (rooms.ts); `passage` — an airlock cycle in progress. */
-export type BaseState = { buildings: Building[]; links: Link[]; nextId: number; hand: Job | null; handQueue: string[]; glass: number[]; doors: Door[]; zones: Zone[]; passage: Passage | null };
-export const freshBase = (): BaseState => ({ buildings: [], links: [], nextId: 1, hand: null, handQueue: [], glass: [], doors: [], zones: [], passage: null });
+/** S4 (D31): `glass` — sorted unique cell keys of glass blocks; `doors` — airlock modules (2×1×2 cells, D36); `zones` — the air of each
+ * closed room (rooms.ts); every airlock module carries its own doors and chamber (airlock.ts). */
+export type BaseState = { buildings: Building[]; links: Link[]; nextId: number; hand: Job | null; handQueue: string[]; glass: number[]; doors: Door[]; zones: Zone[] };
+export const freshBase = (): BaseState => ({ buildings: [], links: [], nextId: 1, hand: null, handQueue: [], glass: [], doors: [], zones: [] });
 export const machine = (g: GameState, id: string) => g.world.base.buildings.find(b => b.id === id);
 /** Buffers in milli-units (D30, S4): generator 2000 EU and 300 EU per fiber, electrolyzer 2000 GU; refill and
  * distributor ports keep 480 GU; the capsule holds 2400 GU. */
@@ -198,7 +199,7 @@ export function poweredComponent(g: GameState, id: string) {
 export const generatorsOf = (g: GameState, b: Building) => { const net = poweredComponent(g, b.id); return g.world.base.buildings.filter(v => v.kind === 'biogenerator' && net.has(v.id)); };
 // A generator inside a room may still spend its stored energy, but never burns fuel there (productionTick).
 export const hasPower = (g: GameState, b: Building) => generatorsOf(g, b).some(v => v.enabled && (v.energy > 0 || !stationRoom(g, v) && (v.fuel > 0 || countItem(v.input, 'fiber') > 0)));
-export type ProductionTick = { changed: boolean; passage: {x:number;y:number;z:number} | null };
+export type ProductionTick = { changed: boolean };
 /**
  * Read-only view of the last simulated tick for visuals and station screens: accepted energy per
  * building and gas moved per link/room (milli-units in `ms`). Never read by the simulation itself.
@@ -302,13 +303,13 @@ export function productionTick(g: GameState, ms: number, refillId: string | null
  for(const l of base.links)if(l.kind==='gas_pipe'){const a=machine(g,l.from)!,b=machine(g,l.to),cap=b?PORT_O2:CAPSULE_CAPACITY,stored=b?b.oxygen:g.world.capsuleMilliGU;const mounted=a.input[1],reserved=mounted&&TANKS[mounted.itemId]?TANKS[mounted.itemId].capacity-(mounted.milliGU??0):0;const n=Math.min(Math.max(0,a.oxygen-reserved),cap-stored,40*ms);a.oxygen-=n;if(b)b.oxygen+=n;else g.world.capsuleMilliGU+=n;if(n>0)telemetry.gas.set(l.id,n);}
  roomsTick(g,ms,power,outside,(r,d,n)=>{const key='room-'+r.cell;telemetry.room.set(key,(telemetry.room.get(key)??0)+n);telemetry.gas.set(d.id,(telemetry.gas.get(d.id)??0)+n);});
  const refill=refillId&&machine(g,refillId);if(refill&&Math.hypot(refill.x-g.player.x,refill.z-g.player.z)<=3.2){let budget=Math.min(refill.oxygen,(power.get(refill.id)??0)*10);for(const t of g.player.bottles)if(t){const n=Math.min(budget,TANKS[t.itemId].capacity-(t.milliGU??0));t.milliGU=(t.milliGU??0)+n;refill.oxygen-=n;budget-=n;if(n>0)changed=recordQuestFact(g,'system:refill')||changed;}}
- const passage=advancePassage(g,ms);if(passage)changed=true;
- return {changed,passage};
+ if(airlockTick(g,ms))changed=true;
+ return {changed};
 }
 
 /** Death preserves WIP: incomplete hand inputs, or a finished output, join the cargo. */
 export function releaseHandOnDeath(g:GameState) {
  const job=g.world.base.hand;g.world.base.handQueue=[];if(!job)return;const r=RECIPE_BY_ID.get(job.recipeId)!;
  if(job.workMs>=r.seconds*1000)recordQuestFact(g,'craft:'+(r.id==='legacy_melt'?'melt_in_generator':r.id));
- dropItems(g,g.player.x,g.player.z,job.workMs>=r.seconds*1000?outputSlots(r):job.reserved);g.world.base.hand=null;g.world.base.handQueue=[];g.world.base.passage=null;
+ dropItems(g,g.player.x,g.player.z,job.workMs>=r.seconds*1000?outputSlots(r):job.reserved);g.world.base.hand=null;g.world.base.handQueue=[];
 }

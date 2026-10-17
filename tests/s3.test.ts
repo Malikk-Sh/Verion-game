@@ -5,7 +5,8 @@ import { addItems, countItem } from '../src/game/inventory.ts';
 import { NODES, NODE_BY_ID, PATCH_NODES } from '../src/game/resources.ts';
 import { natureTick, nextRegrowSeconds, covers } from '../src/game/nature.ts';
 import { RECIPES, RECIPE_BY_ID, WORKBENCH_UPGRADE, makeBuilding, startJob, productionTick, connect, linkSegments, telemetry, deliverPower, manualWork, queueJob } from '../src/game/production.ts';
-import { allRooms, beginPassage, bumpRooms, cellKey, doorFront, doorKeys, doorProblem, groundRoom, landingPoint, lowestAir, placeDoor, roomAt, shellOf, stationRoom, type Door } from '../src/game/rooms.ts';
+import { allRooms, bumpRooms, cellKey, cellY, doorColumns, doorFront, doorKeys, doorProblem, groundRoom, landingPoint, lowestAir, newDoor, placeDoor, roomAt, shellOf, stationRoom, type Door } from '../src/game/rooms.ts';
+import { airlockTick, breathingChamber, useDoor, CHAMBER_Q, SILL } from '../src/game/airlock.ts';
 import { packStation } from '../src/game/worldActions.ts';
 import { TANKS, type BuildingKind } from '../src/game/defs.ts';
 import { heightAt, GRASS, makeColliders } from '../src/world.ts';
@@ -16,11 +17,11 @@ import { nearestNode, guideStep } from '../src/game/guide.ts';
 import { refreshQuestProgress } from '../src/game/quests.ts';
 
 const fresh = () => newGame('w-s3', 7, 1, heightAt(40, 42));
-/** A closed glass room over the ground (3 levels above each interior column's floor); an airlock replaces the two lowest
- *  wall cells of column (x, z) facing `rot`. `room()` reads the live room (its zone changes with every edit). */
+/** A closed glass room over the ground (3 levels above each interior column's floor); a 2×2 airlock module (D36) replaces
+ *  the four lowest wall cells from column (x, z) along the wall, facing `rot`. `room()` reads the live room (its zone changes with every edit). */
 function shelter(g: GameState, x0: number, z0: number, w: number, d: number, at?: { x: number; z: number; rot: number }) {
  let glass = shellOf(groundRoom(x0, z0, w, d, 3)), door: Door | undefined;
- if (at) { const f = doorFront(at.rot); door = { id: 'door-' + g.world.base.nextId++, x: at.x, y: Math.max(lowestAir(at.x, at.z), lowestAir(at.x - f.x, at.z - f.z)), z: at.z, rot: at.rot }; const cells = doorKeys(door); glass = glass.filter(k => !cells.includes(k)); g.world.base.doors.push(door); }
+ if (at) { const f = doorFront(at.rot), cols = doorColumns({ ...at, y: 0, width: 2 }); door = newDoor('door-' + g.world.base.nextId++, at.x, Math.max(...cols.flatMap(c => [lowestAir(c.i, c.j), lowestAir(c.i - f.x, c.j - f.z)])), at.z, at.rot); const cells = doorKeys(door); glass = glass.filter(k => !cells.includes(k)); g.world.base.doors.push(door); }
  g.world.base.glass = [...new Set([...g.world.base.glass, ...glass])].sort((a, b) => a - b); bumpRooms(g);
  const cell = groundRoom(x0, z0, w, d, 3)[0], room = () => { const r = allRooms(g).find(r => r.cells.includes(cell)); assert.ok(r, 'the shelter is closed'); return r!; };
  room(); return { room, door: door! };
@@ -99,22 +100,20 @@ test('S3: the whole start-to-base path fits the valley deposits with margin', ()
  assert.ok(RECIPE_BY_ID.get('electrolysis'));
  assert.ok(raw.iron_raw >= 16 && raw.sand >= 32, 'the shell costs 16 glass and 16 iron'); assert.equal(RECIPE_BY_ID.get('craft_dome'), undefined);
 });
-test('S3/S4: a turned airlock keeps its side, in and out', () => {
- const g = fresh(), { room, door } = shelter(g, 57, 39, 3, 3, { x: 60, z: 40, rot: 1 });
- assert.deepEqual(doorFront(door.rot), { x: 1, z: 0 });
- Object.assign(g.player, { x: 60, y: heightAt(60, 43.5), z: 43.5 });
- assert.equal(beginPassage(g, door.id), 'Подойдите к шлюзу');
- Object.assign(g.player, { x: 62.8, z: 40.5 });
- room().zone.q = 3999; assert.match(beginPassage(g, door.id), /4 GU/, 'Entry needs the full 4 GU charge');
- room().zone.q = 8000; assert.equal(beginPassage(g, door.id), ''); assert.equal(room().zone.q, 4000);
- const enter = productionTick(g, 6000).passage!;
- assert.equal(roomAt(g, enter.x, enter.y + 1, enter.z)?.volume, 27); assert.deepEqual([enter.x, enter.z], [59.5, 40.5]);
- Object.assign(g.player, { x: enter.x, y: enter.y, z: enter.z });
- room().zone.q = 0; assert.equal(beginPassage(g, door.id), '', 'Leaving an empty room is always possible');
- const leave = productionTick(g, 6000).passage!;
- assert.equal(roomAt(g, leave.x, leave.y + 1, leave.z), null); assert.deepEqual([leave.x, leave.z], [61.5, 40.5]);
+test('S3/S4/D36: a turned airlock keeps its side, in and out', () => {
+ const g = fresh(), { room, door } = shelter(g, 57, 39, 3, 3, { x: 60, z: 40, rot: 1 }), run = (ms: number) => { for (let n = 0; n < ms; n += 50) airlockTick(g, 50); };
+ assert.deepEqual(doorFront(door.rot), { x: 1, z: 0 }); assert.deepEqual(doorKeys(door).length, 4);
+ const inside = landingPoint(g, door, 'back'), outside = landingPoint(g, door, 'front');
+ assert.deepEqual([inside.x, inside.z, outside.x, outside.z], [59.5, 41, 61.5, 41]); assert.equal(roomAt(g, inside.x, inside.y + 1, inside.z)?.volume, 27); assert.equal(roomAt(g, outside.x, outside.y + 1, outside.z), null);
+ Object.assign(g.player, { x: 60, y: heightAt(60, 47), z: 47 }); assert.equal(useDoor(g, door.id, 'outer'), 'Подойдите к шлюзу');
+ // In from the +x side: the outer door slides at once, the inner one takes 4 GU of the room (3 s) before it slides.
+ Object.assign(g.player, outside); room().zone.q = 8000; assert.equal(useDoor(g, door.id, 'outer'), ''); run(800); assert.equal(door.outer, 'open'); assert.equal(room().zone.q, 8000);
+ Object.assign(g.player, { x: 60.5, y: cellY(door.y) + SILL, z: 41 }); assert.equal(useDoor(g, door.id, 'outer'), ''); assert.equal(useDoor(g, door.id, 'inner'), ''); assert.deepEqual([room().zone.q, door.pressure], [4000, CHAMBER_Q]); run(3800); assert.equal(door.inner, 'open');
+ // Out of an empty room: the chamber is still charged, so the outer door vents it; nothing is asked of the room.
+ Object.assign(g.player, inside); room().zone.q = 0; Object.assign(g.player, { x: 60.5, y: cellY(door.y) + SILL, z: 41 }); assert.equal(useDoor(g, door.id, 'inner'), ''); assert.equal(useDoor(g, door.id, 'outer'), '', 'Leaving an empty room is always possible');
+ run(3800); assert.deepEqual([door.outer, door.pressure, room().zone.q], ['open', 0, 0]);
 });
-test('S3/S4: the airlock landing spots stay free and its 6 s cycle is breathable', () => {
+test('S3/S4/D36: the airlock landing spots stay free and its charged chamber is breathable', () => {
  const g = fresh(), { room, door } = shelter(g, 57, 39, 3, 3, { x: 60, z: 40, rot: 1 }), y = heightAt(58, 40) + .12;
  Object.assign(g.player, { x: 58, y, z: 36 });
  assert.match(placementProblem(g, 'distributor', 62, 40), /шлюза/, 'the outer landing cell (61, 40)');
@@ -125,12 +124,12 @@ test('S3/S4: the airlock landing spots stay free and its 6 s cycle is breathable
  const g2 = fresh(); makeBuilding(g2, 'kiln', 62, heightAt(62, 40) + .12, 40); Object.assign(g2.player, { x: 58, y, z: 36 }); addItems(g2.player.inventory, 'airlock', 1);
  const before = structuredClone(g2); assert.match(placeDoor(g2, cellKey(60, lowestAir(60, 40), 40), 1).error, /станция/); assert.deepEqual(g2, before);
  makeColliders(); Object.assign(g2.player, { x: 20, y: heightAt(20, 20), z: 20 });
- const rock = cellKey(24, lowestAir(24, 22), 22); assert.match(doorProblem(g2, rock, 0), /препятствие/, 'the stone pile X24/Z25 stands in front of a door at X24/Z22 facing +z'); assert.equal(doorProblem(g2, rock, 1), '');
- // Entering from outside with empty tanks: the paid chamber air carries the player through the cycle.
- Object.assign(g.player, { x: 62.8, y: heightAt(62.8, 40.5), z: 40.5 }); for (const t of g.player.bottles) if (t) t.milliGU = 0;
- room().zone.q = 20000; assert.equal(beginPassage(g, door.id), ''); assert.equal(room().zone.q, 16000);
- for (let i = 0; i < 100; i++) survivalTick(g, .05, false);
- // The 4 GU paid at the start carry the cycle: no suffocation and no second charge from the room.
+ const rock = cellKey(24, lowestAir(24, 22), 22); assert.match(doorProblem(g2, rock, 0), /препятствие/, 'the stone pile X24/Z25 stands in front of a door at X24/Z22 facing +z'); assert.equal(doorProblem(g2, cellKey(24, lowestAir(24, 21), 21), 0), '', 'one cell further from it the landing is clear');
+ // Entering from outside with empty tanks: in the chamber the inner door charges it with 4 GU of the room, which carry the breath.
+ Object.assign(g.player, { x: 60.5, y: cellY(door.y) + SILL, z: 41 }); for (const t of g.player.bottles) if (t) t.milliGU = 0;
+ room().zone.q = 20000; assert.equal(useDoor(g, door.id, 'inner'), ''); assert.equal(room().zone.q, 16000); assert.equal(breathingChamber(g)?.id, door.id);
+ for (let i = 0; i < 60; i++) survivalTick(g, .05, false);
+ // No suffocation and no second charge from the room while the inner door opens.
  assert.equal(g.player.survival.suffocationMs, 0); assert.equal(room().zone.q, 16000);
 });
 test('S3/S4: in a power shortage the room distributor is served before workbench II (SYSTEMS energy classes)', () => {
@@ -270,14 +269,10 @@ test('S3: a power deficit inside one class is shared in proportion to the reques
  assert.equal(r.get(a.id), 15 * ms); assert.equal(r.get(b.id), 5 * ms);
 });
 
-test('S3/S4: leaving through the airlock lands on the ground in front of the door, not at the room floor height', () => {
- const g = fresh(), { room, door } = shelter(g, 69, 42, 3, 3, { x: 70, z: 45, rot: 0 }), out = landingPoint(g, door, 'front');
- assert.deepEqual([out.x, out.z], [70.5, 46.5]); assert.equal(out.y, heightAt(70.5, 46.5));
- assert.ok(Math.abs(out.y - door.y) > .05, 'the outer ground must sit at another height than the door sill for this check');
- Object.assign(g.player, { x: 70.5, y: heightAt(70.5, 44.5), z: 44.5 }); assert.ok(room());
- assert.equal(beginPassage(g, door.id), '');
- const leave = productionTick(g, 6000).passage!;
- assert.deepEqual(leave, out);
+test('S3/S4: the outer landing point (migration, map) is on the ground in front of the module, not at the room floor height', () => {
+ const g = fresh(), { room, door } = shelter(g, 139, 42, 3, 3, { x: 140, z: 45, rot: 0 }), out = landingPoint(g, door, 'front');
+ assert.deepEqual([out.x, out.z], [141, 46.5]); assert.equal(out.y, heightAt(141, 46.5));
+ assert.ok(Math.abs(out.y - cellY(door.y)) > .05, 'the outer ground must sit at another height than the threshold for this check'); assert.ok(room());
 });
 
 test('S3/S4: the journal follows the distributor inside the room where the pipe and the cable meet', () => {

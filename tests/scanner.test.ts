@@ -7,7 +7,7 @@ import {toolSlot,mineSeconds} from '../src/game/mining';
 import {NODE_BY_ID} from '../src/game/resources';
 import {spawnVein} from '../src/game/nature';
 import {makeBuilding,connect,GEN_BUFFER,ELECTROLYZER_O2} from '../src/game/production';
-import {allRooms,boxCells,bumpRooms,shellOf} from '../src/game/rooms';
+import {allRooms,boxCells,bumpRooms,newDoor,shellOf} from '../src/game/rooms';
 import {grantScanner,scanDeposit,scanRoom,scanStation,scannerSelected,SCANNER,SCANNER_DROP} from '../src/game/scanner';
 import catalog from '../src/game/catalog.generated.json';
 const fresh=()=>newGame('w-scanner',5,1,0);
@@ -51,5 +51,6 @@ test('Scanner readouts: deposit stock (moved from the aim label), vein, grass, s
  g.world.base.glass=shellOf(boxCells(56,0,42,4,3,4));bumpRooms(g);const room=allRooms(g)[0];Object.assign(room.zone,{q:0,purity:1,temperature:18});
  r=scanRoom(room);assert.deepEqual(r.rows[0],['Объём',`${room.volume} м³`]);assert.deepEqual(r.rows.at(-1),['Дышать','нельзя']);
  Object.assign(room.zone,{q:8000*room.volume});r=scanRoom(room);assert.deepEqual(r.rows.at(-1),['Дышать','можно']);assert.match(r.text,/пригоден/);
- assert.equal(scanRoom(null).title,'Не замкнуто');assert.equal(scanRoom(null,true).kind,'Шлюз');
+ assert.equal(scanRoom(null).title,'Не замкнуто');const d=newDoor('door-1',0,0,0,0);d.pressure=4000;d.inner='open';const rd=scanRoom(null,d);assert.equal(rd.kind,'Шлюз');assert.deepEqual(rd.rows,[['Камера','4 GU'],['Двери','наружная закрыта, внутренняя открыта']]);
+ r=scanRoom(room,d);assert.equal(r.kind,'Шлюз · помещение');assert.deepEqual(r.rows.at(-1),['Двери','наружная закрыта, внутренняя открыта']);
 });

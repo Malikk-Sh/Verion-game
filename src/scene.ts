@@ -472,6 +472,11 @@ export function createWorld(scene:THREE.Scene,wind=new Wind()){
   inst.name='local-grass';inst.receiveShadow=true;inst.castShadow=false;scene.add(inst);
  }
  const meshes=batch.finish(scene,m=>({cast:!noShadow.has(m)&&m!==caveInner&&m!==cliffRock,receive:!noShadow.has(m)}));
+ // S5: on Low the scattered rocks (one batch per 40 m cell, about a hundred down the valley) are drawn only within
+ // FAR_ROCKS m of the camera (nearest point of the batch's bounding sphere; checked every 8 m of travel). Cliffs, deposits
+ // and the terrain stay. Standard and High draw every batch as before.
+ const FAR_ROCKS=120,farRocks=meshes.filter(m=>m.name.startsWith('rock:')),farAt=new THREE.Vector3(Infinity,0,Infinity);
+ const updateFarRocks=(p:THREE.Vector3,force=false)=>{if(!force&&Math.hypot(p.x-farAt.x,p.z-farAt.z)<8)return;farAt.copy(p);for(const m of farRocks){const b=m.geometry.boundingSphere!;m.visible=quality!=='low'||Math.hypot(b.center.x-p.x,b.center.z-p.z)-b.radius<=FAR_ROCKS;}};
  for(const m of cache.values())if(!noShadow.has(m))useBakedShade(m,bakeUniforms);
 
  // ---------- Sky, light, fog, atmosphere ----------
@@ -523,7 +528,7 @@ export function createWorld(scene:THREE.Scene,wind=new Wind()){
  function setQuality(q:Quality){quality=q;sun.castShadow=q!=='low';const size=q==='high'?2048:1024,ext=q==='high'?60:42;
   sun.shadow.normalBias=2*ext/size; // about one texel (8.2 cm Standard, 5.9 cm High)
   if(sun.shadow.mapSize.x!==size||sc.right!==ext){sun.shadow.mapSize.set(size,size);sc.left=sc.bottom=-ext;sc.right=sc.top=ext;sc.updateProjectionMatrix();sun.shadow.map?.dispose();sun.shadow.map=null as unknown as THREE.WebGLRenderTarget;}
-  motes.setQuality(q);sand.setQuality(q);for(const m of lowDecoration)m.visible=q!=='low';terrain.setQuality(q);lights.resize(q==='low'?2:4);shadowAt.set(Infinity,0,0);sun.shadow.needsUpdate=true;const environment=(q==='low'?environments.low:environments.full)[k<.5?0:1];if(environment)scene.environment=environment.texture;}
+  motes.setQuality(q);sand.setQuality(q);for(const m of lowDecoration)m.visible=q!=='low';updateFarRocks(farAt,true);terrain.setQuality(q);lights.resize(q==='low'?2:4);shadowAt.set(Infinity,0,0);sun.shadow.needsUpdate=true;const environment=(q==='low'?environments.low:environments.full)[k<.5?0:1];if(environment)scene.environment=environment.texture;}
  const snapped=new THREE.Vector3(),lx=new THREE.Vector3(),ly=new THREE.Vector3(),up=new THREE.Vector3(0,1,0),center=new THREE.Vector3(),shadowDir=new THREE.Vector3(),shadowCenter=new THREE.Vector3(Infinity,Infinity,Infinity);
  // S4: the shadow map follows its own light direction (updated after a 0.25° turn) and its own centre
  // (moved after 3 m of travel, texel-snapped), so it is redrawn about twice a second, not every frame.
@@ -567,7 +572,7 @@ export function createWorld(scene:THREE.Scene,wind=new Wind()){
    if(!shadowCenter.equals(snapped)||!shadowDir.equals(L)){shadowCenter.copy(snapped);shadowDir.copy(L);sun.shadow.needsUpdate=true;shadowRedraws++;}
    sun.target.position.copy(snapped);sun.position.copy(snapped).addScaledVector(L,130);sun.target.updateMatrixWorld();
   }
-  updatePebbles(camera.position);
+  updatePebbles(camera.position);updateFarRocks(camera.position);
   if(allowMaintenance)terrain.update(camera.position,2);
   measure?.('terrain',performance.now()-at);at=performance.now();
   const blink=(Math.sin(time*3)>.6?1:0);redLight.emissiveIntensity=.3+blink*3.5;beacon.emissiveIntensity=1.2+Math.sin(time*2.2)*.8;holo.opacity=.55+Math.sin(time*1.7)*.2;

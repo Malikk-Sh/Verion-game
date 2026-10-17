@@ -76,13 +76,14 @@ export type VeinBlocker = { x: number; z: number; hx: number; hz: number; why: s
 /** Player structures kept outside `base.buildings` add their footprints here (glass rooms register below), like
  *  `mapFootprintSources` for the map; `veinSpotBlocked` checks them with the bodies. */
 export const veinBlockers: ((g: GameState) => VeinBlocker[])[] = [];
-/** Glass rooms (D31): every glass column, each airlock with both landings, and each room's bounding cells, so a vein
- *  never grows inside or across a room, its door or the spot where the passage lands. Cached per glass layout. */
+/** Glass rooms (D31): every glass column, every column of each airlock module with both landings across its whole width
+ *  (D36), and each room's bounding cells, so a vein never grows inside or across a room, its airlock or the doorways
+ *  the player walks through. Cached per glass layout. */
 const ROOM_BLOCKS = new WeakMap<object, VeinBlocker[]>();
 export function roomBlockers(g: GameState): VeinBlocker[] {
  const v = roomsView(g.world.base), hit = ROOM_BLOCKS.get(v); if (hit) return hit;
  const out: VeinBlocker[] = [], cols = new Set<string>(), col = (key: number, why: string) => { const c = cellOf(key), id = c.i + ',' + c.j; if (!cols.has(id)) { cols.add(id); out.push({ x: c.i + .5, z: c.j + .5, hx: .5, hz: .5, why }); } };
- for (const d of g.world.base.doors) { col(doorKeys(d)[0], 'шлюз'); for (const s of ['front', 'back'] as const) col(landingCells(d, s)[0], 'выход шлюза'); }
+ for (const d of g.world.base.doors) { for (const k of doorKeys(d)) col(k, 'шлюз'); for (const s of ['front', 'back'] as const) for (const k of landingCells(d, s)) col(k, 'выход шлюза'); }
  for (const key of v.glass) col(key, 'стеклоблок');
  for (const r of v.rooms) { let i0 = Infinity, i1 = -Infinity, j0 = Infinity, j1 = -Infinity; for (const key of r.cells) { const c = cellOf(key); i0 = Math.min(i0, c.i); i1 = Math.max(i1, c.i); j0 = Math.min(j0, c.j); j1 = Math.max(j1, c.j); } out.push({ x: (i0 + i1 + 1) / 2, z: (j0 + j1 + 1) / 2, hx: (i1 - i0 + 1) / 2, hz: (j1 - j0 + 1) / 2, why: 'помещение' }); }
  ROOM_BLOCKS.set(v, out); return out;

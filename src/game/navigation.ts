@@ -1,6 +1,7 @@
 import { LANDMARKS, MIN, MAX } from '../world';
 import { depositById, depositLeft, bodyHalf, type ResourceNode } from './resources';
 import { ITEMS } from './defs';
+import { doorCenter, type Door } from './rooms';
 import type { GameState } from './state';
 /**
  * One navigation model (S4, D34). `progress.selected` names what the compass, the world marker and the
@@ -17,8 +18,8 @@ export const stationName = (b: { kind: string; level: number }) => b.kind === 'w
 export const nodeRadius = (n: ResourceNode) => Math.max(3, n.radius + 2);
 export const stationRadius = (b: { kind: string }) => Math.max(3, bodyHalf(b.kind) + 2.5);
 export const DOOR_RADIUS = 3;
-/** An airlock as a target: the centre of its 1 m column. */
-export const doorTarget = (d: { id: string; x: number; z: number }) => ({ id: d.id, kind: 'station' as const, name: ITEMS.airlock.name, x: d.x + .5, z: d.z + .5, radius: DOOR_RADIUS });
+/** An airlock module as a target: the centre of its footprint (D36: 2 m wide). */
+export const doorTarget = (d: Door) => { const c = doorCenter(d); return { id: d.id, kind: 'station' as const, name: ITEMS.airlock.name, x: c.x, z: c.z, radius: DOOR_RADIUS }; };
 /** Map mark («Метка») kept inside the walkable square. */
 export const clampWaypoint = (x: number, z: number): Waypoint => ({ x: Math.max(MIN, Math.min(MAX, Math.round(x * 10) / 10)), z: Math.max(MIN, Math.min(MAX, Math.round(z * 10) / 10)) });
 /** The selected target, null for the guide, or 'invalid' when the selection no longer exists. */

@@ -18,8 +18,9 @@ import { itemArt } from './ui/art';
 import { createProductionPanel } from './ui/production';
 import { createBuildings } from './buildings';
 import { productionTick, manualWork, releaseHandOnDeath, machine } from './game/production';
-import { allRooms, around, breathingRoom, doorById, doorKeys, habitableRoom, removeDoor, removeGlass, roomAtCell, roomDoors, structureRoom, type RoomEdit } from './game/rooms';
+import { allRooms, around, doorById, doorKeys, habitableRoom, removeDoor, removeGlass, roomAtCell, roomDoors, structureRoom, type RoomEdit } from './game/rooms';
 import { structureStatus } from './game/stationStatus';
+import { chamberAt, doorStatus, shelteredAir, useDoor } from './game/airlock';
 import * as THREE from 'three';
 import './style.css';
 import './ui/hud.css';
@@ -74,6 +75,7 @@ function boot(){
  const scene=new THREE.Scene();const camera=new THREE.PerspectiveCamera(68,1,.15,1400);
  const fx=createFx(scene,{ground:heightAt}),built=createBuildings(scene,fx),interaction=createWorldInteraction(scene,camera);
  const world=createWorld(scene),actor=new Character(boxes,(a,b,c,d,out)=>built.glass.query(a,b,c,d,out)),audio=new Ambience(),settings=loadSettings(),haptics=createHaptics();
+ built.glass.setSound(kind=>audio.airlock(kind));
  world.lightRoots.push(built.root);const prints=createFootprints(scene,heightAt);
  const diagnostics=new Diagnostics(),gl=renderer.getContext(),rendererVersion=String(gl.getParameter(gl.VERSION));
  const gpuExtension=gl.getExtension('WEBGL_debug_renderer_info');
@@ -88,9 +90,9 @@ function boot(){
  let lastSurvivalEvent='none';
  const token=(globalThis.crypto?.randomUUID?.()??Math.random().toString(36).slice(2)+Date.now().toString(36));
  let game:GameState|null=null,store:SaveStore|null=null,saver:Saver|null=null,storeError='',slotId:string|null=null;
- let holdMine=false,holdRefill=false,aimNode:string|null=null,aimNear=Infinity,hadPassage=false,aimReason='',mineRatio=0,nearDrop:string|null=null,slots:SlotRecord[]=[],actionKind='none',hudKey='';
+ let holdMine=false,holdRefill=false,aimNode:string|null=null,aimNear=Infinity,hadDoorMotion=false,aimReason='',mineRatio=0,nearDrop:string|null=null,slots:SlotRecord[]=[],actionKind='none',hudKey='';
  /** S5 (D37): what the selected scanner reads now (null when the scanner is not selected or nothing is in reach). */
- let scanAim:{kind:'landmark'}|{kind:'deposit';id:string}|{kind:'station';id:string}|{kind:'room';key:number;door:boolean}|null=null;
+ let scanAim:{kind:'landmark'}|{kind:'deposit';id:string}|{kind:'station';id:string}|{kind:'room';key:number;door:string|null}|null=null;
  let refillTanks=false;
  // S4 mining feel: the strike timeline of the current hold (strikes.ts) drives the swing, the reticle ring and every impact cue.
  let swingActive=false,swingStruck=false,swingNeed=0,swingPoseValue=0,kickT=1,kickPitch=0,kickYaw=0,lastHit='',strikesLanded=0,ringNeed=0,heldModel:string|null=null;
@@ -112,6 +114,8 @@ function boot(){
  // ---------- Settings ----------
  function applyQuality(q:Quality){
   settings.quality=q;saveSettings(settings);world.setQuality(q);fx.setQuality(q);prints.setQuality(q);renderer.shadowMap.enabled=q!=='low';lastRender=-Infinity;diagnostics.event('quality',0,{quality:q});
+  // S5: the new shadow setup changes every lit program; the hidden glass and airlock warm-ups join that compile, so the first room built after a quality change compiles nothing.
+  if(sceneReady){built.glass.warmup(true);void renderer.compileAsync(scene,camera).catch(()=>{});built.glass.warmup(false);}
   renderer.setPixelRatio(q==='high'?Math.min(devicePixelRatio,1.5):q==='low'?.75:1);resize();
   el('quality-label').textContent=QUALITY_LABEL[q];
  }
@@ -176,7 +180,7 @@ function boot(){
  el('import-button').onclick=()=>el<HTMLInputElement>('import-file').click();
  el<HTMLInputElement>('import-file').addEventListener('change',e=>{const input=e.target as HTMLInputElement,file=input.files?.[0];input.value='';if(file)void importFile(file);});
  // ---------- Inventory / suit screens (live: game time keeps running) ----------
- const panels=createPanels({game:()=>game,insideCapsule:()=>insideCapsule(),hazard:()=>!insideCapsule()&&!(game&&breathingRoom(game)),tone:k=>audio.tone(k),recipe:id=>production.openRecipe(id),
+ const panels=createPanels({game:()=>game,insideCapsule:()=>insideCapsule(),hazard:()=>!insideCapsule()&&!(game&&shelteredAir(game)),tone:k=>audio.tone(k),recipe:id=>production.openRecipe(id),
   changed:what=>{if(what==='drop')syncDrops();hudKey='';updateHotbar();updateVisor();},
   show:which=>{if(started&&(running||liveDialogs.has(dialog)))setDialog(which);},close:()=>{void saver?.save();resume();}});
  const openPanel=(which:'inventory-panel'|'suit-panel')=>{audio.tone('ui');if(dialog===which){void saver?.save();resume();return;}if(running||liveDialogs.has(dialog)){if(which==='inventory-panel'&&dialog!=='suit-panel')panels.reset();setDialog(which);}};
@@ -233,6 +237,11 @@ function boot(){
   if(!game)return;const key=id.startsWith('glass:')?Number(id.slice(6)):doorKeys(doorById(game,id)!)[0],st=structureStatus(game,key);
   if(st.leak.length)built.glass.showLeak(st.leak,6);production.open(id);
  }
+ /** One press on the aimed airlock door (D36): open it (the chamber equalises first when needed) or close it. */
+ function useAimedDoor(){
+  const id=interaction.target,face=interaction.struck?.face;if(!game||!id||!face)return;
+  const error=useDoor(game,id,face);if(error){toast('Шлюз',error);audio.tone('warn');}else{hudKey='';void saver?.save();}updateAimUI();
+ }
  function retrieveStation(){if(!game||!running)return;if(!nearMachine){removeStructure();return;}const error=packStation(game,nearMachine);toast(error?'Не удалось забрать':'Станция в рюкзаке',error||'Содержимое сохранено');if(!error){built.sync(game);world.invalidateShadows();hudKey='';updateHotbar();void saver?.save();}}
  el('retrieve-station').onclick=retrieveStation;
  const rotateBuild=()=>{if(!running||!(interaction.building||interaction.cellTool))return;interaction.rotate();audio.tone('ui');};
@@ -242,6 +251,7 @@ function boot(){
   lastAction=`${actionKind}:${running}:${nearMachine??''}`;
   if(!running||!game)return;
   if(interaction.cellTool){placeCell();return;}
+  if(actionKind==='door'){useAimedDoor();return;}
   if(actionKind==='room'&&interaction.target){openStructure(interaction.target);return;}
   const before=game.world.base.buildings.length,linksBefore=game.world.base.links.length;
   const result=interaction.action(game);if(result!==null){toast(result?'Действие в мире':'Готово',result||(game.world.base.links.length>linksBefore?'Соединено':'Установлено'));if(!result&&game.world.base.buildings.length>before)audio.tone('discover');
@@ -350,7 +360,7 @@ function boot(){
   if(t.kind==='landmark'){if(!nearest)return;visited.add(nearest.id);const y=heightAt(nearest.x,nearest.z);r={kind:nearest.kind,title:nearest.name,text:nearest.description,rows:[['Координаты',`${Math.round(nearest.x)} · ${Math.round(nearest.z)}`],['Высота',`${y>=0?'+':''}${y.toFixed(1)} м`],['От капсулы',`${Math.round(Math.hypot(nearest.x-40,nearest.z-40))} м`]]};if(nearest.id===selected)selected='guide';}
   else if(t.kind==='deposit')r=scanDeposit(game,t.id);
   else if(t.kind==='station'){const b=machine(game,t.id);if(b)r=scanStation(game,b);}
-  else r=scanRoom(around(t.key).map(n=>roomAtCell(game!,n)).find(Boolean)??structureRoom(game,t.key,256),t.door);
+  else r=scanRoom(around(t.key).map(n=>roomAtCell(game!,n)).find(Boolean)??structureRoom(game,t.key,256),t.door?doorById(game,t.door):undefined);
   if(!r)return;lastScan=t.kind;audio.tone('scan');hand.scan();
   const sweep=el('scan-sweep');sweep.hidden=true;void sweep.offsetWidth;sweep.hidden=false;
   el('info-kind').textContent=r.kind;el('info-title').textContent=r.title;el('info-text').textContent=r.text;
@@ -562,11 +572,16 @@ function boot(){
   else if(kind!=='eat'&&nearMachine){kind='machine';label='Открыть станцию';iconId='i-plug';const b=game&&machine(game,nearMachine);if(b){if(selected?.itemId==='wrench'&&b.kind==='workbench'&&b.level===1){kind='upgrade';label='Улучшить';iconId='i-gear';}box.hidden=!running;const st=stationStatus(game!,b);el('aim-name').textContent=b.kind==='workbench'?'Верстак '+(b.level===2?'II':'I'):ITEMS[b.kind].name;el('aim-meta').textContent=kind==='upgrade'?'Ключ · улучшение до II':st.title;box.classList.toggle('blocked',st.tone==='warn');(el('aim-bar').firstElementChild as HTMLElement).style.transform='scaleX(0)';document.body.dataset.aim='true';}}
   else if(kind==='eat'){blocked=game!.player.survival.foodCooldownMs>0?'Подождите перед следующей порцией':'';}
   if(game&&interaction.cellTool){const id=selected?.itemId;kind='cell';label=id==='airlock'?'Встроить шлюз':'Поставить';iconId='i-pack';el('aim-name').textContent=selected?ITEMS[selected.itemId].name:'';el('aim-meta').textContent=interaction.problem||(id==='window'?'Удерживайте кнопку — ряд блоков':'Встроить в стену');blocked=interaction.problem;box.classList.toggle('blocked',!!blocked);}
-  else if(game&&!nearMachine&&(interaction.target?.startsWith('glass:')||interaction.target?.startsWith('door-'))){
-   const door=interaction.target.startsWith('door-')?doorById(game,interaction.target):undefined,key=door?doorKeys(door)[0]:Number(interaction.target.slice(6));
+  else if(game&&!nearMachine&&interaction.target?.startsWith('door-')){
+   // D36: F opens or closes the aimed door; the lamp colour (red: the other door is open) also tints the label.
+   const door=doorById(game,interaction.target),face=interaction.struck?.face;(el('aim-bar').firstElementChild as HTMLElement).style.transform='scaleX(0)';
+   if(door&&face){const st=doorStatus(game,door,face);kind='door';label=st.action;iconId='i-hand';el('aim-name').textContent=st.name;el('aim-meta').textContent=st.meta;box.classList.toggle('blocked',st.lamp==='locked');}
+   else if(door){kind='room';label='Открыть шлюз';iconId='i-plug';el('aim-name').textContent='Шлюз';el('aim-meta').textContent=door.width===2?'Камера '+String(Math.round(door.pressure/100)/10).replace('.',',')+' GU':'Шлюз прежней версии';box.classList.remove('blocked');}}
+  else if(game&&!nearMachine&&interaction.target?.startsWith('glass:')){
+   const key=Number(interaction.target.slice(6));
    // Cheap caption (no leak search every frame): the room beside the block or the box it belongs to (≤ 64 blocks).
-   const room=around(key).map(n=>roomAtCell(game!,n)).find(Boolean)??structureRoom(game,key,64);kind='room';label=door?'Открыть шлюз':'Открыть помещение';iconId='i-plug';
-   el('aim-name').textContent=door?'Шлюз':room?`Помещение · ${room.volume} м³`:'Стеклоблок';el('aim-meta').textContent=(room?(habitableRoom(room)?'Воздух пригоден':`Воздух ${Math.floor(room.zone.q/1000)} GU · непригоден`):'Не замкнуто');box.classList.toggle('blocked',!room||!habitableRoom(room));(el('aim-bar').firstElementChild as HTMLElement).style.transform='scaleX(0)';}
+   const room=around(key).map(n=>roomAtCell(game!,n)).find(Boolean)??structureRoom(game,key,64);kind='room';label='Открыть помещение';iconId='i-plug';
+   el('aim-name').textContent=room?`Помещение · ${room.volume} м³`:'Стеклоблок';el('aim-meta').textContent=(room?(habitableRoom(room)?'Воздух пригоден':`Воздух ${Math.floor(room.zone.q/1000)} GU · непригоден`):'Не замкнуто');box.classList.toggle('blocked',!room||!habitableRoom(room));(el('aim-bar').firstElementChild as HTMLElement).style.transform='scaleX(0)';}
   else if(game&&interaction.building){kind='place';label='Установить';iconId='i-pack';el('aim-name').textContent=selected?ITEMS[selected.itemId].name:'';el('aim-meta').textContent=interaction.problem||'Можно установить';blocked=interaction.problem;}
   else if(game&&interaction.linking){kind='link';label='Соединить';iconId='i-plug';el('aim-name').textContent=selected?ITEMS[selected.itemId].name:'';el('aim-meta').textContent=interaction.hint;box.classList.toggle('blocked',!interaction.linkOk);}
   else if(game&&interaction.target?.startsWith('crate-')){kind='crate';label='Открыть ящик';iconId='i-pack';el('aim-name').textContent='Ящик снабжения';el('aim-meta').textContent='';}
@@ -577,9 +592,9 @@ function boot(){
   // capsule its port is the target wherever you look, so there the scanner reads the capsule (the port opens with any
   // other slot). Without it there is no scan action at all (and the scanner never mines).
   scanAim=null;
-  if(game&&selected?.itemId==='scanner'&&['mine','machine','upgrade','room','capsule','none'].includes(kind)){
+  if(game&&selected?.itemId==='scanner'&&['mine','machine','upgrade','room','door','capsule','none'].includes(kind)){
    const st=interaction.target,door=st?.startsWith('door-')?doorById(game,st):undefined;
-   scanAim=kind==='mine'&&n?{kind:'deposit',id:n.id}:kind==='machine'||kind==='upgrade'?{kind:'station',id:nearMachine!}:kind==='room'?(door?{kind:'room',key:doorKeys(door)[0],door:true}:{kind:'room',key:Number(st!.slice(6)),door:false}):nearest?{kind:'landmark'}:null;
+   scanAim=kind==='mine'&&n?{kind:'deposit',id:n.id}:kind==='machine'||kind==='upgrade'?{kind:'station',id:nearMachine!}:kind==='room'||kind==='door'?(door?{kind:'room',key:doorKeys(door)[0],door:door.id}:{kind:'room',key:Number(st!.slice(6)),door:null}):nearest?{kind:'landmark'}:null;
    kind=scanAim?'scan':'none';label='Сканировать';iconId='i-scan';blocked='';el('aim-meta').textContent='';el('aim-wear').textContent='';box.classList.remove('blocked');(el('aim-bar').firstElementChild as HTMLElement).style.transform='scaleX(0)';
    const b=nearMachine?machine(game,nearMachine):undefined;el('aim-name').textContent=!scanAim?'':scanAim.kind==='deposit'?n!.name:scanAim.kind==='station'&&b?stationName(b):scanAim.kind==='room'?(door?'Шлюз':'Стеклоблок'):nearest?.name??'';
   }
@@ -694,7 +709,7 @@ function boot(){
   const alert=el('survival-alert');
   const critical=started&&g.player.vitals.health>0&&(ratio<=.2||g.player.vitals.health<=20||g.player.vitals.satiety===0);
   alert.setAttribute('aria-hidden',String(!critical));document.body.dataset.hazard=critical?'critical':'safe';
-  const text=!critical?'':ratio<=.2?(source.emergency?'АВАРИЙНЫЙ РЕЗЕРВ ЗАКАНЧИВАЕТСЯ':!inCapsule&&!breathingRoom(g)&&wornParts(g)<4?'КОСТЮМ НЕГЕРМЕТИЧЕН':'КИСЛОРОД КРИТИЧЕСКИ НИЗКИЙ'):g.player.vitals.health<=20?'ЗДОРОВЬЕ КРИТИЧЕСКИ НИЗКО':'СЫТОСТЬ ИСЧЕРПАНА';
+  const text=!critical?'':ratio<=.2?(source.emergency?'АВАРИЙНЫЙ РЕЗЕРВ ЗАКАНЧИВАЕТСЯ':!inCapsule&&!shelteredAir(g)&&wornParts(g)<4?'КОСТЮМ НЕГЕРМЕТИЧЕН':'КИСЛОРОД КРИТИЧЕСКИ НИЗКИЙ'):g.player.vitals.health<=20?'ЗДОРОВЬЕ КРИТИЧЕСКИ НИЗКО':'СЫТОСТЬ ИСЧЕРПАНА';
   const textNode=el('survival-alert-text');if(textNode.textContent!==text)textNode.textContent=text;
  }
  function updateVisor(){el('visor').hidden=!game?.player.suit.helmet;}
@@ -713,7 +728,7 @@ function boot(){
   const o=objective();if(o!==lastObjective){lastObjective=o;el('objective-text').textContent=o;const ob=el('objective');ob.classList.remove('advance');void ob.offsetWidth;ob.classList.add('advance');}
   updateVitals();updateHotbar();updateDayButton();
  }
- function state(){const sorted=[...frames].sort((a,b)=>a-b);return {ready:true,version:'S3',linkSource:interaction.source,lastAction,fx:fx.stats(),guide:game?{current:currentStep(game),objective:el('objective-text').textContent,task:el('objective-task').textContent,nav:navTarget(),selected}:null,map:mapUI.debug(),waypoint,station:production.station,worldTarget:interaction.target,quests:game?structuredClone(game.progress.quests):null,questBook:questBook.debug(),vitals:game?{...game.player.vitals}:null,survival:game?{...game.player.survival}:null,capsuleMilliGU:game?.world.capsuleMilliGU??0,base:game?structuredClone(game.world.base):null,rooms:game?allRooms(game).map(r=>({cell:r.cell,volume:r.volume,q:r.zone.q/1000,purity:r.zone.purity,temperature:r.zone.temperature,habitable:habitableRoom(r),doors:roomDoors(game!,r).map(d=>d.id)})):[],glass:game?{count:game.world.base.glass.length,...built.glass.stats()}:null,cellTarget:interaction.cell,cellProblem:interaction.cellTool?interaction.problem:'',struck:interaction.struck,pendingRemove:pendingRemove&&performance.now()<pendingRemove.until?pendingRemove.text:'',visibleDrops:dropGroup.children.length,slotId,revision:saver?.revision??0,saveStatus:saver?.status.kind??(game?'none':'idle'),halted:!!saver?.halted,activeTicks:clock.activeTicks,clockRunning:clock.running,hotbar:game?.player.hotbar??0,cells:game?game.player.inventory.map(s=>s?{...s}:null):[],suit:game?Object.fromEntries(Object.entries(game.player.suit).map(([k,v])=>[k,v?.itemId??null])):null,worn:game?wornParts(game):0,bottles:game?game.player.bottles.map(b=>b?{...b}:null):[],oxygenGU:game?oxygenGU(game):0,dayPhase:dayPhase(),dayOffsetTicks:game?.world.dayOffsetTicks??0,nightValue:world.nightValue,action:actionKind,handItem:hand.item!==null,feel:{strikes:strikesLanded,hit:lastHit,swing:swingPoseValue,crack:world.deposits.crackLevel,shell:world.deposits.shell.visible,pops:feed.pops,crumbling:world.deposits.crumbling,punching:world.deposits.punching,ring:reticle.classList.contains('mining'),haptics:haptics.played,model:hand.item},haptics:settings.haptics,panel:panels.debug,aimNode,mineRatio,nodes:game?{...game.world.nodes}:null,veins:game?structuredClone(game.world.veins):[],respawn:game?structuredClone(game.world.respawn):[],nextVeinId:game?.world.nextVeinId??0,veinGroups:[...world.nodeGroups.keys()].filter(k=>k.startsWith('vein-')).length,veinBoxes:boxes.filter(b=>b.id.startsWith('vein-')).length,toast:{kind:el('toast-kind').textContent,text:el('toast-text').textContent},inventory:game?game.player.inventory.filter(Boolean).map(s=>({...s})):[],drops:game?game.world.drops.length:0,storage:!!store,grassCount:world.grassCount,fullscreen:!!document.fullscreenElement,running,dialog,night:!isDay(dayPhase()),selected,visited:[...visited],activeTime:clock.activeSeconds,position:{x:actor.x,y:actor.y,z:actor.z},yaw:actor.yaw,pitch:actor.pitch,grounded:actor.grounded,input:{...input,joyX,joyY,joyPointer,lookPointer},quality:settings.quality,sound:settings.sound,bob:settings.bob,fov:settings.fov,fineTerrainBlocks:world.terrain.fineBlocks,midTerrainBlocks:world.terrain.midBlocks,drawCalls:renderCalls,triangles:renderTriangles,terrainSettled:world.terrain.settled,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0,viewport:{width:innerWidth,height:innerHeight},renderer:rendererVersion,diagnostics:diagnostics.enabled,shadowTarget:world.sunLight.target.position.toArray(),shadowRedraws:world.shadowRedraws,footprints:{count:prints.count,visible:prints.visible},motes:world.motes.count,drift:{live:world.drift.live,cap:world.drift.cap,born:world.drift.born},wind:{gust:world.wind.gust,angle:world.wind.angle,time:world.wind.time},pointLights:{pool:world.lights.count,active:world.lights.active,emitters:world.lights.emitters},shadowBias:world.sunLight.shadow.bias};}
+ function state(){const sorted=[...frames].sort((a,b)=>a-b);return {ready:true,version:'S3',linkSource:interaction.source,lastAction,fx:fx.stats(),guide:game?{current:currentStep(game),objective:el('objective-text').textContent,task:el('objective-task').textContent,nav:navTarget(),selected}:null,map:mapUI.debug(),waypoint,station:production.station,worldTarget:interaction.target,quests:game?structuredClone(game.progress.quests):null,questBook:questBook.debug(),vitals:game?{...game.player.vitals}:null,survival:game?{...game.player.survival}:null,capsuleMilliGU:game?.world.capsuleMilliGU??0,base:game?structuredClone(game.world.base):null,doors:game?game.world.base.doors.map(d=>({id:d.id,width:d.width,outer:d.outer,inner:d.inner,pressure:d.pressure,cycleMs:d.cycleMs,shown:built.glass.doorOpen(d.id)})):[],chamber:game?chamberAt(game,game.player.x,game.player.y+1,game.player.z)?.id??null:null,rooms:game?allRooms(game).map(r=>({cell:r.cell,volume:r.volume,q:r.zone.q/1000,purity:r.zone.purity,temperature:r.zone.temperature,habitable:habitableRoom(r),doors:roomDoors(game!,r).map(d=>d.id)})):[],glass:game?{count:game.world.base.glass.length,...built.glass.stats()}:null,cellTarget:interaction.cell,cellProblem:interaction.cellTool?interaction.problem:'',struck:interaction.struck,pendingRemove:pendingRemove&&performance.now()<pendingRemove.until?pendingRemove.text:'',visibleDrops:dropGroup.children.length,slotId,revision:saver?.revision??0,saveStatus:saver?.status.kind??(game?'none':'idle'),halted:!!saver?.halted,activeTicks:clock.activeTicks,clockRunning:clock.running,hotbar:game?.player.hotbar??0,cells:game?game.player.inventory.map(s=>s?{...s}:null):[],suit:game?Object.fromEntries(Object.entries(game.player.suit).map(([k,v])=>[k,v?.itemId??null])):null,worn:game?wornParts(game):0,bottles:game?game.player.bottles.map(b=>b?{...b}:null):[],oxygenGU:game?oxygenGU(game):0,dayPhase:dayPhase(),dayOffsetTicks:game?.world.dayOffsetTicks??0,nightValue:world.nightValue,action:actionKind,handItem:hand.item!==null,feel:{strikes:strikesLanded,hit:lastHit,swing:swingPoseValue,crack:world.deposits.crackLevel,shell:world.deposits.shell.visible,pops:feed.pops,crumbling:world.deposits.crumbling,punching:world.deposits.punching,ring:reticle.classList.contains('mining'),haptics:haptics.played,model:hand.item},haptics:settings.haptics,panel:panels.debug,aimNode,mineRatio,nodes:game?{...game.world.nodes}:null,veins:game?structuredClone(game.world.veins):[],respawn:game?structuredClone(game.world.respawn):[],nextVeinId:game?.world.nextVeinId??0,veinGroups:[...world.nodeGroups.keys()].filter(k=>k.startsWith('vein-')).length,veinBoxes:boxes.filter(b=>b.id.startsWith('vein-')).length,toast:{kind:el('toast-kind').textContent,text:el('toast-text').textContent},inventory:game?game.player.inventory.filter(Boolean).map(s=>({...s})):[],drops:game?game.world.drops.length:0,storage:!!store,grassCount:world.grassCount,fullscreen:!!document.fullscreenElement,running,dialog,night:!isDay(dayPhase()),selected,visited:[...visited],activeTime:clock.activeSeconds,position:{x:actor.x,y:actor.y,z:actor.z},yaw:actor.yaw,pitch:actor.pitch,grounded:actor.grounded,input:{...input,joyX,joyY,joyPointer,lookPointer},quality:settings.quality,sound:settings.sound,bob:settings.bob,fov:settings.fov,fineTerrainBlocks:world.terrain.fineBlocks,midTerrainBlocks:world.terrain.midBlocks,drawCalls:renderCalls,triangles:renderTriangles,programs:renderer.info.programs?.length??0,terrainSettled:world.terrain.settled,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0,viewport:{width:innerWidth,height:innerHeight},renderer:rendererVersion,diagnostics:diagnostics.enabled,shadowTarget:world.sunLight.target.position.toArray(),shadowRedraws:world.shadowRedraws,footprints:{count:prints.count,visible:prints.visible},motes:world.motes.count,drift:{live:world.drift.live,cap:world.drift.cap,born:world.drift.born},wind:{gust:world.wind.gust,angle:world.wind.angle,time:world.wind.time},pointLights:{pool:world.lights.count,active:world.lights.active,emitters:world.lights.emitters},shadowBias:world.sunLight.shadow.bias};}
  const dev=!!(import.meta as unknown as {env?:{DEV?:boolean}}).env?.DEV;
  Object.defineProperty(window,'__vireon',{value:{getState:state,save:()=>saver?.save(),snapshot:()=>game?snapshot():null,diagnostics:()=>diagnosticReport(),
   // Development-only verification helpers; absent from production builds.
@@ -741,7 +756,7 @@ function boot(){
   }else{input.forward=input.right=0;input.jump=false;}
   // One accepted clock drives everything: ≤5 fixed 50 ms steps per frame, nothing while paused/hidden.
   const steps=clock.advance(actualFrameMs);let productionChanged=false,regrown=false;const spawned:string[]=[];
-  for(let i=0;i<steps;i++){const px=actor.x,pz=actor.z,wasAir=!actor.grounded;if(game?.world.base.passage){input.forward=input.right=0;input.run=false;input.jump=false;}actor.step(FIXED_DT,input,game?survivalSpeed(game):1);input.jump=false;
+  for(let i=0;i<steps;i++){const px=actor.x,pz=actor.z,wasAir=!actor.grounded;actor.step(FIXED_DT,input,game?survivalSpeed(game):1);input.jump=false;
    if(wasAir&&actor.grounded){if(airTime>.25)footstep(false,true);airTime=0;}else if(!actor.grounded)airTime+=FIXED_DT;
    const moved=Math.hypot(actor.x-px,actor.z-pz);if(actor.grounded&&moved>0){stride+=moved;bob+=moved*(input.run?2.4:2.9);if(stride>(input.run?.82:.68)){stride=0;audio.step(input.run,insideCapsule());footstep(input.run);}}
    if(game){
@@ -751,16 +766,15 @@ function boot(){
     // A finished transfer ends its mode: a tank installed later never starts filling (or draining) without a new press.
     const port=dialog==='production-panel'&&insideCapsule();
     if(port&&refillMachine==='capsule-out'&&!refillFromCapsule(game,FIXED_DT)||port&&refillMachine==='capsule-in'&&!refillCapsule(game,FIXED_DT)||refillMachine&&!refillMachine.startsWith('capsule')&&(game.player.bottles.every(t=>!t||(t.milliGU??0)>=TANKS[t.itemId].capacity)||(machine(game,refillMachine)?.oxygen??0)<=0)){refillMachine=null;void saver?.save();}
-    if(produced.passage){Object.assign(actor,produced.passage);actor.previous={x:actor.x,y:actor.y,z:actor.z};Object.assign(game.player,produced.passage);}
     if(produced.changed)productionChanged=true;
     const survival=survivalTick(game,FIXED_DT,insideCapsule(),(input.run||(!actor.grounded&&actor.airSpeed>3.5*survivalSpeed(game)+.01))&&moved>0);
     if(survival!==lastSurvivalEvent){lastSurvivalEvent=survival;if(survival==='warning')toast('ВНИМАНИЕ','Проверьте кислород');if(survival==='damage')audio.tone('warn');}
     if(survival==='death'){
-     clock.activeTicks-=steps-i-1;releaseHandOnDeath(game);loseCargo(game);game.world.base.passage=null;mining.nodeId=null;mining.ticks=0;aimReason='';mineRatio=0;swingActive=swingStruck=false;world.deposits.setCrack(null);
+     clock.activeTicks-=steps-i-1;releaseHandOnDeath(game);loseCargo(game);mining.nodeId=null;mining.ticks=0;aimReason='';mineRatio=0;swingActive=swingStruck=false;world.deposits.setCrack(null);
      syncDrops();hudKey='';updateHotbar();updateVitals();setDialog('death-panel');void saver?.save();break;
     }
     if(running&&holdRefill&&actionKind==='refill'&&insideCapsule()&&(refillTanks?refillFromCapsule(game,FIXED_DT):refillCapsule(game,FIXED_DT))){hudKey='';updateHotbar();}
-    const ev=mineTick(game,mining,running?aimNode:null,running&&holdMine&&!game.world.base.hand&&!manualWork(game)&&!game.world.base.passage);
+    const ev=mineTick(game,mining,running?aimNode:null,running&&holdMine&&!game.world.base.hand&&!manualWork(game));
     aimReason=ev.kind==='blocked'?ev.reason:'';mineRatio=ev.kind==='progress'?ev.ratio:0;
     // S4: impacts come from the strike timeline (strikes.ts); the break tick is the last impact of the block.
     if(ev.kind==='progress'){swingActive=true;swingNeed=ev.need;if(impactAt(ev.tick,ev.need))strike(ev.nodeId,impactsBy(ev.tick,ev.need),ev.need);}
@@ -819,8 +833,8 @@ function boot(){
   if(started){drawCompass(bearing(Math.sin(actor.yaw),Math.cos(actor.yaw)));updateMarker();computeAim();updateTarget(dt);updateAimUI();updateRing();feed.tick(running?dt:0,project);
    // Held F: one more block every 0.25 s as the aim moves to a new cell resting on something that was there before the hold.
    if(holdPlace&&running&&game&&interaction.cellTool&&performance.now()-lastPlace>=250&&interaction.cell!==null&&!interaction.problem&&!placedInHold.has(interaction.cell)&&!placedInHold.has(interaction.support))placeCell();}
-  // The frame a cycle ends still redraws the shadow: the shutters snap shut after base.passage is already cleared.
-  if(game&&started){built.update(game,frozen?0:dt);const cycling=!!game.world.base.passage;if(built.animating||cycling||hadPassage)world.invalidateShadows();hadPassage=cycling;}
+  // Moving airlock leaves cast moving shadows; the frame after they stop still redraws it once.
+  if(game&&started){built.update(game,frozen?0:dt);const cycling=built.glass.animating;if(built.animating||cycling||hadDoorMotion)world.invalidateShadows();hadDoorMotion=cycling;}
   if(running&&dt>0){frames.push(actualFrameMs);if(frames.length>180)frames.shift();}
   if(now-lastUI>150){updateUI();lastUI=now;if(showMetrics){const sorted=[...frames].sort((a,b)=>a-b),s={drawCalls:renderCalls,triangles:renderTriangles,terrainSettled:world.terrain.settled,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0};const ob=el('objective').getBoundingClientRect();el('metrics').style.top=`${Math.round(ob.bottom+8)}px`;el('metrics').textContent=`S3 / WebGL2 / DPR ${renderer.getPixelRatio()} / ${settings.quality}\nВызовы: ${s.drawCalls} · треуг.: ${s.triangles}\nКадр p95: ${s.frameP95Ms.toFixed(1)} мс\nX ${actor.x.toFixed(1)} · Z ${actor.z.toFixed(1)}\nЭто замер текущего браузера`;}}
   diagnostics.stage('hud',measured);if(diagnostics.enabled&&!afterHidden)diagnostics.frame(diagnosticGapMs,workStart,diagnosticContext());

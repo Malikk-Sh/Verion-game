@@ -546,8 +546,8 @@
         512,
         512
       ],
-      "game_bytes": 32352,
-      "game_sha256": "d412ffa7f73e685592909f37598cb5286d9046de7bac5d35a773401bb2cc3ff6",
+      "game_bytes": 17996,
+      "game_sha256": "ac358124bbee5b1eef758d419111824755e7a5fcc7113b096838b39dda4f7961",
       "transparent_background": true
     },
     {
@@ -559,8 +559,8 @@
         512,
         512
       ],
-      "game_bytes": 9912,
-      "game_sha256": "a3b57ddd77c3e965c7ee16448238a76d9372039167e72e53f00b318fb8c001a0",
+      "game_bytes": 13500,
+      "game_sha256": "b1cc8b69249744f75e15785ab5844c61fe9270fa507bcc714a17b328dee6f011",
       "transparent_background": true
     }
   ],
