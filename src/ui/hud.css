@@ -89,7 +89,8 @@
 #visor-settings-panel{width:min(620px,calc(100vw - var(--sl) - var(--sr)));max-height:calc(100dvh - 20px);padding:16px;display:flex;flex-direction:column;gap:16px;overflow:hidden}
 #visor-settings-panel h2{font-size:22px;margin:0}.visor-settings-grid{display:grid;gap:12px}.visor-size-row{font-size:14px;gap:6px 8px}
 #visor-settings-panel .help{font-size:11px;line-height:1.35;margin:0}
-@media(max-height:360px){#visor-settings-panel{padding:12px 16px;gap:10px}.visor-settings-grid{gap:8px}.visor-size-row{font-size:12px;gap:4px 8px}}
+@media(max-height:360px){#visor-settings-panel{padding:12px 16px;gap:10px}.visor-settings-grid{gap:8px 14px}.visor-size-row{font-size:12px;gap:4px 8px}}
+@media(max-height:420px){.visor-settings-grid{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:14px}}
 /* S5 (D38): keyboard controls live only here; the game UI names on-screen buttons. Two or three columns, no page overflow. */
 #keys-settings-panel{width:min(820px,calc(100vw - var(--sl) - var(--sr)));max-height:calc(100dvh - 20px);padding:12px 16px;display:flex;flex-direction:column;gap:8px;overflow:hidden}
 #keys-settings-panel h2{font-size:22px;margin:0}#keys-settings-panel .help{font-size:11px;line-height:1.35;margin:0;flex-shrink:0}

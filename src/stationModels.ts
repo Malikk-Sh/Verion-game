@@ -252,9 +252,9 @@ export function buildDoor(width: 1 | 2 = 2, drop = 0, depth: 1 | 2 = 2): DoorVis
  const put = (mesh: THREE.InstancedMesh, i: number, x: number, y: number, z: number, sx: number, sy: number, sz: number, turn = false) => mesh.setMatrixAt(i, mx.compose(v.set(x, y, z), turn ? flip : q, sc.set(sx, sy, sz)));
  // Lights: 0/1 strips over the outer/inner doorway outside, 2/3 the same doors seen from the chamber, 4 screen, 5 its bar,
  // 6 its status dot, 7 the chamber's ceiling light (a long cold strip between the grilles).
- const strips = [[0, mid(), Z + .052, w - .5, .035, .02], [0, mid(), -Z - .052, w - .5, .035, .02], [0, LINTEL - .022, Z - .1, w - 2 * JAMB - .1, .02, .03], [0, LINTEL - .022, -Z + .1, w - 2 * JAMB - .1, .02, .03], [-h + JAMB + .033, 1.29, 0, .004, .14, .22], [0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0], [0, LINTEL - .006, 0, .12, .008, D - .5]];
+ const strips = [[0, mid(), Z + .052, w - .5, .035, .02], [0, mid(), -Z - .052, w - .5, .035, .02], [0, LINTEL - .022, Z - .1, w - 2 * JAMB - .1, .02, .03], [0, LINTEL - .022, -Z + .1, w - 2 * JAMB - .1, .02, .03], [-h + JAMB + .033, 1.29, 0, .004, .14, .22], [0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0], [0, LINTEL - .006, 0, .06, .006, D - .6]];
  strips.forEach((s, i) => put(lights, i, s[0], s[1], s[2], s[3], s[4], s[5]));
- lights.setColorAt(4, col.set('#0b3a3d')); lights.setColorAt(7, col.set('#cfeef0'));
+ lights.setColorAt(4, col.set('#0b3a3d')); lights.setColorAt(7, col.set('#6f9ea2'));
  let t = Math.random() * 10;
  function update(dt: number, look: DoorLook, still = false) {
   t += still ? 0 : dt;
