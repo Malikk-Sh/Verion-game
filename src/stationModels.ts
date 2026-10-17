@@ -226,7 +226,9 @@ export function buildDoor(width: 1 | 2 = 2, drop = 0): DoorVisual {
  const leafKey = 'leaf' + w, leafGeo = DOOR_GEO.get(leafKey) ?? (DOOR_GEO.set(leafKey, leafGeometry(lw)), DOOR_GEO.get(leafKey)!), holeGeo = DOOR_GEO.get('hole') ?? (DOOR_GEO.set('hole', portholeGeometry()), DOOR_GEO.get('hole')!);
  const group = new THREE.Group(), frame = new THREE.Mesh(frameGeo, DOOR_MAT); frame.castShadow = frame.receiveShadow = true; group.add(frame);
  const leaves = new THREE.InstancedMesh(leafGeo, DOOR_MAT, 4), holes = new THREE.InstancedMesh(holeGeo, DOOR_MAT, 4), lights = new THREE.InstancedMesh(BOX, LIGHT_MAT, 7);
- leaves.castShadow = true; leaves.receiveShadow = true; group.add(leaves, holes, lights);
+ // The leaves cast no shadow: the frame's shadow already outlines the doorway, moving leaves never force a shadow redraw,
+ // and an instanced shadow caster would compile its own depth program on the first airlock in view.
+ leaves.receiveShadow = true; group.add(leaves, holes, lights);
  for (const m of [leaves, holes, lights]) { m.frustumCulled = false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); }
  const mx = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3(), col = new THREE.Color(), hr = Math.min(1, lw / .5);
  const flip = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
