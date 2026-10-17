@@ -221,7 +221,7 @@ export function createMap(d: Deps) {
    for (const l of base.links) { const a = endpoint(g, l.from), b = endpoint(g, l.to); if (!a || !b) continue; const s = S(a.x, a.z), e = S(b.x, b.z); ctx.strokeStyle = l.kind === 'cable' ? 'rgba(255,196,110,.75)' : 'rgba(127,230,218,.8)'; ctx.lineWidth = 1.5; ctx.setLineDash(l.kind === 'cable' ? [] : [4, 3]); ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke(); }
    ctx.setLineDash([]);
    const prints: MapFootprint[] = [...mapFootprintSources.flatMap(f => f(g))]; glassMarks = prints.map(f => f.tone);
-   if (z >= 5) { ctx.fillStyle = 'rgba(166,226,236,.30)'; ctx.strokeStyle = 'rgba(214,246,250,.55)'; ctx.lineWidth = 1; for (const c of glassColumns(g)) { const s = S(c.i + 1, c.j + 1); if (s.x + z > 0 && s.y + z > 0 && s.x < w && s.y < h) columnMarks++; ctx.fillRect(s.x, s.y, z, z); ctx.strokeRect(s.x + .5, s.y + .5, z - 1, z - 1); } }
+   if (z >= 5) { ctx.fillStyle = 'rgba(166,226,236,.30)'; ctx.strokeStyle = 'rgba(214,246,250,.55)'; ctx.lineWidth = 1; for (const c of glassColumns(g)) { const s = S(c.i + 1, c.j + 1); if (s.x + z <= 0 || s.y + z <= 0 || s.x >= w || s.y >= h) continue; columnMarks++; ctx.fillRect(s.x, s.y, z, z); ctx.strokeRect(s.x + .5, s.y + .5, z - 1, z - 1); } }
    for (const b of base.buildings) { const half = bodyHalf(b.kind); prints.push({ id: b.id, x: b.x, z: b.z, w: half * 2, d: half * 2, rot: b.rot, tone: stationStatus(g, b).tone, label: stationName(b) }); }
    for (const f of prints) {
     const s = S(f.x, f.z), fw = Math.max(10, f.w * z), fd = Math.max(10, f.d * z), c = TONE[f.tone]; markers++;
