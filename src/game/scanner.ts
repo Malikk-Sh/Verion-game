@@ -1,4 +1,4 @@
-import { addItems, countItem } from './inventory';
+import { countItem } from './inventory';
 import { dropItems, itemName } from './mining';
 import { depositById, depositLeft, isVeinId } from './resources';
 import { ITEMS, TANKS } from './defs';
@@ -19,15 +19,16 @@ export type ScannerGrant = 'none' | 'quick' | 'backpack' | 'capsule';
 /** Next to the capsule hatch, where a drop is easy to find (SPAWN_POSE faces it). */
 export const SCANNER_DROP = { x: 40, z: 43.2 };
 const holds = (g: GameState) => countItem(g.player.inventory, SCANNER) > 0 || Object.values(g.world.crates).some(c => countItem(c, SCANNER) > 0) || g.world.drops.some(d => d.items.some(s => s.itemId === SCANNER));
-/** Grants the scanner once to a save that never had it: into a free quick slot (it is used from there), else the backpack
- *  rows, else as a drop at the capsule. A world that already holds one (backpack, crates, drops) is only marked.
- *  Returns where it went; 'none' when nothing was given. */
+/** Grants the scanner once to a save that never had it: into a free quick slot other than the selected one (it is used
+ *  from there; the selected empty slot is the bare hand for gathering, so the player is never suddenly holding it), else
+ *  the backpack rows, else as a drop at the capsule. A world that already holds one (backpack, crates, drops) is only
+ *  marked. Returns where it went; 'none' when nothing was given. */
 export function grantScanner(g: GameState): ScannerGrant {
  if (g.progress.scanner) return 'none';
  g.progress.scanner = true;
  if (holds(g)) return 'none';
- const quick = g.player.inventory.slice(0, HOTBAR_SIZE).indexOf(null); if (quick >= 0) { g.player.inventory[quick] = { itemId: SCANNER, count: 1 }; return 'quick'; }
- if (!addItems(g.player.inventory, SCANNER, 1)) return 'backpack';
+ const quick = g.player.inventory.slice(0, HOTBAR_SIZE).findIndex((s, i) => !s && i !== g.player.hotbar); if (quick >= 0) { g.player.inventory[quick] = { itemId: SCANNER, count: 1 }; return 'quick'; }
+ const row = g.player.inventory.findIndex((s, i) => !s && i >= HOTBAR_SIZE); if (row >= 0) { g.player.inventory[row] = { itemId: SCANNER, count: 1 }; return 'backpack'; }
  dropItems(g, SCANNER_DROP.x, SCANNER_DROP.z, [{ itemId: SCANNER, count: 1 }]); return 'capsule';
 }
 export const scannerSelected = (g: GameState) => g.player.inventory[g.player.hotbar]?.itemId === SCANNER;

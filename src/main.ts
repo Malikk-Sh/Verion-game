@@ -572,12 +572,14 @@ function boot(){
   else if(game&&interaction.target?.startsWith('crate-')){kind='crate';label='Открыть ящик';iconId='i-pack';el('aim-name').textContent='Ящик снабжения';el('aim-meta').textContent='';}
   else if(game&&interaction.target==='capsule'&&kind!=='eat'){kind='capsule';label='Открыть заправку';iconId='i-plug';el('aim-name').textContent='Капсула · кислородный порт';el('aim-meta').textContent='Заправка баллонов';}
   if(pendingRemove&&performance.now()<pendingRemove.until&&interaction.struck?.key===pendingRemove.key){if(!el('aim-name').textContent)el('aim-name').textContent=interaction.struck.door?'Шлюз':'Стеклоблок';el('aim-meta').textContent=pendingRemove.text;box.classList.add('blocked');}
-  // S5 (D37): with the scanner selected the action reads the aimed deposit, station or structure, else the nearby place;
-  // without it there is no scan action at all (and the scanner never mines).
+  // S5 (D37): with the scanner selected the action reads the aimed deposit, station or structure, else (nothing aimed) the
+  // nearby place; like the wrench it replaces only the actions on what it reads, so pickup and crates stay. Inside the
+  // capsule its port is the target wherever you look, so there the scanner reads the capsule (the port opens with any
+  // other slot). Without it there is no scan action at all (and the scanner never mines).
   scanAim=null;
-  if(game&&selected?.itemId==='scanner'){
+  if(game&&selected?.itemId==='scanner'&&['mine','machine','upgrade','room','capsule','none'].includes(kind)){
    const st=interaction.target,door=st?.startsWith('door-')?doorById(game,st):undefined;
-   scanAim=n?{kind:'deposit',id:n.id}:nearMachine?{kind:'station',id:nearMachine}:st?.startsWith('glass:')?{kind:'room',key:Number(st.slice(6)),door:false}:door?{kind:'room',key:doorKeys(door)[0],door:true}:nearest?{kind:'landmark'}:null;
+   scanAim=kind==='mine'&&n?{kind:'deposit',id:n.id}:kind==='machine'||kind==='upgrade'?{kind:'station',id:nearMachine!}:kind==='room'?(door?{kind:'room',key:doorKeys(door)[0],door:true}:{kind:'room',key:Number(st!.slice(6)),door:false}):nearest?{kind:'landmark'}:null;
    kind=scanAim?'scan':'none';label='Сканировать';iconId='i-scan';blocked='';el('aim-meta').textContent='';el('aim-wear').textContent='';box.classList.remove('blocked');(el('aim-bar').firstElementChild as HTMLElement).style.transform='scaleX(0)';
    const b=nearMachine?machine(game,nearMachine):undefined;el('aim-name').textContent=!scanAim?'':scanAim.kind==='deposit'?n!.name:scanAim.kind==='station'&&b?stationName(b):scanAim.kind==='room'?(door?'Шлюз':'Стеклоблок'):nearest?.name??'';
   }

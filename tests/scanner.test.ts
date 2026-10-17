@@ -31,6 +31,9 @@ test('Older saves get the scanner once: a free quick slot, else the backpack row
  a.player.inventory[a.player.inventory.findIndex(s=>s?.itemId===SCANNER)]=null;assert.equal(grantScanner(a),'none');assert.equal(countItem(a.player.inventory,SCANNER),0);
  const full=old();full.player.inventory=full.player.inventory.map(()=>({itemId:'stone',count:64}));assert.equal(grantScanner(full),'capsule');
  const pile=full.world.drops.find(d=>d.items.some(s=>s.itemId===SCANNER))!;assert.deepEqual([pile.x,pile.z],[SCANNER_DROP.x,SCANNER_DROP.z]);assert.deepEqual(sanitizeState(JSON.parse(JSON.stringify(full))),full);
+ // The selected empty quick slot is the bare hand: the grant skips it (S5 review), and with no other free quick slot uses the rows.
+ const hand=old();hand.player.hotbar=2;assert.equal(grantScanner(hand),'quick');assert.notEqual(hand.player.inventory[2]?.itemId,SCANNER);assert.equal(scannerSelected(hand),false);assert.ok(hand.player.inventory.findIndex(s=>s?.itemId===SCANNER)<HOTBAR_SIZE);
+ const only=old();only.player.hotbar=2;for(let i=0;i<HOTBAR_SIZE;i++)if(i!==only.player.hotbar)only.player.inventory[i]??={itemId:'stone',count:1};assert.equal(only.player.inventory[only.player.hotbar],null);assert.equal(grantScanner(only),'backpack');assert.equal(scannerSelected(only),false);assert.equal(only.player.inventory[only.player.hotbar],null);
  const crate=old();crate.world.crates['crate-a'][0]={itemId:SCANNER,count:1};assert.equal(grantScanner(crate),'none');assert.equal(crate.progress.scanner,true);assert.equal(countItem(crate.player.inventory,SCANNER),0);
  const bad:any=JSON.parse(JSON.stringify(fresh()));bad.progress.scanner='yes';assert.throws(()=>sanitizeState(bad),/scanner/);
 });

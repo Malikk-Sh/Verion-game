@@ -124,6 +124,9 @@ try{
  await click('#close-production');await page.waitForFunction(()=>window.__vireon.getState().rooms[0]?.q>=8,null,{timeout:120000});await openRoom('glass:'+probe,...probeAim);assert.equal(await page.locator('.st-checks li').count(),7);assert.notEqual(await page.locator('#st-status-title').textContent(),'Утечка');await validate('room');await shot('room');
  check('With pipe and cable the room fills with air; the window of any wall block lists every habitability condition');
  // ---------- Storage and capsule ----------
+ // S5 review (D37): the selected scanner replaces only the actions on what it reads; a supply crate still opens with it.
+ const scanSlot=(await snapshot()).player.inventory.findIndex(v=>v?.itemId==='scanner');assert.ok(scanSlot>=0&&scanSlot<6);await slot(scanSlot);await face('crate-a');assert.equal((await state()).action,'crate');assert.equal(await page.locator('#aim-name').textContent(),'Ящик снабжения');
+ await page.locator('#action').click();await page.waitForFunction(()=>window.__vireon.getState().dialog==='production-panel');await click('#close-production');await slot(0);check('With the scanner selected the supply crate keeps its open action');
  await open('crate-a');await bag('stone');assert.ok((await snapshot()).world.crates['crate-a'].some(s=>s?.itemId==='stone'));await validate('crate');await shot('crate');check('Starting crate accepts real items');
  for(const size of [{width:667,height:320},{width:568,height:320}]){await page.setViewportSize(size);await validate('crate'+size.width);await open(electro);await validate('oxygen'+size.width);await shot('oxygen-'+size.width);await open(kiln);await validate('kiln'+size.width);await shot('kiln-'+size.width);await openRoom('glass:'+probe,...probeAim);await validate('room'+size.width);await shot('room-'+size.width);}
  check('Furnace, oxygen, room and storage windows fit 844×390, 667×320 and 568×320; all controls ≥32×32');
