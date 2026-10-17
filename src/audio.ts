@@ -81,6 +81,16 @@ export class Ambience {
   const g=c.createGain(),t=c.currentTime;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.22,t+.03);g.gain.exponentialRampToValueAtTime(.001,t+2);
   s.connect(f).connect(g).connect(this.master);s.start(t,Math.random()*1.5,2.05);
  }
+ /** Airlock (D36): 'hiss' — 3 s of gas filling or leaving the chamber (softer and lower than a breach), 'slide' — the
+  *  leaves' motor whir with a latch at the end, 'clunk' — a heavy metal thud as a door seals. */
+ airlock(kind:'hiss'|'slide'|'clunk'){
+  const c=this.ctx;if(!c||!this.enabled)return;
+  if(kind==='hiss'){const s=c.createBufferSource();s.buffer=this.noise;const f=c.createBiquadFilter();f.type='bandpass';f.frequency.value=1700;f.Q.value=.7;
+   const g=c.createGain(),t=c.currentTime;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.12,t+.15);g.gain.setValueAtTime(.12,t+2.4);g.gain.exponentialRampToValueAtTime(.001,t+3);
+   s.connect(f).connect(g).connect(this.master);s.start(t,Math.random()*.9,3.05);this.ring('sine',95,.12,.18,this.master);return;}
+  if(kind==='slide'){this.ring('sawtooth',70,.035,.75,this.master,0,110);this.burst('bandpass',900,2,.05,.7,this.master);this.ring('sine',180,.08,.09,this.master,.72);this.burst('lowpass',260,.9,.16,.12,this.master,.72);return;}
+  this.burst('lowpass',180,.8,.36,.22,this.master);this.ring('sine',70,.26,.2,this.master,0,45);this.ring('triangle',620,.04,.12,this.master,.01);
+ }
  /** Interface tones; `at` delays (s) and `level` scales one (the mined-item chime follows the crack quieter). */
  tone(kind:'ui'|'scan'|'discover'|'boot'|'item'|'warn',at=0,level=1){
   const c=this.ctx;if(!c||!this.enabled)return;const t=c.currentTime+at;

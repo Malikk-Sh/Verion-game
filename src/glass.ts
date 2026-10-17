@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { reducedMotion } from './motion';
 import { heightAt, type Box } from './world';
-import { allRooms, around, cellCenter, cellY, levelAt, roomCenter, cellKey, cellOf, columnFloor, doorFront, habitableRoom, isGround, roomAtCell, roomsRevision, roomsView, type Door } from './game/rooms';
+import { allRooms, around, cellCenter, cellY, levelAt, roomCenter, cellKey, cellOf, columnFloor, doorCenter, doorColumns, doorById, habitableRoom, isGround, roomAtCell, roomsRevision, roomsView, widthOf, type Door, type DoorFace } from './game/rooms';
+import { CHAMBER_Q, LINTEL, doorBoxes, doorLamp, doorPhase, shownPressure, simOpen } from './game/airlock';
 import type { GameState } from './game/state';
 import { buildDoor, type DoorVisual } from './stationModels';
 import type { Fx } from './fx';
@@ -9,7 +10,8 @@ import type { Fx } from './fx';
  * S4 glass rooms on screen (D31), frameless since S5 (D35): faces are built per 16 m chunk (only faces between glass and
  * air are drawn, a skirt hides the gap down to the terrain, a thin dark trim marks the structure's edges) and all chunks
  * are joined into ONE mesh with one material (one draw call, never in the shadow map); airlock door models, one lamp per
- * room, the red tint of a room about to vent, the leak path and the breach jet. Collision boxes live in a 4 m spatial hash, so the controller asks only
+ * room, the red tint of a room about to vent, the leak path and the breach jet. Airlock modules (D36): their models, the
+ * sliding leaves eased from the simulation, the lamps and screen, steam and sounds while cycling, and their colliders. Collision boxes live in a 4 m spatial hash, so the controller asks only
  * the blocks around the player. Purely visual apart from those boxes; the rooms themselves are game/rooms.ts.
  */
 export const CHUNK = 16, HASH_CELL = 4;
@@ -147,7 +149,7 @@ export function joinChunks(parts: Iterable<ChunkGeometry>) {
  for (const f of list) { position.set(f.position, v * 3); normal.set(f.normal, v * 3); trim.set(f.trim, v); for (let q = 0; q < f.index.length; q++) index[t + q] = f.index[q] + v; v += f.position.length / 3; t += f.index.length; }
  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(position, 3)); g.setAttribute('normal', new THREE.BufferAttribute(normal, 3)); g.setAttribute('trim', new THREE.BufferAttribute(trim, 1)); g.setIndex(new THREE.BufferAttribute(index, 1)); g.computeBoundingSphere(); return g;
 }
-const ROOM_LIGHT = '#cdf7f0';
+const ROOM_LIGHT = '#cdf7f0', UP = new THREE.Vector3(0, 1, 0);
 export function createGlassView(root: THREE.Group, fx?: Fx) {
  const group = new THREE.Group(); group.name = 'glass'; root.add(group);
  const mat = glassMaterial();
@@ -157,11 +159,16 @@ export function createGlassView(root: THREE.Group, fx?: Fx) {
  warm.geometry.setDrawRange(0, 0); warm.frustumCulled = false; warm.onAfterRender = () => { warm.visible = false; }; group.add(warm);
  // Likewise one airlock model far below the world for the boot-time compile (its two-pass station glass would otherwise
  // compile on the first airlock in view); hidden on the first game frame and kept, so its programs stay referenced.
- const warmDoor = buildDoor(); warmDoor.group.position.y = -999; warmDoor.group.name = 'warm-door'; group.add(warmDoor.group);
+ const warmDoor = buildDoor(2); warmDoor.group.position.y = -999; warmDoor.group.name = 'warm-door'; group.add(warmDoor.group);
  // Chunks keep their cells and built faces; the one drawn mesh joins every chunk (rebuilt only after an edit).
  const chunks = new Map<number, { cells: Set<number>; faces: ChunkGeometry | null }>();
  let mesh: THREE.Mesh | null = null;
- const hash = new SpatialHash(), solids = new Map<number, Box>(), doors = new Map<string, { d: Door; v: DoorVisual; box: Box }>();
+ const hash = new SpatialHash(), solids = new Map<number, Box>();
+ /** Per module: the model, the frame colliders, the two leaf colliders (collapsed while that door is open), the shown open
+  *  fraction of each door, the last state (for sounds) and the steam timer. */
+ type Shown = { d: Door; v: DoorVisual; frame: Box[]; leaf: Record<DoorFace, Box & { y0: number; y1: number }>; open: Record<DoorFace, number>; last: string; puff: number };
+ const doors = new Map<string, Shown>();
+ let sound: ((kind: 'hiss' | 'slide' | 'clunk', at: { x: number; y: number; z: number }) => void) | null = null, moving = false;
  const skirt: Skirt = { ground: isGround, height: heightAt };
  let rev = -1, glass = new Set<number>(), doorCells = new Set<number>();
  const groundAt = (k: number) => { const c = cellOf(k); return isGround(c.i, c.k, c.j); };
@@ -237,27 +244,46 @@ export function createGlassView(root: THREE.Group, fx?: Fx) {
   for (const k of doorCells) if (!nextDoorCells.has(k)) touch(k);
   for (const k of nextDoorCells) if (!doorCells.has(k)) touch(k);
   glass = new Set(view.glass); doorCells = nextDoorCells;
-  for (const [id, s] of doors) { const d = nextDoors.get(id); if (!d || d.x !== s.d.x || d.y !== s.d.y || d.z !== s.d.z || d.rot !== s.d.rot) { group.remove(s.v.group); s.v.dispose(); hash.remove(s.box); doors.delete(id); } }
+  for (const [id, s] of doors) { const d = nextDoors.get(id); if (!d || d.x !== s.d.x || d.y !== s.d.y || d.z !== s.d.z || d.rot !== s.d.rot || d.width !== s.d.width) { dropDoor(s); doors.delete(id); } }
   for (const d of g.world.base.doors) if (!doors.has(d.id)) {
-   const v = buildDoor(); v.group.position.set(d.x + .5, cellY(d.y), d.z + .5); v.group.rotation.y = d.rot * Math.PI / 2; v.group.name = d.id;
-   // A plinth under the threshold down to the lowest terrain corner (visual only, like the glass skirt).
-   const drop = cellY(d.y) - columnFloor(d.x, d.z); if (drop > .02) { const base = v.group.children[0] as THREE.Mesh, plinth = new THREE.Mesh(new THREE.BoxGeometry(.96, drop + .06, .96), base.material); plinth.position.y = -(drop + .06) / 2 + .02; plinth.receiveShadow = true; v.group.add(plinth); }
-   const box = cube('build-' + d.id, d.x, d.y, d.z, 2); hash.insert(box); doors.set(d.id, { d: { ...d }, v, box }); group.add(v.group);
+   // A plinth under the threshold down to the lowest terrain corner of its columns (visual only, like the glass skirt).
+   const drop = cellY(d.y) - Math.min(...doorColumns(d).map(c => columnFloor(c.i, c.j))), v = buildDoor(widthOf(d), drop), c = doorCenter(d);
+   v.group.position.set(c.x, cellY(d.y), c.z); v.group.rotation.y = d.rot * Math.PI / 2; v.group.name = d.id;
+   const b = doorBoxes(d), leaf = { outer: { ...b.outer, y0: b.outer.minY, y1: b.outer.maxY }, inner: { ...b.inner, y0: b.inner.minY, y1: b.inner.maxY } };
+   for (const x of [...b.frame, leaf.outer, leaf.inner]) hash.insert(x);
+   doors.set(d.id, { d: { ...d }, v, frame: b.frame, leaf, open: { outer: simOpen(d, 'outer'), inner: simOpen(d, 'inner') }, last: '', puff: 0 }); group.add(v.group);
   }
   for (const id of dirty) if (chunks.has(id)) rebuild(id);
   if (dirty.size) join();
   syncLamps(g);
   return true;
  }
- function reset() { chunks.clear(); join(); for (const s of doors.values()) { group.remove(s.v.group); s.v.dispose(); } doors.clear(); hash.clear(); solids.clear(); glass = new Set(); doorCells = new Set(); rev = -1; clearTint(); showLeak([]); vent = null; }
+ function dropDoor(s: Shown) { group.remove(s.v.group); s.v.dispose(); for (const x of [...s.frame, s.leaf.outer, s.leaf.inner]) hash.remove(x); }
+ function reset() { chunks.clear(); join(); for (const s of doors.values()) dropDoor(s); doors.clear(); hash.clear(); solids.clear(); glass = new Set(); doorCells = new Set(); rev = -1; clearTint(); showLeak([]); vent = null; }
  /** `dt` is real frame time (0 while frozen). */
  function update(g: GameState, dt: number) {
-  const still = reducedMotion(), p = g.world.base.passage; warmDoor.group.visible = false;
+  const still = reducedMotion(); warmDoor.group.visible = false; moving = false;
   for (const s of doors.values()) {
-   // Outer shutter opens early in an inbound cycle and late in an outbound one; the inner one the other way round.
-   const cycle = p?.doorId === s.d.id && p.remainingMs > 0, t = cycle ? 1 - p!.remainingMs / 6000 : 0, open = (a: number) => cycle ? Math.max(0, Math.sin(Math.PI * THREE.MathUtils.clamp((t - a) / .35, 0, 1))) : 0;
-   const first = open(.02), last = open(.6), outer = p?.direction === 'out' ? last : first, inner = p?.direction === 'out' ? first : last;
-   const room = roomBeside(g, s.d); s.v.update(dt, { status: cycle ? 'warn' : room && habitableRoom(room) ? 'work' : room ? 'idle' : 'off', outer, inner }, still);
+   const d = doorById(g, s.d.id); if (!d) continue;
+   const ph = doorPhase(g, d), c = doorCenter(d), at = { x: c.x, y: cellY(d.y) + 1, z: c.z };
+   for (const f of ['outer', 'inner'] as const) {
+    // Opening follows the simulation (the slide is the end of the cycle); closing eases shut in 0.8 s. Reduced motion snaps.
+    const target = still ? d[f] === 'open' ? 1 : 0 : simOpen(d, f), was = s.open[f];
+    s.open[f] = still || target >= was ? target : Math.max(target, was - dt / .8); if (s.open[f] !== was || s.open[f] !== target) moving = true;
+    // The leaf blocks unless its door is open (it closes at once: the body was checked out of its plane).
+    const l = s.leaf[f], block = d[f] !== 'open'; if ((l.maxY > l.minY) !== block) { l.minY = block ? l.y0 : -1e4; l.maxY = block ? l.y1 : -1e4; }
+   }
+   s.v.update(dt, { outer: s.open.outer, inner: s.open.inner, lamps: [doorLamp(d, 'outer'), doorLamp(d, 'inner')], pressure: shownPressure(g, d) / CHAMBER_Q, busy: !!ph && ph.kind !== 'slide' }, still);
+   // Sounds on each change of state: hiss while equalising, a hum as the leaves slide, a clunk when a door seals or stops.
+   const state = d.outer + d.inner + (ph?.kind ?? ''); if (state !== s.last) { const near = Math.hypot(g.player.x - at.x, g.player.z - at.z) < 25;
+    if (s.last && near) sound?.(ph?.kind === 'fill' || ph?.kind === 'vent' ? 'hiss' : ph?.kind === 'slide' ? 'slide' : 'clunk', at); s.last = state; }
+   if (ph) moving = true;
+   // Steam puffs in the chamber while it fills or vents (out of the grilles under the lintel, and out of the outer doorway when venting).
+   if (fx && dt > 0 && !still && (ph?.kind === 'fill' || ph?.kind === 'vent') && (s.puff -= dt) <= 0) {
+    s.puff = .12; const a = s.v.group, side = (Math.random() - .5) * widthOf(d) * .6, y = cellY(d.y) + LINTEL - .1;
+    const p = new THREE.Vector3(side, 0, (Math.random() - .5) * .3).applyAxisAngle(UP, a.rotation.y); fx.steam(c.x + p.x, y, c.z + p.z);
+    if (ph.kind === 'vent') { const q = new THREE.Vector3(side, 0, .55).applyAxisAngle(UP, a.rotation.y); fx.steam(c.x + q.x, cellY(d.y) + .3, c.z + q.z); }
+   }
   }
   lampClock -= dt; if (lampClock <= 0 && lamps) { lampClock = .25; const rooms = allRooms(g); glow = roomCells.map(c => { const r = rooms.find(v => v.cell === c); return r && habitableRoom(r) ? 1 : 0; }); }
   // Lamp plates and lights ease towards the room's state (habitable: lit); reduced motion switches at once.
@@ -267,13 +293,18 @@ export function createGlassView(root: THREE.Group, fx?: Fx) {
   if (leak && (leak.left -= dt) <= 0) showLeak([]);
   if (vent && fx && dt > 0) { vent.left -= dt; vent.next -= dt; if (vent.next <= 0) { vent.next = .1; fx.vent(vent.x, vent.y, vent.z, vent.n, vent.left / 2); } if (vent.left <= 0) vent = null; }
  }
- const roomBeside = (g: GameState, d: Door) => { const f = doorFront(d.rot), a = roomAtCell(g, cellKey(d.x + f.x, d.y, d.z + f.z)), b = roomAtCell(g, cellKey(d.x - f.x, d.y, d.z - f.z)); return a && habitableRoom(a) ? a : b ?? a; };
  return {
   sync, reset, update, tintRooms, clearTint, showLeak, breach, group,
   /** Glass and door boxes overlapping the XZ rectangle (the controller's neighbourhood). */
   query: (minX: number, minZ: number, maxX: number, maxZ: number, out: Box[]) => hash.query(minX, minZ, maxX, maxZ, out),
   /** A breach jet is playing. */
   get venting() { return !!vent; },
+  /** An airlock door is moving or cycling (its shadow must follow). */
+  get animating() { return moving; },
+  /** Called on each change of an airlock's state near the player: 'hiss' (equalising), 'slide' (leaves move), 'clunk' (sealed). */
+  setSound(fn: typeof sound) { sound = fn; },
+  /** Shown open fraction of each door of a module (tests and the debug state). */
+  doorOpen: (id: string) => { const s = doors.get(id); return s ? { ...s.open } : null; },
   /** Shows the hidden warm-up meshes for one renderer.compile (a quality change recompiles the lit programs). */
   warmup(on: boolean) { warm.visible = warmDoor.group.visible = on; },
   stats: () => ({ chunks: [...chunks.values()].filter(c => c.faces).length, meshes: mesh ? 1 : 0, castShadow: !!mesh?.castShadow, faces: [...chunks.values()].reduce((a, c) => a + (c.faces?.faces ?? 0), 0), trims: [...chunks.values()].reduce((a, c) => a + (c.faces?.trims ?? 0), 0), doors: doors.size, lamps: lamps?.count ?? 0, boxes: hash.count, leak: leak?.mesh.count ?? 0, tint: !!tint }),

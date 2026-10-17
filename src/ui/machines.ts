@@ -4,7 +4,8 @@ import { loadMachineSlot, takeSlot, packStation, moveTank, moveTankGap, wearSlot
 import { addItems, countItem, transferSlot, type Slot } from '../game/inventory';
 import { machine, RECIPES, RECIPE_BY_ID, cancelJob, connect, disconnect, linkOptions, linkLength, endpoint, gasRate, powerRate, supplyRate, telemetry, ELECTROLYZER_O2, FIBER_EU, GEN_BUFFER, O2_PER_WU, PORT_O2, type Building } from '../game/production';
 import { stationStatus, structureStatus, type StationStatus } from '../game/stationStatus';
-import { beginPassage, capacityOf, doorById, doorKeys, doorRooms, habitableQ, removeDoor, removeGlass, type RoomEdit } from '../game/rooms';
+import { capacityOf, doorById, doorKeys, doorRooms, habitableQ, removeDoor, removeGlass, type RoomEdit } from '../game/rooms';
+import { CHAMBER_Q, doorStatus } from '../game/airlock';
 import { CAPSULE_CAPACITY, lastAirText } from '../game/survival';
 import type { GameState } from '../game/state';
 import type { GuideTarget } from '../game/guide';
@@ -180,8 +181,9 @@ function quickLoad(ctx: Ctx, kind: string, id: string, items: string[], label: s
 export const isStructure = (id: string) => id.startsWith('glass:') || id.startsWith('door-');
 export function structureKey(g: GameState, id: string): number | null { if (id.startsWith('glass:')) { const k = Number(id.slice(6)); return g.world.base.glass.includes(k) ? k : null; } const d = doorById(g, id); return d ? doorKeys(d)[0] : null; }
 let confirmKey = -1, confirmUntil = 0, structureTick = 0;
-/** Glass block / airlock window (S4): the room beside it (volume, air, checklist) or why it is not closed; the airlock
- *  passage; taking the block back (a second press within 3 s confirms when air would leave). */
+/** Glass block / airlock window (S4): the room beside it (volume, air, checklist) or why it is not closed; for an airlock
+ *  (D36) the state of its two doors and the chamber charge; taking the block back (a second press within 3 s confirms
+ *  when air would leave). */
 function structureView(g: GameState, id: string, host: MachineHost): HTMLElement {
  const { say, caution } = host, root = h('div', '', 'st-layout'), left = h('div', '', 'st-main'); root.append(left);
  const key = structureKey(g, id); if (key === null) return root;
@@ -192,8 +194,9 @@ function structureView(g: GameState, id: string, host: MachineHost): HTMLElement
  if (st.room) { const r = st.room; side.append(h('h4', `Помещение · ${r.volume} м³`), meter('room-air', 'Воздух', r.zone.q / 1000, capacityOf(r.volume) / 1000, 'GU', 'o2', habitableQ(r.volume) / 1000), meter('room-purity', 'Чистота', r.zone.purity * 100, 100, '%', 'clean', 50), h('p', `Дышать можно от ${habitableQ(r.volume) / 1000} GU (8 GU на м³).`, 'st-note')); }
  else { side.append(h('h4', 'Конструкция')); if (st.leak.length) side.append(h('p', 'Путь утечки подсвечен красным в мире на 6 с.', 'st-note')); }
  if (door) {
-  const sides = doorRooms(g, door), quick = h('div', '', 'st-actions'), pass = button('Пройти шлюз', () => say(beginPassage(g, door.id), 'Шлюз: 6 с'), 'st-btn accent'); pass.id = 'airlock-pass'; quick.append(pass);
-  side.append(h('h4', 'Шлюз'), quick, h('p', sides.front && sides.back ? 'Внутренняя дверь: переход стоит 4 GU из помещения назначения.' : sides.front || sides.back ? 'Цикл 6 с. Вход тратит 4 GU воздуха помещения, выход — остаток до 4 GU. В пригодном помещении баллоны не расходуются.' : 'Шлюз не граничит с помещением: это просто проход, без цикла.', 'st-note'));
+  const sides = doorRooms(g, door);
+  side.append(h('h4', door.width === 2 ? 'Шлюз' : 'Шлюз прежней версии · 1 клетка'), meter('chamber', 'Камера', door.pressure / 1000, CHAMBER_Q / 1000, 'GU', 'o2'), h('p', `${doorStatus(g, door, 'outer').name}: ${doorStatus(g, door, 'outer').meta}. ${doorStatus(g, door, 'inner').name}: ${doorStatus(g, door, 'inner').meta}.`, 'st-note'),
+   h('p', sides.front || sides.back ? 'Двери открываются по очереди (F на двери). Перед дверью в помещение камера наполняется из него (4 GU, 3 с), перед дверью наружу — сбрасывает давление (3 с).' : 'Шлюз не граничит с помещением: двери открываются сразу, без наполнения.', 'st-note'));
  }
  const footer = h('div', '', 'st-actions st-foot');
  footer.append(button(door ? 'Забрать шлюз' : 'Забрать стеклоблок', () => {

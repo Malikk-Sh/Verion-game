@@ -3,6 +3,7 @@ import { reducedMotion } from './motion';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import type { BuildingKind } from './game/defs';
+import { JAMB, LEAF_AT, LEAF_T, LINTEL, SILL } from './game/airlock';
 
 /**
  * Procedural low-poly station models (S3). Static detail is merged per material and cached per
@@ -146,38 +147,120 @@ function distributorBody(k: Kit, m: Mats) {
  k.cyl(m.steel, -.3, .25, .42, .045, .12, Math.PI / 2);
 }
 /**
- * Airlock door (S4): the vestibule of the retired prefab dome fitted into one 1×2 m cell column. Hull jambs fill the
- * full cell depth (they close the seam to the glass beside them), a lintel with the orange band, a threshold, keypads
- * and two sliding shutters with windows: the outer one at the front (+z at rot 0), the inner one at the back.
- * Origin: the centre of the lower cell's floor.
+ * S5 (D36) walk-through airlock module, `width` cells wide × 1 deep × 2 high, industrial and readable: chunky dark frame
+ * with chamfered jambs and lintel, bolts, hazard stripes on the threshold and the jambs, a floor grate, a pipe and a
+ * control panel inside the chamber, and two doors of two horizontal sliding leaves each with round portholes. Lamp strips
+ * above each door (outside and inside the chamber) and the panel screen are instances of one unlit mesh: green — the
+ * door can be used, amber — cycling, red — locked by the other door. Four draw calls per module: frame, leaves,
+ * portholes, lights (one vertex-coloured material for the first three). Origin: the centre of the footprint at the
+ * threshold level; +z is the outer face, x runs along the width.
  */
-function doorBody(k: Kit, m: Mats) {
- for (const x of [-.45, .45]) { k.box(m.hull, x, 1, 0, .1, 2, 1); k.box(m.frame, x * 1.12, 1.2, 0, .012, 1.1, .46); k.box(m.orange, x, .3, 0, .11, .06, 1.01); }
- k.box(m.hull, 0, 1.9, 0, .8, .2, 1); for (const z of [-.505, .505]) k.box(m.orange, 0, 1.93, z, .8, .05, .012);
- k.box(m.frame, 0, .03, 0, .8, .06, 1); for (const z of [-.43, .43]) { k.box(m.orange, 0, .065, z, .7, .012, .05); k.box(m.frame, 0, 1.79, z, .8, .02, .07); }
- for (const z of [-.508, .508]) k.box(m.dark, .45, 1.15, z, .07, .16, .012);
-}
-export type DoorLook = { status: StationStatus; outer: number; inner: number };
+const DOOR_LAMP = { ready: '#5df2a0', cycling: '#ffb347', locked: '#ff4d3d' } as const;
+export type DoorLamp = keyof typeof DOOR_LAMP;
+/** `outer`/`inner`: open fraction of each door (0…1); `pressure` 0…1 of the chamber charge for the panel screen. */
+export type DoorLook = { outer: number; inner: number; lamps: [DoorLamp, DoorLamp]; pressure: number; busy: boolean };
 export type DoorVisual = { group: THREE.Group; update(dt: number, look: DoorLook, still?: boolean): void; dispose(): void };
-let DOOR: THREE.Group | null = null, DOOR_LAMPS: THREE.BufferGeometry | null = null;
-/** One placed airlock: the cached static frame plus its own shutters and status lamps. */
-export function buildDoor(): DoorVisual {
- const m = M(); if (!DOOR) { const k = new Kit(); doorBody(k, m); DOOR = k.finish(); }
- const group = new THREE.Group(); for (const c of DOOR.children) { const mesh = c as THREE.Mesh, copy = new THREE.Mesh(mesh.geometry, mesh.material); copy.castShadow = mesh.castShadow; copy.receiveShadow = true; group.add(copy); }
- const shutters = [.43, -.43].map(z => { const s = new THREE.Group(); s.position.set(0, 1.79, z); const p = new THREE.Mesh(BOX, m.panel); p.scale.set(.8, 1.72, .04); p.position.y = -.86; p.castShadow = true; s.add(p); const w = new THREE.Mesh(BOX, m.glass); w.scale.set(.34, .18, .05); w.position.set(0, -.5, 0); s.add(w); group.add(s); return s; });
- const mat = new THREE.MeshStandardMaterial({ color: '#202628', emissive: LAMP_COLOR.idle, emissiveIntensity: 2.2, roughness: .3 });
- // S5: both status lamps (one each side) are one mesh — one draw call per airlock fewer.
- DOOR_LAMPS ??= mergeGeometries([-.51, .51].map(z => lampGeo.clone().translate(0, 1.9, z)))!; group.add(new THREE.Mesh(DOOR_LAMPS, mat));
+let DOOR_MAT: THREE.MeshStandardMaterial | null = null, LIGHT_MAT: THREE.MeshBasicMaterial | null = null;
+const DOOR_GEO = new Map<string, THREE.BufferGeometry>();
+/** Pieces with a vertex colour each, merged into one geometry. */
+class Paint {
+ private parts: THREE.BufferGeometry[] = []; private m = new THREE.Matrix4(); private q = new THREE.Quaternion(); private e = new THREE.Euler(); private c = new THREE.Color();
+ add(g: THREE.BufferGeometry, color: string, x: number, y: number, z: number, sx: number, sy: number, sz: number, rx = 0, ry = 0, rz = 0) {
+  const geo = (g.index ? g.toNonIndexed() : g.clone()); for (const k of Object.keys(geo.attributes)) if (!['position', 'normal'].includes(k)) geo.deleteAttribute(k);
+  this.m.compose(new THREE.Vector3(x, y, z), this.q.setFromEuler(this.e.set(rx, ry, rz)), new THREE.Vector3(sx, sy, sz)); geo.applyMatrix4(this.m);
+  this.c.set(color).convertSRGBToLinear(); const n = geo.attributes.position.count, col = new Float32Array(n * 3); for (let i = 0; i < n; i++) col.set([this.c.r, this.c.g, this.c.b], i * 3);
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); this.parts.push(geo);
+ }
+ box(color: string, x: number, y: number, z: number, w: number, h: number, d: number, rz = 0) { this.add(BOX, color, x, y, z, w, h, d, 0, 0, rz); }
+ bevel(color: string, x: number, y: number, z: number, w: number, h: number, d: number) { this.add(CHAMFER, color, x, y, z, w, h, d); }
+ finish() { const g = mergeGeometries(this.parts)!; this.parts.forEach(p => p.dispose()); this.parts = []; g.computeBoundingSphere(); return g; }
+}
+/** A box with every edge chamfered (one bevel segment): the chunky frame members. */
+const CHAMFER = new RoundedBoxGeometry(1, 1, 1, 1, .09);
+const C = { frame: '#2c3539', face: '#3a4549', steel: '#9ea8ab', bolt: '#c3cacb', hazard: '#f0a020', dark: '#15191b', hull: '#d9dcd4', seal: '#1c2022', glass: '#24495a', grate: '#20272a', pipe: '#7d8a8f', panel: '#232b2e', green: '#3fae6a', red: '#c4483d' };
+/** Static frame of a module `w` wide; `drop`: a plinth under the threshold down to the terrain (0: none). */
+function doorFrame(w: number, drop: number) {
+ const p = new Paint(), h = w / 2, J = JAMB, mid = (LINTEL + 2) / 2;
+ for (const s of [-1, 1]) {
+  const x = s * (h - J / 2);
+  p.bevel(C.frame, x, 1, 0, J, 2, 1);
+  // Face plates around the opening, bolted, with hazard chevrons at the foot of each jamb.
+  for (const z of [-.5, .5]) {
+   p.box(C.face, x, 1, z * 1.02, J + .02, 1.96, .03);
+   for (const y of [.32, 1, 1.62]) p.add(CYL8, C.bolt, x, y, z * 1.06, .022, .02, .022, Math.PI / 2);
+   for (let i = 0; i < 3; i++) p.box(i % 2 ? C.dark : C.hazard, x, .1 + i * .085, z * 1.055, J - .02, .07, .012, s * .55);
+  }
+ }
+ p.bevel(C.frame, 0, mid, 0, w, 2 - LINTEL, 1);
+ for (const z of [-.5, .5]) { p.box(C.face, 0, mid, z * 1.02, w, .1, .03); for (let x = -h + .35; x <= h - .34; x += .45) p.add(CYL8, C.bolt, x, mid + .03, z * 1.06, .016, .02, .016, Math.PI / 2); }
+ // Threshold: a dark sill, a grate in the chamber and hazard stripes along both doorways.
+ p.box(C.frame, 0, SILL / 2, 0, w, SILL, 1);
+ for (let x = -h + J + .08; x < h - J - .04; x += .12) p.box(C.grate, x, SILL + .004, 0, .05, .008, .7);
+ const n = Math.max(2, Math.round((w - 2 * J) / .16));
+ for (const z of [-.42, .42]) for (let i = 0; i < n; i++) { const u = -h + J + (i + .5) * (w - 2 * J) / n; p.box(i % 2 ? C.dark : C.hazard, u, SILL + .006, z, (w - 2 * J) / n, .012, .12); }
+ // Chamber fittings: a vertical pipe with brackets, vent grilles under the lintel, the control panel housing and buttons.
+ p.add(CYL8, C.pipe, h - J - .04, 1, -.3, .028, 1.8, .028); for (const y of [.4, 1.6]) p.box(C.steel, h - J - .02, y, -.3, .04, .04, .08);
+ for (const x of [-.25, .25]) { p.box(C.grate, x * (w / 2), LINTEL - .006, 0, .3, .012, .22); for (let i = 0; i < 4; i++) p.box(C.dark, x * (w / 2), LINTEL - .014, -.09 + i * .06, .28, .006, .02); }
+ p.box(C.panel, -h + J + .015, 1.25, 0, .03, .36, .28); p.box(C.steel, -h + J + .02, 1.25, 0, .018, .38, .3);
+ p.box(C.green, -h + J + .035, 1.1, -.06, .02, .04, .05); p.box(C.red, -h + J + .035, 1.1, .06, .02, .04, .05);
+ if (drop > .02) p.box(C.frame, 0, -drop / 2 + .02, 0, w - .02, drop + .04, .98);
+ return p.finish();
+}
+/** One leaf, centred on its own origin: panel with dark bands, an orange stripe and a rubber seal on its meeting edge. */
+function leafGeometry(lw: number) {
+ const p = new Paint(), hgt = LINTEL - SILL;
+ p.box(C.hull, 0, 0, 0, lw, hgt, LEAF_T);
+ for (const y of [-hgt / 2 + .05, hgt / 2 - .04]) p.box(C.frame, 0, y, 0, lw, y < 0 ? .1 : .08, LEAF_T + .01);
+ p.box(C.hazard, 0, -.12, 0, lw, .045, LEAF_T + .012); p.box(C.seal, lw / 2 - .015, 0, 0, .03, hgt, LEAF_T + .014);
+ return p.finish();
+}
+function portholeGeometry() {
+ const p = new Paint(); p.add(new THREE.TorusGeometry(1, .2, 6, 16), C.steel, 0, 0, 0, .12, .12, .5); p.add(new THREE.CylinderGeometry(1, 1, 1, 16), C.glass, 0, 0, 0, .11, .06, .11, Math.PI / 2); return p.finish();
+}
+/** One placed module: its own frame copy (or a cached one), four leaves, four portholes and the lights. */
+export function buildDoor(width: 1 | 2 = 2, drop = 0): DoorVisual {
+ DOOR_MAT ??= new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .55, metalness: .45 });
+ LIGHT_MAT ??= new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false });
+ const w = width, h = w / 2, lw = h - JAMB, key = w + ':' + (drop > .02 ? drop.toFixed(2) : '0'), own = drop > .02;
+ const frameGeo = own ? doorFrame(w, drop) : DOOR_GEO.get(key) ?? (DOOR_GEO.set(key, doorFrame(w, 0)), DOOR_GEO.get(key)!);
+ const leafKey = 'leaf' + w, leafGeo = DOOR_GEO.get(leafKey) ?? (DOOR_GEO.set(leafKey, leafGeometry(lw)), DOOR_GEO.get(leafKey)!), holeGeo = DOOR_GEO.get('hole') ?? (DOOR_GEO.set('hole', portholeGeometry()), DOOR_GEO.get('hole')!);
+ const group = new THREE.Group(), frame = new THREE.Mesh(frameGeo, DOOR_MAT); frame.castShadow = frame.receiveShadow = true; group.add(frame);
+ const leaves = new THREE.InstancedMesh(leafGeo, DOOR_MAT, 4), holes = new THREE.InstancedMesh(holeGeo, DOOR_MAT, 4), lights = new THREE.InstancedMesh(BOX, LIGHT_MAT, 7);
+ leaves.castShadow = true; leaves.receiveShadow = true; group.add(leaves, holes, lights);
+ for (const m of [leaves, holes, lights]) { m.frustumCulled = false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); }
+ const mx = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3(), col = new THREE.Color(), hr = Math.min(1, lw / .5);
+ const flip = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+ // `turn`: the right leaf is the left one turned half round, so its seal also meets the middle.
+ const put = (mesh: THREE.InstancedMesh, i: number, x: number, y: number, z: number, sx: number, sy: number, sz: number, turn = false) => mesh.setMatrixAt(i, mx.compose(v.set(x, y, z), turn ? flip : q, sc.set(sx, sy, sz)));
+ // Lights: 0/1 strips over the outer/inner doorway outside, 2/3 the same doors seen from the chamber, 4 screen, 5 its bar, 6 its status dot.
+ const strips = [[0, mid(), .532, w - .5, .035, .02], [0, mid(), -.532, w - .5, .035, .02], [0, LINTEL - .02, .4, w - 2 * JAMB - .1, .02, .03], [0, LINTEL - .02, -.4, w - 2 * JAMB - .1, .02, .03], [-h + JAMB + .032, 1.29, 0, .004, .14, .22]];
+ strips.forEach((s, i) => put(lights, i, s[0], s[1], s[2], s[3], s[4], s[5]));
+ lights.setColorAt(4, col.set('#0b3a3d'));
  let t = Math.random() * 10;
- return {
-  group,
-  // A shutter rolls up into the lintel (scale from its top edge); reduced motion jumps straight to the state.
-  update(dt, look, still = false) {
-   t += still ? 0 : dt; mat.emissive.set(LAMP_COLOR[look.status]); mat.emissiveIntensity = look.status === 'warn' ? 1.2 + Math.max(0, Math.sin(t * 6)) * 2.4 : look.status === 'off' ? .2 : 2.2;
-   [look.outer, look.inner].forEach((open, i) => { const s = shutters[i], k = Math.max(.04, 1 - open); s.scale.y = still ? (open > .5 ? .04 : 1) : k; });
-  },
-  dispose: () => mat.dispose(),
- };
+ function update(dt: number, look: DoorLook, still = false) {
+  t += still ? 0 : dt;
+  // Leaves slide sideways into the jambs: the part inside is hidden, so each leaf shrinks towards its jamb as it opens.
+  ([look.outer, look.inner] as const).forEach((open, d) => {
+   const z = (d ? -1 : 1) * (.5 - LEAF_AT), o = Math.min(1, Math.max(0, open));
+   for (const s of [-1, 1]) {
+    const i = d * 2 + (s > 0 ? 1 : 0), e1 = o * lw, cx = s * (lw + e1) / 2, k = Math.max(.001, 1 - o);
+    put(leaves, i, cx, (SILL + LINTEL) / 2, z, k, 1, 1, s > 0);
+    const hx = s * (lw / 2 + e1), hs = Math.max(0, Math.min(1, (lw - Math.abs(hx)) / (.13 * hr))) * hr;
+    put(holes, i, hx, 1.35, z, hs || .001, hs || .001, hr);
+   }
+  });
+  leaves.instanceMatrix.needsUpdate = holes.instanceMatrix.needsUpdate = true;
+  // Amber blinks while cycling (steady with reduced motion); the screen bar shows the chamber charge.
+  const lamp = (l: DoorLamp) => col.set(DOOR_LAMP[l]).multiplyScalar(l === 'cycling' && !still ? .55 + .45 * Math.max(0, Math.sin(t * 7)) : 1);
+  look.lamps.forEach((l, d) => { lights.setColorAt(d, lamp(l)); lights.setColorAt(d + 2, lamp(l)); });
+  const p = Math.min(1, Math.max(0, look.pressure));
+  put(lights, 5, -h + JAMB + .036, 1.24, -.1 + .1 * p, .004, .035, Math.max(.001, .2 * p)); lights.setColorAt(5, col.set(look.busy ? '#ffb347' : '#6ff0e6'));
+  put(lights, 6, -h + JAMB + .036, 1.34, .08, .004, .025, .025); lights.setColorAt(6, col.set(look.busy ? DOOR_LAMP.cycling : p >= 1 ? DOOR_LAMP.ready : '#3a4448'));
+  lights.instanceMatrix.needsUpdate = true; lights.instanceColor!.needsUpdate = true;
+ }
+ function mid() { return (LINTEL + 2) / 2; }
+ update(0, { outer: 0, inner: 0, lamps: ['ready', 'ready'], pressure: 0, busy: false }, true);
+ return { group, update, dispose: () => { leaves.dispose(); holes.dispose(); lights.dispose(); if (own) frameGeo.dispose(); } };
 }
 type Animated = { kind: BuildingKind; parts: Record<string, THREE.Object3D>; mats: Record<string, THREE.MeshStandardMaterial> };
 const STATIC = new Map<string, THREE.Group>();

@@ -7,24 +7,33 @@ import type { BaseState, Building } from './production';
 import type { GameState } from './state';
 /**
  * S4 glass rooms (D31). One orthogonal 1 m grid: cell (i, k, j) spans x∈[i, i+1], y∈[cellY(k), cellY(k) + 1], z∈[j, j+1]. Glass
- * blocks, the two cells of each airlock door and ground cells are solid; air cells joined by faces (6 neighbours, never
+ * blocks, the cells of each airlock module (its chamber is never room air, D36) and ground cells are solid; air cells joined by faces (6 neighbours, never
  * edges or corners) and closed on every side form a room. A new room is born empty; air leaves at once when a room opens
  * (D32). No DOM and no three.js: the simulation, quests, station windows and tests share this module.
  * Derived data (rooms, cell → room) is rebuilt only on an edit or a load and cached per `world.base`.
  */
-export type Door = { id: string; x: number; y: number; z: number; rot: number };
+/** One door of an airlock module: the outer one on its front face (rot 0 = +z), the inner one on its back face. */
+export type DoorFace = 'outer' | 'inner';
+/** 'cycling': the door was asked to open and is equalising the chamber (3 s, when needed) or sliding open (0.8 s). */
+export type DoorState = 'closed' | 'cycling' | 'open';
+/**
+ * S5 (D36) walk-through airlock module: `width` cells along the wall (2 when built; 1 only for a legacy module converted
+ * from an older save) × 1 cell deep × 2 high from the anchor cell (x, y, z), the width running along +x (rot 0/2) or +z
+ * (rot 1/3). Two sliding doors close its faces; the chamber between them holds `pressure` milli-GU (0…4000) and is never
+ * room air. `cycleMs`: what is left of the cycle of the door marked 'cycling' (airlock.ts).
+ */
+export type Door = { id: string; x: number; y: number; z: number; rot: number; width: 1 | 2; outer: DoorState; inner: DoorState; pressure: number; cycleMs: number };
+/** A closed, depressurised module (a new one, or one converted from an older save). */
+export const newDoor = (id: string, x: number, y: number, z: number, rot: number, width: 1 | 2 = 2): Door => ({ id, x, y, z, rot: ((rot % 4) + 4) % 4, width, outer: 'closed', inner: 'closed', pressure: 0, cycleMs: 0 });
 /** Air of one room; `cell` is the room's smallest cell key and is its identity. q in milli-GU. */
 export type Zone = { cell: number; q: number; temperature: number; purity: number; lossRemainder: number };
-/** `direction` 'in' moves to the door's back side, 'out' to its front (rot 0 = +z, like the old dome); `paid`: the
- *  destination room charged the chamber with 4 GU, which carries the breath for the cycle (survival lock). */
-export type Passage = { doorId: string; direction: 'in' | 'out'; remainingMs: number; paid: boolean };
 export type Room = { index: number; cell: number; cells: number[]; volume: number };
 export type RoomInfo = Room & { zone: Zone };
 export type Side = 'front' | 'back';
 export type RoomEdit = { error: string; needConfirm: boolean; ventGU: number; breached: boolean; at: { x: number; y: number; z: number } | null };
 export const GLASS_LIMIT = 8192, DOOR_LIMIT = 32, ROOM_LIMIT = 64, ROOM_MAX = 1024, DISTRIBUTOR_M3 = 256;
-/** Manual airlock cycle (SYSTEMS §5): 6 s, 4 GU. Build reach from the eye to a cell centre. */
-export const PASSAGE_MS = 6000, PASSAGE_Q = 4000, BUILD_REACH = 7;
+/** Build reach from the eye to a cell centre. */
+export const BUILD_REACH = 7;
 /** Bounds of placeable cells: the map's building area; levels keep every neighbour key inside the grid. */
 export const CELL_MIN = -195, CELL_MAX = 354, LEVEL_MIN = -31, LEVEL_MAX = 94;
 /** Per cubic metre (milli-GU): capacity 20 GU, habitable from 8 GU; technical leak 0.002 GU/s. */
@@ -77,12 +86,23 @@ export function groundCell(view: { glass: Set<number>; doorAt: Map<number, unkno
  while ((view.glass.has(cellKey(i, k, j)) || view.doorAt.has(cellKey(i, k, j))) && k < LEVEL_MAX) support = cellKey(i, k++, j);
  return { cell: cellKey(i, k, j), support };
 }
-// ---------- Doors ----------
+// ---------- Airlock modules ----------
 export const doorFront = (rot: number) => ({ x: Math.round(Math.sin(rot * Math.PI / 2)), z: Math.round(Math.cos(rot * Math.PI / 2)) });
-export const doorKeys = (d: { x: number; y: number; z: number }) => [cellKey(d.x, d.y, d.z), cellKey(d.x, d.y + 1, d.z)];
-/** The landing column on one side of a door: the cell straight in front (or behind) at both door levels. */
-export function landingCells(d: Door, side: Side) { const f = doorFront(d.rot), s = side === 'front' ? 1 : -1; return doorKeys({ x: d.x + f.x * s, y: d.y, z: d.z + f.z * s }); }
-const other = (s: Side): Side => s === 'front' ? 'back' : 'front';
+/** The width axis of a module: +x for rot 0/2, +z for rot 1/3 (always the positive axis, so rot 0 and 2 share cells). */
+export const doorAlong = (rot: number) => rot % 2 ? { x: 0, z: 1 } : { x: 1, z: 0 };
+/** Width of a module; an unconverted door of an older save (no `width`, migration only) is one cell wide. */
+export const widthOf = (d: { width?: number }) => d.width === 2 ? 2 : 1;
+type Shape = { x: number; y: number; z: number; rot?: number; width?: number };
+/** Cell columns of a module, from the anchor along its width. */
+export const doorColumns = (d: Shape) => { const a = doorAlong(d.rot ?? 0); return Array.from({ length: widthOf(d) }, (_, c) => ({ i: d.x + a.x * c, j: d.z + a.z * c })); };
+/** Every cell of a module (both levels of each column); [0] is the anchor's lower cell, the key a module is aimed by. */
+export const doorKeys = (d: Shape) => doorColumns(d).flatMap(c => [cellKey(c.i, d.y, c.j), cellKey(c.i, d.y + 1, c.j)]);
+/** The landing on one side of a module: the cells straight in front (or behind) of every column, at both levels. */
+export function landingCells(d: Door, side: Side) { const f = doorFront(d.rot), s = side === 'front' ? 1 : -1; return doorKeys({ ...d, x: d.x + f.x * s, z: d.z + f.z * s }); }
+/** Centre of a module's footprint (the map target and the leading point, D34). */
+export const doorCenter = (d: Door) => { const a = doorAlong(d.rot), w = widthOf(d); return { x: d.x + (a.x ? w / 2 : .5), z: d.z + (a.z ? w / 2 : .5) }; };
+/** [minX, maxX, minY, maxY, minZ, maxZ] of a whole module. */
+export const moduleBox = (d: Door) => { const a = doorAlong(d.rot), w = widthOf(d), y = cellY(d.y); return [d.x, d.x + (a.x ? w : 1), y, y + 2, d.z, d.z + (a.z ? w : 1)]; };
 // ---------- Derived rooms ----------
 /** The glass that closes a set of interior cells: every face neighbour that is neither interior nor ground. */
 export function shellOf(interior: Iterable<number>) {
@@ -202,11 +222,10 @@ function standY(view: RoomsView, i: number, k: number, j: number, x: number, z: 
 /** Landing point on one side: the centre of the landing cell, 1 m from the door axis — 1.5 m from the door's inner face,
  *  which for a converted dome is exactly its old exit (dome centre + front × 3.5). */
 export function landingAt(view: RoomsView, d: Door, side: Side) {
- const f = doorFront(d.rot), s = side === 'front' ? 1 : -1, i = d.x + f.x * s, j = d.z + f.z * s, x = i + .5, z = j + .5;
+ const f = doorFront(d.rot), s = side === 'front' ? 1 : -1, c = doorCenter(d), i = d.x + f.x * s, j = d.z + f.z * s, x = c.x + f.x * s, z = c.z + f.z * s;
  return { x, y: standY(view, i, d.y, j, x, z), z };
 }
 export const landingPoint = (g: GameState, d: Door, side: Side) => landingAt(roomsView(g.world.base), d, side);
-export const sideOf = (d: Door, x: number, z: number): Side => { const f = doorFront(d.rot); return (x - d.x - .5) * f.x + (z - d.z - .5) * f.z >= 0 ? 'front' : 'back'; };
 // ---------- Leak path (UI) ----------
 /** Why a glass/door cell is not part of a closed room: the escape path from the air beside it (prefers the side under a
  *  roof), or 'big' for a closed volume over 1024 m³. Null when it borders a room on some side or has no air beside it. */
@@ -322,20 +341,22 @@ export function glassProblem(g: GameState, key: number): string {
  if (reservedCells(g).has(key)) return 'Здесь посадка шлюза — оставьте её свободной';
  return '';
 }
-/** Why an airlock (lower cell `key`, turned `rot`) cannot stand here ('' = it can). Glass in its two cells is fine:
- *  the door replaces it and the blocks return to the backpack. */
-export function doorProblem(g: GameState, key: number, rot: number, except?: string): string {
+/** Why an airlock module (anchor cell `key`, turned `rot`) cannot stand here ('' = it can). It fills either an empty gap or
+ *  a straight 2×2 run of wall glass, which it replaces (the blocks return to the backpack), so sealing never breaks. */
+export function doorProblem(g: GameState, key: number, rot: number, except?: string, width: 1 | 2 = 2): string {
  if (g.player.vitals.health <= 0) return 'Персонаж погиб';
- const c = cellOf(key), cells = doorKeys({ x: c.i, y: c.k, z: c.j }), v = roomsView(g.world.base);
+ const c = cellOf(key), d = newDoor('', c.i, c.k, c.j, rot, width), cells = doorKeys(d), v = roomsView(g.world.base);
  for (const k of cells) { const area = areaProblem(k); if (area) return area; }
  if (!reach(g, key)) return 'Слишком далеко — подойдите ближе';
  if (g.world.base.doors.filter(d => d.id !== except).length >= DOOR_LIMIT) return `Достигнут предел ${DOOR_LIMIT} шлюзов`;
- for (const k of cells) { const d = v.doorAt.get(k); if (d && d.id !== except) return 'Здесь уже стоит шлюз'; const p = cellOf(k); if (isGround(p.i, p.k, p.j)) return 'Шлюз не ставится в грунт'; }
- const box = cellBox(key, 2);
+ for (const k of cells) { const o = v.doorAt.get(k); if (o && o.id !== except) return 'Здесь уже стоит шлюз'; const p = cellOf(k); if (isGround(p.i, p.k, p.j)) return 'Шлюз не ставится в грунт'; }
+ // Part glass, part air: the module would stick out of the wall (or leave half a wall standing beside its chamber).
+ const glassIn = cells.filter(k => v.glass.has(k)).length; if (glassIn && glassIn < cells.length) return `Шлюзу нужен ровный участок стены ${width}×2 — наведите на середину стены`;
+ const box = moduleBox(d);
  if (overlaps(box, playerBox(g.player.x, g.player.y, g.player.z))) return 'Место занято персонажем';
  if (g.world.base.buildings.some(b => overlaps(box, stationBox(b)))) return 'Место занято станцией';
  const reserved = reservedCells(g, except); if (cells.some(k => reserved.has(k))) return 'Здесь проход другого шлюза';
- const d: Door = { id: '', x: c.i, y: c.k, z: c.j, rot: ((rot % 4) + 4) % 4 }, solid = (k: number) => v.glass.has(k) || v.doorAt.has(k), stations = g.world.base.buildings.map(stationBox);
+ const solid = (k: number) => v.glass.has(k) || v.doorAt.has(k), stations = g.world.base.buildings.map(stationBox);
  for (const side of ['front', 'back'] as const) { const p = landingProblem(solid, d, side, stations, null); if (p) return p; }
  for (const side of ['front', 'back'] as const) { const p = landingProblem(solid, d, side, stations, boxes); if (p) return p; }
  return '';
@@ -343,23 +364,23 @@ export function doorProblem(g: GameState, key: number, rot: number, except?: str
 /** Rocks, deposits, veins and the capsule (static colliders; stations are 'build-' boxes) meeting a box. `list`: the live
  *  `boxes` of the loaded world, or worldColliders() of a save being migrated. */
 const staticHit = (box: number[], list: readonly Box[] = boxes) => list.some(b => !b.id.startsWith('build-') && overlaps(box, [b.minX, b.maxX, b.minY, b.maxY, b.minZ, b.maxZ]));
-/** Why one landing of a door would trap the player set down there ('' = clear). Pure on the given layout (`solid` cells,
- *  station boxes): new doors and the v7 → v8 migration share it. `statics` (a collider list): only the rock/deposit/capsule
- *  check against it; null: the glass, ground and station checks. */
+/** Why one landing of a module would block the walk through it ('' = clear): the whole width, both levels. Pure on the
+ *  given layout (`solid` cells, station boxes): new modules and the v7 → v8 migration share it. `statics` (a collider
+ *  list): only the rock/deposit/capsule check against it; null: the glass, ground and station checks. */
 export function landingProblem(solid: (key: number) => boolean, d: Door, side: Side, stations: readonly number[][], statics: readonly Box[] | null): string {
- const land = landingCells(d, side), low = cellOf(land[0]), box = cellBox(land[0], 2), front = side === 'front';
+ const land = landingCells(d, side), f = doorFront(d.rot), s = side === 'front' ? 1 : -1, box = moduleBox({ ...d, x: d.x + f.x * s, z: d.z + f.z * s }), front = side === 'front';
  if (statics) return staticHit(box, statics) ? front ? 'Перед шлюзом препятствие — поверните шлюз' : 'За шлюзом препятствие — поверните шлюз' : '';
  if (land.some(solid)) return front ? 'Перед шлюзом стекло — освободите проход' : 'За шлюзом стекло — освободите проход';
- if (isGround(low.i, low.k, low.j)) return 'Шлюз упирается в грунт — поставьте его выше';
+ if (land.some(k => { const c = cellOf(k); return c.k === d.y && isGround(c.i, c.k, c.j); })) return 'Шлюз упирается в грунт — поставьте его выше';
  if (land.some(k => areaProblem(k))) return 'Шлюзу нужен проход с обеих сторон';
  if (stations.some(b => overlaps(box, b))) return 'У шлюза стоит станция — оставьте проход свободным';
  return '';
 }
-/** Both landings clear and the two door cells free of stations and of other doors' landings (`reserved`); `colliders`:
- *  the static colliders of the world the door stands in (worldColliders() of the save in the v7 → v8 migration). */
+/** Both landings clear and the module's cells free of stations and of other modules' landings (`reserved`); `colliders`:
+ *  the static colliders of the world the module stands in (worldColliders() of the save in the v7 → v8 migration). */
 export const doorFits = (solid: (key: number) => boolean, d: Door, stations: readonly number[][], reserved: ReadonlySet<number>, colliders: readonly Box[]) =>
- !doorKeys(d).some(k => reserved.has(k)) && !stations.some(b => overlaps(cellBox(doorKeys(d)[0], 2), b)) && (['front', 'back'] as const).every(s => !landingProblem(solid, d, s, stations, null) && !landingProblem(solid, d, s, stations, colliders));
-/** A standing body (feet at y) meets glass or a door. */
+ !doorKeys(d).some(k => reserved.has(k)) && !stations.some(b => overlaps(moduleBox(d), b)) && (['front', 'back'] as const).every(s => !landingProblem(solid, d, s, stations, null) && !landingProblem(solid, d, s, stations, colliders));
+/** A standing body (feet at y) meets glass or a module cell (the migrations: a saved player is never left inside). */
 export function bodyInSolid(view: RoomsView, x: number, y: number, z: number) {
  const body = playerBox(x, y, z);
  for (let i = Math.floor(body[0]); i < body[1]; i++) for (let j = Math.floor(body[4]); j < body[5]; j++) for (let k = levelAt(body[2]); cellY(k) < body[3]; k++) { const key = cellKey(i, k, j); if (view.glass.has(key) || view.doorAt.has(key)) return true; }
@@ -387,8 +408,6 @@ function takeOne(g: GameState, itemId: string) {
 }
 /** Returns blocks to the backpack; what does not fit lands on the ground at the cell. */
 function giveBack(g: GameState, itemId: string, n: number, key: number) { const left = addItems(g.player.inventory, itemId, n); if (left) { const p = cellCenter(key); dropItems(g, p.x, p.z, [{ itemId, count: left }]); } }
-/** The paid 4 GU carry the breath of a cycle only while its room stands, so nothing is taken down until the cycle ends. */
-const CYCLING = 'Дождитесь конца цикла шлюза';
 const confirmText = (gu: number) => `Воздух уйдёт: ${Math.ceil(gu)} GU — нажмите ещё раз`;
 /** Places one glass block from the backpack. */
 export function placeGlass(g: GameState, key: number): RoomEdit {
@@ -401,70 +420,36 @@ export function placeGlass(g: GameState, key: number): RoomEdit {
 export function removeGlass(g: GameState, key: number, confirmed = false): RoomEdit {
  if (g.player.vitals.health <= 0) return refuse('Персонаж погиб');
  if (!isGlass(g, key)) return refuse('Здесь нет стеклоблока');
- if (g.world.base.passage) return refuse(CYCLING);
  if (!reach(g, key)) return refuse('Слишком далеко — подойдите ближе');
  const gu = predictRemove(g, key); if (gu > 0 && !confirmed) return refuse(confirmText(gu), true, gu);
  const r = editRooms(g, { remove: [key] }); if (r.error) return refuse(r.error);
  giveBack(g, 'window', 1, key); return { error: '', needConfirm: false, ventGU: r.vented, breached: r.breached, at: r.at };
 }
-/** Builds an airlock into the two cells from `key` up: glass there returns to the backpack, sealing never breaks. */
+/** Builds an airlock module (2 wide) at anchor `key`: glass in its cells returns to the backpack, sealing never breaks. */
 export function placeDoor(g: GameState, key: number, rot: number): RoomEdit {
  const problem = doorProblem(g, key, rot); if (problem) return refuse(problem);
  if (countItem(g.player.inventory, 'airlock') < 1) return refuse('В рюкзаке нет: ' + ITEMS.airlock.name);
- const c = cellOf(key), cells = doorKeys({ x: c.i, y: c.k, z: c.j }), glass = cells.filter(k => isGlass(g, k));
- const door: Door = { id: 'door-' + g.world.base.nextId, x: c.i, y: c.k, z: c.j, rot: ((rot % 4) + 4) % 4 };
+ const c = cellOf(key), door = newDoor('door-' + g.world.base.nextId, c.i, c.k, c.j, rot), glass = doorKeys(door).filter(k => isGlass(g, k));
  const r = editRooms(g, { remove: glass, door }); if (r.error) return refuse(r.error);
  g.world.base.nextId++; takeOne(g, 'airlock'); if (glass.length) giveBack(g, 'window', glass.length, key);
  return { error: '', needConfirm: false, ventGU: r.vented, breached: r.breached, at: r.at };
 }
-/** Takes an airlock back into the backpack; asks first when air would leave. */
+/** A standing body (feet at y) overlaps a module (it is in the chamber or in one of its doorways). */
+export const bodyInModule = (d: Door, x: number, y: number, z: number) => overlaps(moduleBox(d), playerBox(x, y, z));
+/** A legacy one-wide module (never crafted) gives back what the S4 airlock cost. */
+export const LEGACY_REFUND: Record<string, number> = { iron: 4, glass: 2, fiber: 4 };
+/** Takes an airlock module back: both doors closed and nobody inside; asks first when air would leave. The chamber's own
+ *  charge (≤ 4 GU) is not room air and leaves with it. */
 export function removeDoor(g: GameState, id: string, confirmed = false): RoomEdit {
  const d = doorById(g, id); if (!d) return refuse('Нет такого шлюза');
  if (g.player.vitals.health <= 0) return refuse('Персонаж погиб');
- if (g.world.base.passage) return refuse(g.world.base.passage.doorId === id ? 'Шлюз занят' : CYCLING);
+ if (d.outer !== 'closed' || d.inner !== 'closed') return refuse('Сначала закройте обе двери шлюза');
+ if (bodyInModule(d, g.player.x, g.player.y, g.player.z)) return refuse('Выйдите из шлюза');
  const key = doorKeys(d)[0]; if (!reach(g, key)) return refuse('Слишком далеко — подойдите ближе');
  const gu = predictRemove(g, key); if (gu > 0 && !confirmed) return refuse(confirmText(gu), true, gu);
  const r = editRooms(g, { undoor: id }); if (r.error) return refuse(r.error);
- giveBack(g, 'airlock', 1, key); return { error: '', needConfirm: false, ventGU: r.vented, breached: r.breached, at: r.at };
-}
-// ---------- Airlock passage ----------
-/** Clear landing: the standing body there meets no glass, door, station or static collider (rock, deposit, capsule). */
-function landingClear(g: GameState, d: Door, side: Side) {
- const p = landingPoint(g, d, side), body = playerBox(p.x, p.y, p.z);
- return !bodyInSolid(roomsView(g.world.base), p.x, p.y, p.z) && !g.world.base.buildings.some(b => overlaps(body, stationBox(b))) && !staticHit(body);
-}
-/**
- * Starts a passage through door `id` from the player's side. From a room: anywhere in it within 2.5 m of the door. From
- * outside: within 3 m of that side's landing point. Entering a room needs its full 4 GU (they carry the breath of the 6 s
- * cycle); leaving is always possible and pays what is left (≤ 4 GU); an inner door (rooms on both sides) charges 4 GU from
- * the destination when it has them. A door with no room on either side is a plain doorway: free and instant.
- */
-export function beginPassage(g: GameState, id: string): string {
- const d = doorById(g, id); if (!d) return 'Нужен шлюз';
- if (g.world.base.passage) return 'Шлюз занят';
- if (g.player.vitals.health <= 0) return 'Персонаж погиб';
- const p = g.player, sides = doorRooms(g, d), here = playerRoom(g);
- const from: Side = here && sides.front?.index === here.index ? 'front' : here && sides.back?.index === here.index ? 'back' : sideOf(d, p.x, p.z), to = other(from), src = sides[from], dst = sides[to];
- if (src) { if (here?.index !== src.index || Math.hypot(p.x - d.x - .5, p.z - d.z - .5) > 2.5) return 'Подойдите к шлюзу'; }
- else { const at = landingPoint(g, d, from); if (here || Math.hypot(p.x - at.x, p.z - at.z) > 3) return 'Подойдите к шлюзу'; }
- if (!landingClear(g, d, to)) return 'Проход загорожен — освободите место за шлюзом';
- const direction = to === 'back' ? 'in' : 'out';
- if (!src && !dst) { g.world.base.passage = { doorId: id, direction, remainingMs: 0, paid: false }; return ''; }
- let paid = false;
- if (dst && !src) { if (dst.zone.q < PASSAGE_Q) return 'В помещении меньше 4 GU воздуха — сначала наполните его'; dst.zone.q -= PASSAGE_Q; paid = true; }
- else if (src && !dst) { const cost = Math.min(src.zone.q, PASSAGE_Q); src.zone.q -= cost; paid = cost > 0; }
- else if (dst!.zone.q >= PASSAGE_Q) { dst!.zone.q -= PASSAGE_Q; paid = true; }
- g.world.base.passage = { doorId: id, direction, remainingMs: PASSAGE_MS, paid };
- return '';
-}
-/** The room whose 4 GU carry the player through a paid inbound cycle: no breathing is taken meanwhile. */
-export function cyclingRoom(g: GameState) { const p = g.world.base.passage, d = p?.paid ? doorById(g, p.doorId) : undefined; return d ? doorRooms(g, d)[p!.direction === 'in' ? 'back' : 'front'] : null; }
-/** Advances the cycle; returns where to put the player when it ends (null otherwise). */
-export function advancePassage(g: GameState, ms: number) {
- const p = g.world.base.passage; if (!p) return null;
- p.remainingMs = Math.max(0, p.remainingMs - ms); if (p.remainingMs) return null;
- const d = doorById(g, p.doorId); g.world.base.passage = null;
- return d ? landingPoint(g, d, p.direction === 'in' ? 'back' : 'front') : null;
+ if (widthOf(d) === 2) giveBack(g, 'airlock', 1, key); else for (const [item, n] of Object.entries(LEGACY_REFUND)) giveBack(g, item, n, key);
+ return { error: '', needConfirm: false, ventGU: r.vented, breached: r.breached, at: r.at };
 }
 // ---------- Simulation ----------
 /** Distributor power request in milli-EU for one tick (climate grows with the outside difference, SYSTEMS §5). */
