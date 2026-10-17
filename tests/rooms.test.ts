@@ -211,8 +211,9 @@ test('Save v7 → v8: a dome becomes a 4×4×3 glass room with its air, airlock 
  assert.ok(m.progress.quests.facts.includes('item:dome') && m.progress.quests.facts.includes('craft:craft_dome'), 'old facts stay valid');
  refreshQuestProgress(m); assert.ok(m.progress.quests.completed.includes('dome') && m.progress.quests.completed.includes('distributor'));
  assert.deepEqual(sanitizeState(JSON.parse(JSON.stringify(m))), m, 'round trip');
- // The old exit spot (dome + front × 3.5, X61.5/Z44.5) is on the new outer landing, half a metre from its centre.
- assert.deepEqual([landingPoint(m, m.world.base.doors[0], 'front').x, landingPoint(m, m.world.base.doors[0], 'front').z], [61.5, 45]);
+ // The old exit spot (dome + front × 3.5, X61.5/Z44.5) is in the chamber's second row (S5.1: two deep); the outer landing
+ // is one cell further out.
+ assert.equal(m.world.base.doors[0].depth, 2); assert.deepEqual([landingPoint(m, m.world.base.doors[0], 'front').x, landingPoint(m, m.world.base.doors[0], 'front').z], [62.5, 45]);
  // A dome on the very edge of the old building area keeps its shell, 3 cells past it.
  const corner = v7(fresh(), { x: -195, z: -195, rot: 3, q: 1000 }); corner.world.base.buildings = corner.world.base.buildings.slice(0, 1); const edge = sanitizeState(corner); assert.equal(cellOf(edge.world.base.glass[0]).i, -198); assert.deepEqual(sanitizeState(JSON.parse(JSON.stringify(edge))), edge);
  // Every rotation keeps the airlock on its turned side (the fixture's distributor at dome − 1 x stands aside here)…
@@ -285,14 +286,14 @@ test('Save v8 without the glass fields (a preview that kept the dome) still conv
  assert.ok(m.world.base.buildings.every(b => b.kind !== 'dome')); assert.equal(m.world.base.doors.length, 1);
  assert.deepEqual(sanitizeState(JSON.parse(JSON.stringify(m))), m, 'idempotent');
  const again = toGlassRooms(JSON.parse(JSON.stringify(m))); assert.deepEqual(again.world, JSON.parse(JSON.stringify(m.world)), 'running the step twice changes nothing');
- const newer: any = JSON.parse(JSON.stringify(old)); newer.meta.stateVersion = 10; assert.equal((toGlassRooms(newer).meta as any).stateVersion, 10, 'the version is never lowered');
+ const newer: any = JSON.parse(JSON.stringify(old)); newer.meta.stateVersion = 11; assert.equal((toGlassRooms(newer).meta as any).stateVersion, 11, 'the version is never lowered');
 });
 
 test('Save v8 (merged S4): a v7 save, a rooms-lane v8 (no vein fields) and a veins-lane v8 (dome, no glass fields) all load as one v8', () => {
  const strip = (o: any) => { delete o.world.veins; delete o.world.respawn; delete o.world.nextVeinId; return o; };
  // 1. A real S3 file: a dome and no vein fields; an exhausted iron deposit queues its vein.
  const s3 = strip(v7(fresh(), { x: 58, z: 44, rot: 0, q: 500000 })); s3.world.nodes['iron-a'] = 0;
- const a = sanitizeState(s3); assert.equal(a.meta.stateVersion, STATE_VERSION); assert.equal(STATE_VERSION, 9);
+ const a = sanitizeState(s3); assert.equal(a.meta.stateVersion, STATE_VERSION); assert.equal(STATE_VERSION, 10);
  assert.deepEqual(allRooms(a).map(r => [r.volume, r.zone.q]), [[48, 500000]]); assert.equal(a.world.base.doors.length, 1);
  assert.deepEqual(a.world.veins, []); assert.equal(a.world.nextVeinId, 1); assert.deepEqual(a.world.respawn.map(e => e.material), ['iron']);
  // 2. A rooms-lane v8 file: glass, doors and zones, but no vein fields; the room stays as it was.
@@ -302,7 +303,7 @@ test('Save v8 (merged S4): a v7 save, a rooms-lane v8 (no vein fields) and a vei
  // 3. A veins-lane v8 file: a live vein and a queue, but still the prefab dome and no glass fields.
  const g = fresh(); g.player.x = -120; g.player.z = -120; const vein = spawnVein(g, 'stone', 0)!; assert.ok(vein); g.world.respawn = [{ material: 'iron', ms: 1234 }];
  const worldLane = v7(g, { x: 58, z: 44, rot: 0, q: 400000 }); worldLane.meta.stateVersion = 8;
- const c = sanitizeState(worldLane); assert.equal(c.meta.stateVersion, 9);
+ const c = sanitizeState(worldLane); assert.equal(c.meta.stateVersion, 10);
  assert.deepEqual(c.world.veins, [vein]); assert.deepEqual(c.world.respawn, [{ material: 'iron', ms: 1234 }]); assert.equal(c.world.nextVeinId, 2, 'the vein fields are kept as they were');
  assert.ok(c.world.base.buildings.every(b => b.kind !== 'dome')); assert.deepEqual(allRooms(c).map(r => [r.volume, r.zone.q]), [[48, 400000]]);
  // A full merged v8 save is never migrated again.
@@ -358,7 +359,7 @@ test('Guide: «Стеклянное убежище» — blocks made (placed cou
  g.world.base.glass = []; lay(g, CUBE()); assert.ok(roomy(allRooms(g)[0])); step = guideStep(g, 'dome');
  assert.deepEqual(step.tasks.map(t => t.done), [true, true, false]); const t = stepTarget(g, step)!; assert.equal(t.name, 'Помещение'); assert.ok(Math.abs(t.x - 57.5) < .01 && Math.abs(t.z - 43.5) < .01, 'the compass leads to the room');
  // The airlock goes into the front wall (two blocks return); the shelter milestone completes.
- near(g, 57.5, 47.2); stock(g, { airlock: 1 }); assert.equal(placeDoor(g, cellKey(57, 0, 45), 0).error, ''); assert.equal(nearestShelter(g)!.name, 'Шлюз');
+ near(g, 57.5, 48.2); stock(g, { airlock: 1 }); assert.equal(placeDoor(g, cellKey(57, 0, 45), 0).error, ''); assert.equal(nearestShelter(g)!.name, 'Шлюз');
  refreshQuestProgress(g); assert.ok(g.progress.quests.completed.includes('dome')); assert.ok(guideStep(g, 'dome').tasks.every(t => t.done));
 });
 

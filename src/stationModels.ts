@@ -179,31 +179,47 @@ class Paint {
 const CHAMFER = new RoundedBoxGeometry(1, 1, 1, 1, .09);
 const C = { frame: '#2c3539', face: '#3a4549', steel: '#9ea8ab', bolt: '#c3cacb', hazard: '#f0a020', dark: '#15191b', hull: '#d9dcd4', seal: '#1c2022', glass: '#24495a', grate: '#20272a', pipe: '#7d8a8f', panel: '#232b2e', green: '#3fae6a', red: '#c4483d' };
 /** Static frame of a module `w` wide; `drop`: a plinth under the threshold down to the terrain (0: none). */
-function doorFrame(w: number, drop: number) {
- const p = new Paint(), h = w / 2, J = jambOf(w), mid = (LINTEL + 2) / 2;
+/**
+ * The fixed body of a module, centred on its own origin, `D` metres deep (front = +z). S5.1: no two parts share a face
+ * plane any more (the lintel and the sill sit between the jambs, the plates, bolts, chevrons, grates and stripes stand
+ * a few millimetres clear of what they are fixed to) — overlapping coplanar faces flickered on phones as the view moved.
+ */
+function doorFrame(w: number, D: number, drop: number) {
+ const p = new Paint(), h = w / 2, J = jambOf(w), iw = w - 2 * J, Z = D / 2, mid = (LINTEL + 2) / 2, F = .03;
  for (const s of [-1, 1]) {
   const x = s * (h - J / 2);
-  p.bevel(C.frame, x, 1, 0, J, 2, 1);
-  // Face plates around the opening, bolted, with hazard chevrons at the foot of each jamb.
-  for (const z of [-.5, .5]) {
-   p.box(C.face, x, 1, z * 1.02, J + .02, 1.96, .03);
-   for (const y of [.32, 1, 1.62]) p.add(CYL8, C.bolt, x, y, z * 1.06, .022, .02, .022, Math.PI / 2);
-   for (let i = 0; i < 3; i++) p.box(i % 2 ? C.dark : C.hazard, x, .1 + i * .085, z * 1.055, J - .02, .07, .012, s * .55);
+  p.bevel(C.frame, x, 1, 0, J, 2, D);
+  // Face plates around both openings, bolted, with hazard chevrons at the foot of each jamb.
+  for (const z of [-1, 1]) {
+   p.box(C.face, x, 1, z * (Z + F / 2), J, 1.96, F);
+   for (const y of [.32, 1, 1.62]) p.add(CYL8, C.bolt, x, y, z * (Z + F + .008), .022, .02, .022, Math.PI / 2);
+   for (let i = 0; i < 3; i++) p.box(i % 2 ? C.dark : C.hazard, x, .1 + i * .085, z * (Z + F + .008), J - .03, .07, .012, s * .55);
   }
+  // Chamber walls: steel ribs every half metre and a low kick plate along the floor.
+  for (let v = -Z + .25; v < Z - .2; v += .5) p.box(C.steel, s * (h - J - .016), 1, v, .03, 1.76, .06);
+  p.box(C.dark, s * (h - J - .012), .16, 0, .02, .22, D - .12);
+  // Outer side walls: three bolted stiffeners, a vertical hazard strip at each corner and a stencilled number plate.
+  for (const y of [.35, 1, 1.65]) { p.box(C.face, s * (h + .012), y, 0, .024, .1, D - .16); for (let v = -Z + .3; v < Z - .25; v += .5) p.add(CYL8, C.bolt, s * (h + .028), y, v, .014, .016, .014, 0, 0, Math.PI / 2); }
+  for (const z of [-1, 1]) for (let i = 0; i < 6; i++) p.box(i % 2 ? C.dark : C.hazard, s * (h + .008), .2 + i * .3, z * (Z - .06), .016, .3, .05);
+  p.box(C.panel, s * (h + .014), 1.32, 0, .02, .16, .36);
  }
- p.bevel(C.frame, 0, mid, 0, w, 2 - LINTEL, 1);
- for (const z of [-.5, .5]) { p.box(C.face, 0, mid, z * 1.02, w, .1, .03); for (let x = -h + .35; x <= h - .34; x += .45) p.add(CYL8, C.bolt, x, mid + .03, z * 1.06, .016, .02, .016, Math.PI / 2); }
- // Threshold: a dark sill, a grate in the chamber and hazard stripes along both doorways.
- p.box(C.frame, 0, SILL / 2, 0, w, SILL, 1);
- for (let x = -h + J + .08; x < h - J - .04; x += .12) p.box(C.grate, x, SILL + .004, 0, .05, .008, .7);
- const n = Math.max(2, Math.round((w - 2 * J) / .16));
- for (const z of [-.42, .42]) for (let i = 0; i < n; i++) { const u = -h + J + (i + .5) * (w - 2 * J) / n; p.box(i % 2 ? C.dark : C.hazard, u, SILL + .006, z, (w - 2 * J) / n, .012, .12); }
+ p.bevel(C.frame, 0, mid, 0, iw, 2 - LINTEL, D);
+ // Roof: two raised rails and a vent housing with louvres (the pressure line runs out of it).
+ for (const x of [-h + J / 2, h - J / 2]) p.box(C.steel, x, 2.025, 0, .1, .05, D - .1);
+ p.box(C.frame, 0, 2.06, 0, Math.min(.7, iw * .5), .12, Math.min(.6, D * .35)); for (let i = 0; i < 4; i++) p.box(C.dark, 0, 2.125, -Math.min(.6, D * .35) / 2 + .08 + i * .14, Math.min(.66, iw * .48), .01, .04);
+ p.add(CYL8, C.pipe, Math.min(.35, iw * .25) + .05, 2.05, 0, .03, Math.min(.6, D * .35) + .3, .03, Math.PI / 2);
+ for (const z of [-1, 1]) { p.box(C.face, 0, mid, z * (Z + F / 2), iw, .1, F); for (let x = -h + .35; x <= h - .34; x += .45) p.add(CYL8, C.bolt, x, mid + .02, z * (Z + F + .008), .016, .02, .016, Math.PI / 2); }
+ // Threshold: a dark sill, grates in the chamber and hazard stripes along both doorways.
+ p.box(C.frame, 0, SILL / 2, 0, iw, SILL, D);
+ for (let x = -h + J + .08; x < h - J - .04; x += .12) p.box(C.grate, x, SILL + .005, 0, .05, .008, D - .3);
+ const n = Math.max(2, Math.round(iw / .16));
+ for (const z of [-1, 1]) for (let i = 0; i < n; i++) { const u = -h + J + (i + .5) * iw / n; p.box(i % 2 ? C.dark : C.hazard, u, SILL + .007, z * (Z - .08), iw / n, .012, .12); }
  // Chamber fittings: a vertical pipe with brackets, vent grilles under the lintel, the control panel housing and buttons.
- p.add(CYL8, C.pipe, h - J - .04, 1, -.3, .028, 1.8, .028); for (const y of [.4, 1.6]) p.box(C.steel, h - J - .02, y, -.3, .04, .04, .08);
- for (const x of [-.25, .25]) { p.box(C.grate, x * (w / 2), LINTEL - .006, 0, .3, .012, .22); for (let i = 0; i < 4; i++) p.box(C.dark, x * (w / 2), LINTEL - .014, -.09 + i * .06, .28, .006, .02); }
- p.box(C.panel, -h + J + .015, 1.25, 0, .03, .36, .28); p.box(C.steel, -h + J + .02, 1.25, 0, .018, .38, .3);
- p.box(C.green, -h + J + .035, 1.1, -.06, .02, .04, .05); p.box(C.red, -h + J + .035, 1.1, .06, .02, .04, .05);
- if (drop > .02) p.box(C.frame, 0, -drop / 2 + .02, 0, w - .02, drop + .04, .98);
+ p.add(CYL8, C.pipe, h - J - .06, 1, -.3, .028, 1.8, .028); for (const y of [.4, 1.6]) p.box(C.steel, h - J - .04, y, -.3, .04, .04, .08);
+ for (const v of D > 1 ? [-.5, .5] : [0]) for (const x of [-.25, .25]) { p.box(C.grate, x * (w / 2), LINTEL - .008, v, .3, .012, .22); for (let i = 0; i < 4; i++) p.box(C.dark, x * (w / 2), LINTEL - .017, v - .09 + i * .06, .28, .006, .02); }
+ p.box(C.panel, -h + J + .016, 1.25, 0, .03, .36, .28); p.box(C.steel, -h + J + .017, 1.25, 0, .018, .38, .3);
+ p.box(C.green, -h + J + .036, 1.1, -.06, .02, .04, .05); p.box(C.red, -h + J + .036, 1.1, .06, .02, .04, .05);
+ if (drop > .02) p.box(C.frame, 0, -drop / 2, 0, w - .02, drop, D - .02);
  return p.finish();
 }
 /** One leaf, centred on its own origin: panel with dark bands, an orange stripe and a rubber seal on its meeting edge. */
@@ -218,14 +234,14 @@ function portholeGeometry() {
  const p = new Paint(); p.add(new THREE.TorusGeometry(1, .2, 6, 16), C.steel, 0, 0, 0, .12, .12, .5); p.add(new THREE.CylinderGeometry(1, 1, 1, 16), C.glass, 0, 0, 0, .11, .06, .11, Math.PI / 2); return p.finish();
 }
 /** One placed module: its own frame copy (or a cached one), four leaves, four portholes and the lights. */
-export function buildDoor(width: 1 | 2 = 2, drop = 0): DoorVisual {
+export function buildDoor(width: 1 | 2 = 2, drop = 0, depth: 1 | 2 = 2): DoorVisual {
  DOOR_MAT ??= new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .55, metalness: .45 });
  LIGHT_MAT ??= new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false });
- const w = width, h = w / 2, JAMB = jambOf(w), lw = h - JAMB, key = w + ':' + (drop > .02 ? drop.toFixed(2) : '0'), own = drop > .02;
- const frameGeo = own ? doorFrame(w, drop) : DOOR_GEO.get(key) ?? (DOOR_GEO.set(key, doorFrame(w, 0)), DOOR_GEO.get(key)!);
+ const w = width, D = depth, Z = D / 2, h = w / 2, JAMB = jambOf(w), lw = h - JAMB, key = w + 'x' + D + ':' + (drop > .02 ? drop.toFixed(2) : '0'), own = drop > .02;
+ const frameGeo = own ? doorFrame(w, D, drop) : DOOR_GEO.get(key) ?? (DOOR_GEO.set(key, doorFrame(w, D, 0)), DOOR_GEO.get(key)!);
  const leafKey = 'leaf' + w, leafGeo = DOOR_GEO.get(leafKey) ?? (DOOR_GEO.set(leafKey, leafGeometry(lw)), DOOR_GEO.get(leafKey)!), holeGeo = DOOR_GEO.get('hole') ?? (DOOR_GEO.set('hole', portholeGeometry()), DOOR_GEO.get('hole')!);
  const group = new THREE.Group(), frame = new THREE.Mesh(frameGeo, DOOR_MAT); frame.castShadow = frame.receiveShadow = true; group.add(frame);
- const leaves = new THREE.InstancedMesh(leafGeo, DOOR_MAT, 4), holes = new THREE.InstancedMesh(holeGeo, DOOR_MAT, 4), lights = new THREE.InstancedMesh(BOX, LIGHT_MAT, 7);
+ const leaves = new THREE.InstancedMesh(leafGeo, DOOR_MAT, 4), holes = new THREE.InstancedMesh(holeGeo, DOOR_MAT, 4), lights = new THREE.InstancedMesh(BOX, LIGHT_MAT, 8);
  // The leaves cast no shadow: the frame's shadow already outlines the doorway, moving leaves never force a shadow redraw,
  // and an instanced shadow caster would compile its own depth program on the first airlock in view.
  leaves.receiveShadow = true; group.add(leaves, holes, lights);
@@ -234,16 +250,17 @@ export function buildDoor(width: 1 | 2 = 2, drop = 0): DoorVisual {
  const flip = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
  // `turn`: the right leaf is the left one turned half round, so its seal also meets the middle.
  const put = (mesh: THREE.InstancedMesh, i: number, x: number, y: number, z: number, sx: number, sy: number, sz: number, turn = false) => mesh.setMatrixAt(i, mx.compose(v.set(x, y, z), turn ? flip : q, sc.set(sx, sy, sz)));
- // Lights: 0/1 strips over the outer/inner doorway outside, 2/3 the same doors seen from the chamber, 4 screen, 5 its bar, 6 its status dot.
- const strips = [[0, mid(), .532, w - .5, .035, .02], [0, mid(), -.532, w - .5, .035, .02], [0, LINTEL - .02, .4, w - 2 * JAMB - .1, .02, .03], [0, LINTEL - .02, -.4, w - 2 * JAMB - .1, .02, .03], [-h + JAMB + .032, 1.29, 0, .004, .14, .22]];
+ // Lights: 0/1 strips over the outer/inner doorway outside, 2/3 the same doors seen from the chamber, 4 screen, 5 its bar,
+ // 6 its status dot, 7 the chamber's ceiling light (a long cold strip between the grilles).
+ const strips = [[0, mid(), Z + .052, w - .5, .035, .02], [0, mid(), -Z - .052, w - .5, .035, .02], [0, LINTEL - .022, Z - .1, w - 2 * JAMB - .1, .02, .03], [0, LINTEL - .022, -Z + .1, w - 2 * JAMB - .1, .02, .03], [-h + JAMB + .033, 1.29, 0, .004, .14, .22], [0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0], [0, LINTEL - .006, 0, .12, .008, D - .5]];
  strips.forEach((s, i) => put(lights, i, s[0], s[1], s[2], s[3], s[4], s[5]));
- lights.setColorAt(4, col.set('#0b3a3d'));
+ lights.setColorAt(4, col.set('#0b3a3d')); lights.setColorAt(7, col.set('#cfeef0'));
  let t = Math.random() * 10;
  function update(dt: number, look: DoorLook, still = false) {
   t += still ? 0 : dt;
   // Leaves slide sideways into the jambs: the part inside is hidden, so each leaf shrinks towards its jamb as it opens.
   ([look.outer, look.inner] as const).forEach((open, d) => {
-   const z = (d ? -1 : 1) * (.5 - LEAF_AT), o = Math.min(1, Math.max(0, open));
+   const z = (d ? -1 : 1) * (Z - LEAF_AT), o = Math.min(1, Math.max(0, open));
    for (const s of [-1, 1]) {
     const i = d * 2 + (s > 0 ? 1 : 0), e1 = o * lw, cx = s * (lw + e1) / 2, k = Math.max(.001, 1 - o);
     put(leaves, i, cx, (SILL + LINTEL) / 2, z, k, 1, 1, s > 0);
@@ -256,8 +273,8 @@ export function buildDoor(width: 1 | 2 = 2, drop = 0): DoorVisual {
   const lamp = (l: DoorLamp) => col.set(DOOR_LAMP[l]).multiplyScalar(l === 'cycling' && !still ? .55 + .45 * Math.max(0, Math.sin(t * 7)) : 1);
   look.lamps.forEach((l, d) => { lights.setColorAt(d, lamp(l)); lights.setColorAt(d + 2, lamp(l)); });
   const p = Math.min(1, Math.max(0, look.pressure));
-  put(lights, 5, -h + JAMB + .036, 1.24, -.1 + .1 * p, .004, .035, Math.max(.001, .2 * p)); lights.setColorAt(5, col.set(look.busy ? '#ffb347' : '#6ff0e6'));
-  put(lights, 6, -h + JAMB + .036, 1.34, .08, .004, .025, .025); lights.setColorAt(6, col.set(look.busy ? DOOR_LAMP.cycling : p >= 1 ? DOOR_LAMP.ready : '#3a4448'));
+  put(lights, 5, -h + JAMB + .037, 1.24, -.1 + .1 * p, .004, .035, Math.max(.001, .2 * p)); lights.setColorAt(5, col.set(look.busy ? '#ffb347' : '#6ff0e6'));
+  put(lights, 6, -h + JAMB + .037, 1.34, .08, .004, .025, .025); lights.setColorAt(6, col.set(look.busy ? DOOR_LAMP.cycling : p >= 1 ? DOOR_LAMP.ready : '#3a4448'));
   lights.instanceMatrix.needsUpdate = true; lights.instanceColor!.needsUpdate = true;
  }
  function mid() { return (LINTEL + 2) / 2; }

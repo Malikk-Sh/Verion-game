@@ -160,14 +160,14 @@ test('D33: a v7 save gains empty vein fields; deposits it already exhausted are 
  old.meta.stateVersion = 7; delete old.world.veins; delete old.world.respawn; delete old.world.nextVeinId;
  old.world.nodes['iron-a'] = 0; old.world.nodes['ice-crater'] = 0; old.world.nodes['grass-c'] = 0;
  const m = sanitizeState(old), again = sanitizeState(structuredClone(old));
- assert.equal(m.meta.stateVersion, 9); assert.deepEqual(m.world.veins, []); assert.equal(m.world.nextVeinId, 1);
+ assert.equal(m.meta.stateVersion, 10); assert.deepEqual(m.world.veins, []); assert.equal(m.world.nextVeinId, 1);
  assert.deepEqual(m.world.respawn.map(e => e.material), ['iron', 'ice']); assert.deepEqual(m.world.respawn, again.world.respawn);
  for (const e of m.world.respawn) assert.ok(e.ms >= VEIN_DELAY_RANGE[0] && e.ms <= VEIN_DELAY_RANGE[1]);
  assert.equal(m.world.nodes['iron-a'], 0, 'the static deposit itself is not refilled');
  assert.equal(old.world.veins, undefined, 'the source object is untouched');
  // A save of the same number from the parallel rooms lane (v8 without vein fields) gains them before validation.
  const rooms: any = cloneState(g); delete rooms.world.veins; delete rooms.world.respawn; delete rooms.world.nextVeinId; rooms.world.nodes['sand-a'] = 0;
- const r = sanitizeState(rooms); assert.equal(r.meta.stateVersion, 9); assert.deepEqual(r.world.veins, []); assert.equal(r.world.nextVeinId, 1); assert.deepEqual(r.world.respawn.map(e => e.material), ['sand']);
+ const r = sanitizeState(rooms); assert.equal(r.meta.stateVersion, 10); assert.deepEqual(r.world.veins, []); assert.equal(r.world.nextVeinId, 1); assert.deepEqual(r.world.respawn.map(e => e.material), ['sand']);
  // A partial preview file with live veins but no counter starts past the highest saved id.
  { const h = fresh(); assert.ok(spawnVein(h, 'iron', 0)); assert.ok(spawnVein(h, 'ice', 0)); const p: any = cloneState(h); delete p.world.nextVeinId; const s = sanitizeState(p); assert.equal(s.world.veins.length, 2); assert.equal(s.world.nextVeinId, h.world.nextVeinId); assert.equal(s.world.nextVeinId, 3); }
  const full = sanitizeState(JSON.parse(JSON.stringify(m))); assert.deepEqual(full.world.respawn, m.world.respawn, 'a full v8 save is not migrated again');

@@ -8,12 +8,14 @@ import { covers, veinDelay, VEIN_CAP, VEIN_TOTAL, RESPAWN_MAX, VEIN_DELAY_RANGE 
 import { CYCLE_TICKS, START_OFFSET_TICKS, isDay, phaseSeconds } from './daycycle';
 import { freshQuestProgress, QUEST_FACTS, type QuestProgress } from './questFacts';
 import { QUEST_IDS, type QuestId } from './questCatalog';
-import { bodyInSolid, carry, groundV8, levelAt, doorFits, landingCells, stationBox, cellKey, cellOf, capacityOf, deriveRooms, doorAlong, doorCenter, doorFront, doorKeys, groundRoom, landingAt, newDoor, lowestAir, storable, STORE_MARGIN, shellOf, CELL_MAX, CELL_MIN, DOOR_LIMIT, GLASS_LIMIT, LEVEL_MAX, LEVEL_MIN, ROOM_LIMIT, ROOM_MAX, type Door, type DoorState, type Zone } from './rooms';
+import { bodyInSolid, carry, groundKey, moduleBox, overlaps, playerBox, groundV8, levelAt, doorFits, landingCells, stationBox, cellKey, cellOf, capacityOf, deriveRooms, doorAlong, doorCenter, doorFront, doorKeys, groundRoom, landingAt, newDoor, lowestAir, storable, STORE_MARGIN, shellOf, CELL_MAX, CELL_MIN, DOOR_LIMIT, GLASS_LIMIT, LEVEL_MAX, LEVEL_MIN, ROOM_LIMIT, ROOM_MAX, type Door, type DoorState, type Zone } from './rooms';
 import { CHAMBER_Q, EQUALIZE_MS, SLIDE_MS } from './airlock';
 /**
  * Complete persistent game state. Plain JSON only: no class instances, GPU objects or
  * functions (TECHNICAL §2). Revision numbers live in save manifests.
  *
+ * State version 10 (S5.1): an airlock module is two cells deep, its chamber standing one cell out of the wall towards its
+ * front; S5 modules get the second row where it fits by the rules of a new one, else stay one deep (toDeepModules).
  * State version 9 (S5) has two field-based steps:
  * - D35 raises the vertical cell lattice by 0.5 m (level k spans y ∈ [k + 0.5, k + 1.5)) so blocks rest flush on the
  *   build pad; keys stay, rooms are re-derived and their air carried over (toShiftedLevels);
@@ -30,7 +32,7 @@ import { CHAMBER_Q, EQUALIZE_MS, SLIDE_MS } from './airlock';
  * the first inventory row — not a separate container), display-only vitals and the day-phase
  * offset. Version 1/2 saves (including content 1.0.0) are migrated by sanitizeState() without loss.
  */
-export const STATE_VERSION = 9;
+export const STATE_VERSION = 10;
 /** Last version produced by the pre-S3 migration chain, the S3 version and the S4 version (integer levels). */
 const V6 = 6, V7 = 7, V8 = 8;
 export const HOTBAR_SIZE = 6;
@@ -159,7 +161,35 @@ export function migrateRaw(raw:unknown):unknown{
  const levels=isObj(rooms)&&isObj(rooms.meta)&&needsShift(rooms)?toShiftedLevels(rooms):rooms;
  // Then every door still without a `width` (S4, or just converted from a dome) becomes a module (D36).
  const modules=isObj(levels)&&isObj(levels.meta)&&needsModules(levels)?toModules(levels):levels;
- return isObj(modules)&&isObj(modules.meta)&&(modules.meta.stateVersion===V7||lacksVeins(modules))?toVeins(modules):modules;
+ // S5.1: every module still without a `depth` (S5, or just made from an S4 door) gets its chamber's second row if it fits.
+ const deep=isObj(modules)&&isObj(modules.meta)&&needsDepth(modules)?toDeepModules(modules):modules;
+ return isObj(deep)&&isObj(deep.meta)&&(deep.meta.stateVersion===V7||lacksVeins(deep))?toVeins(deep):deep;
+}
+const needsDepth=(r:Obj)=>{const b=isObj(r.world)&&isObj(r.world.base)?r.world.base:null;return !!b&&Array.isArray(b.doors)&&b.doors.some(d=>isObj(d)&&!('depth' in d));};
+/**
+ * S5 modules → two cells deep (S5.1). A module two wide gets the row in front of its wall row when that row is free air
+ * (no glass, other module or ground) and the deeper module fits by the rules of a new one (doorFits: the new front landing
+ * clear of glass, ground, stations, rocks, deposits and veins, the module off the other modules' landings and stations).
+ * Otherwise (and for a legacy one-wide module) it stays one deep. Rooms keep every cell and their air: the new row was
+ * outside air. A player standing in the new row (on the old front landing) is set down on the new front landing.
+ * Idempotent; never lowers the version.
+ */
+export function toDeepModules(r:Obj):Obj{
+ const next=structuredClone(r),world=obj(next.world,'world'),base=obj(world.base,'world.base'),m=obj(next.meta,'meta'),pl=obj(next.player,'player');
+ const doors=Array.isArray(base.doors)?base.doors:[],num=(v:unknown)=>typeof v==='number'&&Number.isInteger(v);
+ if(Array.isArray(base.glass)&&base.glass.every(num)&&doors.every(d=>isObj(d)&&['x','y','z','rot'].every(k=>num(d[k])))){
+  const glass=new Set(base.glass as number[]),list=doors as Door[],colliders=worldColliders(isObj(world.nodes)?world.nodes:{},Array.isArray(world.veins)?world.veins:[]);
+  const stations=(Array.isArray(base.buildings)?base.buildings:[]).filter(isObj).map(b=>stationBox({kind:String(b.kind),level:Number(b.level),x:Number(b.x),y:Number(b.y),z:Number(b.z)}));
+  for(const d of list){if(Object.hasOwn(d,'depth'))continue;
+   const shallow={...d,depth:1 as const},deep={...d,depth:2 as const},others=list.filter(o=>o!==d),taken=new Set(others.flatMap(o=>doorKeys(o.depth?o:{...o,depth:1}))),mine=new Set(doorKeys(deep));
+   const reserved=new Set(others.flatMap(o=>{const v=o.depth?o:{...o,depth:1 as const};return [...landingCells(v,'front'),...landingCells(v,'back')];}));
+   const row=doorKeys(deep).filter(k=>!doorKeys(shallow).includes(k));
+   const fits=d.width===2&&row.every(k=>!glass.has(k)&&!taken.has(k)&&!groundKey(k))&&doorFits(k=>(glass.has(k)&&!mine.has(k))||taken.has(k),deep,stations,reserved,colliders);
+   Object.assign(d,{depth:fits?2:1});
+   if(fits&&overlaps(moduleBox(deep,1,1),playerBox(Number(pl.x),Number(pl.y),Number(pl.z))))Object.assign(pl,landingAt(deriveRooms(base.glass as number[],list.map(o=>o.depth?o:{...o,depth:1 as const})),deep,'front'));
+  }
+ }
+ m.stateVersion=Math.max(Number(m.stateVersion),STATE_VERSION);return next;
 }
 /** The module step: a door saved before D36 (no `width`) or the retired S4 passage field. */
 const needsModules=(r:Obj)=>{const b=isObj(r.world)&&isObj(r.world.base)?r.world.base:null;return !!b&&('passage' in b||Array.isArray(b.doors)&&b.doors.some(d=>isObj(d)&&!('width' in d)));};
@@ -184,12 +214,14 @@ export function toModules(r:Obj):Obj{
   let returned=0,at:{x:number;z:number}|null=null;const moved:{d:Door;side:'front'|'back'}[]=[];
   for(const d of list){if(Object.hasOwn(d,'width'))continue;
    const rot=((Number(d.rot)%4)+4)%4,a=doorAlong(rot),others=list.filter(o=>o!==d),taken=new Set(others.flatMap(o=>doorKeys(o))),reserved=new Set(others.flatMap(o=>[...landingCells(o,'front'),...landingCells(o,'back')]));
-   const wide=[newDoor(d.id,d.x,d.y,d.z,rot),newDoor(d.id,d.x-a.x,d.y,d.z-a.z,rot)].find(c=>{const mine=new Set(doorKeys(c)),extra=doorKeys(c).filter(k=>!doorKeys(d).includes(k));
+   const wide=[newDoor(d.id,d.x,d.y,d.z,rot,2,1),newDoor(d.id,d.x-a.x,d.y,d.z-a.z,rot,2,1)].find(c=>{const mine=new Set(doorKeys(c)),extra=doorKeys(c).filter(k=>!doorKeys(d).includes(k));
     return extra.every(k=>glass.has(k))&&doorFits(k=>(glass.has(k)&&!mine.has(k))||taken.has(k),c,stations,reserved,colliders);});
    // A player the dome step set down on this door's landing (its centre) moves to the centre of the wider landing.
    const f=doorFront(rot),side=(['front','back'] as const).find(v=>{const s=v==='front'?1:-1;return Math.abs(Number(pl.x)-(d.x+.5+f.x*s))<1e-9&&Math.abs(Number(pl.z)-(d.z+.5+f.z*s))<1e-9;});
    if(wide){for(const k of doorKeys(wide))if(glass.delete(k))returned++;Object.assign(d,wide);at??=doorCenter(d);if(side)moved.push({d,side});}
-   else Object.assign(d,newDoor(d.id,d.x,d.y,d.z,rot,1));
+   else Object.assign(d,newDoor(d.id,d.x,d.y,d.z,rot,1,1));
+   // The depth step (S5.1) decides the chamber's second row after this one.
+   delete (d as Partial<Door>).depth;
   }
   base.glass=[...glass].sort((p,q)=>p-q);
   if(returned&&Array.isArray(pl.inventory)){const left=addItems(pl.inventory as Slot[],'window',returned);if(left){const drops=Array.isArray(world.drops)?world.drops:(world.drops=[]),id=Number(world.nextDropId);(drops as unknown[]).push({id:'drop-'+id,x:at!.x,z:at!.z,items:[{itemId:'window',count:left}]});world.nextDropId=id+1;}}
@@ -448,8 +480,8 @@ function validateBase(value: unknown, legacy = false): BaseState {
  const glass=list('glass',GLASS_LIMIT).map(v=>{const k=int(v,'base.glass',0,2**27-1),c=cellOf(k);if(!storable(c.i,c.k,c.j))throw new InvalidState('base.glass','клетка вне участка');return k;});
  for(let i=1;i<glass.length;i++)if(glass[i]<=glass[i-1])throw new InvalidState('base.glass','ключи не упорядочены или повторяются');
  const face=(v:unknown,p:string)=>{if(v!=='closed'&&v!=='cycling'&&v!=='open')throw new InvalidState(p,'неверное состояние двери');return v as DoorState;};
- const solid=new Set(glass),doors=list('doors',DOOR_LIMIT).map((v):Door=>{const o=obj(v,'door'),width=o.width;if(width!==1&&width!==2)throw new InvalidState('door.width','ширина шлюза 1 или 2');
-  const d:Door={id:register(o.id,'door.id','door'),x:int(o.x,'door.x',CELL_MIN-STORE_MARGIN,CELL_MAX+STORE_MARGIN),y:int(o.y,'door.y',LEVEL_MIN,LEVEL_MAX-1),z:int(o.z,'door.z',CELL_MIN-STORE_MARGIN,CELL_MAX+STORE_MARGIN),rot:int(o.rot,'door.rot',0,3),width,outer:face(o.outer,'door.outer'),inner:face(o.inner,'door.inner'),pressure:int(o.pressure,'door.pressure',0,CHAMBER_Q),cycleMs:int(o.cycleMs,'door.cycleMs',0,EQUALIZE_MS+SLIDE_MS)};
+ const solid=new Set(glass),doors=list('doors',DOOR_LIMIT).map((v):Door=>{const o=obj(v,'door'),width=o.width,depth=o.depth;if(width!==1&&width!==2)throw new InvalidState('door.width','ширина шлюза 1 или 2');if(depth!==1&&depth!==2)throw new InvalidState('door.depth','глубина шлюза 1 или 2');
+  const d:Door={id:register(o.id,'door.id','door'),x:int(o.x,'door.x',CELL_MIN-STORE_MARGIN,CELL_MAX+STORE_MARGIN),y:int(o.y,'door.y',LEVEL_MIN,LEVEL_MAX-1),z:int(o.z,'door.z',CELL_MIN-STORE_MARGIN,CELL_MAX+STORE_MARGIN),rot:int(o.rot,'door.rot',0,3),width,depth,outer:face(o.outer,'door.outer'),inner:face(o.inner,'door.inner'),pressure:int(o.pressure,'door.pressure',0,CHAMBER_Q),cycleMs:int(o.cycleMs,'door.cycleMs',0,EQUALIZE_MS+SLIDE_MS)};
   // Interlock (D36): at most one door is not closed; a cycle runs exactly while one door is cycling.
   if(d.outer!=='closed'&&d.inner!=='closed')throw new InvalidState('base.doors','обе двери шлюза не закрыты');
   if((d.outer==='cycling'||d.inner==='cycling')!==(d.cycleMs>0))throw new InvalidState('door.cycleMs','неверный цикл шлюза');

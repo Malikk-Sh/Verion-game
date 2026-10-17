@@ -20,11 +20,12 @@ import {
  allRooms, bumpRooms, cellKey, cellY, doorById, doorKeys, doorProblem, landingCells, landingPoint, newDoor, placeDoor, placeGlass, predictRemove, removeDoor, removeGlass, roomsView, shellOf, boxCells, type Door,
 } from '../src/game/rooms.ts';
 
-/** S5 (D36) walk-through airlock: a 2×1×2 module with two sliding doors and a chamber, worked by the player. */
+/** S5 (D36) walk-through airlock: a module with two sliding doors and a chamber, worked by the player. The door logic is
+ *  checked on a one-deep module (S5 saves keep it where the second row does not fit); S5.1 builds it two deep (below). */
 const fresh = () => newGame('w-airlock', 7, 1, heightAt(40, 42));
 /** The base pad (flat 0.5 m): a 3×3×3 room x 56…58, z 42…44, its front wall at z = 45. */
 const CUBE = () => shellOf(boxCells(56, 0, 42, 3, 3, 3));
-const MOD = () => newDoor('door-1', 57, 0, 45, 0);
+const MOD = () => newDoor('door-1', 57, 0, 45, 0, 2, 1);
 function lay(g: GameState, keys: number[], doors: Door[] = []) { g.world.base.glass = [...new Set([...g.world.base.glass, ...keys])].sort((a, b) => a - b); g.world.base.doors.push(...doors); bumpRooms(g); return roomsView(g.world.base); }
 /** A sealed room with a module in its front wall (outer door facing +z) and `q` milli-GU of breathable air. */
 function room(q = 300000) {
@@ -36,7 +37,7 @@ const FLOOR = cellY(0) + SILL, door = (g: GameState) => doorById(g, 'door-1')!, 
 /** Runs the cycle for `ms` of active time (airlockTick alone: no room leak, so the gas is exact). */
 const run = (g: GameState, ms: number) => { for (let n = 0; n < ms; n += 50) airlockTick(g, 50); };
 
-test('D36: the module is 2 cells wide, 1 deep, 2 high; the chamber is never room air and its four cells seal the wall', () => {
+test('D36: a one-deep module is 2 cells wide, 2 high; the chamber is never room air and its four cells seal the wall', () => {
  const g = room(), d = door(g);
  assert.deepEqual(doorKeys(d), [cellKey(57, 0, 45), cellKey(57, 1, 45), cellKey(58, 0, 45), cellKey(58, 1, 45)]);
  assert.deepEqual(allRooms(g).map(r => r.volume), [27], 'the room is sealed by the closed module');
@@ -105,14 +106,14 @@ test('D36: leaving vents the charged chamber outside (no room air); an empty roo
 });
 
 test('D36: a module between two rooms fills from the room behind the opening door; one with no room on either side just slides', () => {
- const g = fresh(), d = newDoor('door-1', 59, 0, 42, 1); assert.deepEqual(doorKeys(d).map(k => k % 128), [32, 33, 32, 33]);
+ const g = fresh(), d = newDoor('door-1', 59, 0, 42, 1, 2, 1); assert.deepEqual(doorKeys(d).map(k => k % 128), [32, 33, 32, 33]);
  lay(g, [...new Set([...shellOf(boxCells(56, 0, 42, 3, 3, 3)), ...shellOf(boxCells(60, 0, 42, 3, 3, 3))])].filter(k => !doorKeys(d).includes(k)), [d]); g.world.base.nextId = 2;
  const [a, b] = allRooms(g); assert.deepEqual([a.volume, b.volume], [27, 27]); a.zone.q = 100000; b.zone.q = 3000; at(g, 57.5, 43);
  // rot 1: the outer door faces +x (room b), the inner one −x (room a).
  assert.equal(useDoor(g, 'door-1', 'inner'), ''); assert.deepEqual([d.pressure, allRooms(g)[0].zone.q], [CHAMBER_Q, 96000]); run(g, EQUALIZE_MS + SLIDE_MS);
  at(g, 59.5, 43, FLOOR); assert.equal(useDoor(g, 'door-1', 'inner'), ''); assert.equal(useDoor(g, 'door-1', 'outer'), ''); assert.equal(d.cycleMs, SLIDE_MS, 'already charged: no fill');
  assert.equal(allRooms(g)[1].zone.q, 3000);
- const h = fresh(), lone = newDoor('door-1', 70, 0, 50, 2); lay(h, [], [lone]); at(h, 71, 48.5);
+ const h = fresh(), lone = newDoor('door-1', 70, 0, 50, 2, 2, 1); lay(h, [], [lone]); at(h, 71, 48.5);
  assert.equal(useDoor(h, 'door-1', 'outer'), ''); assert.equal(lone.cycleMs, SLIDE_MS); run(h, SLIDE_MS); assert.equal(lone.outer, 'open');
 });
 
@@ -126,13 +127,15 @@ test('D36: placement — a straight 2×2 wall run (or a gap) returns its glass; 
  assert.deepEqual(g, before, 'refusals change nothing');
  const r = placeDoor(g, cellKey(57, 0, 45), 0); assert.equal(r.error, ''); assert.equal(r.ventGU, 0);
  assert.equal(g.world.base.glass.length, 41); assert.equal(countItem(g.player.inventory, 'window'), 6); assert.equal(countItem(g.player.inventory, 'airlock'), 0);
- assert.deepEqual({ ...g.world.base.doors[0], id: '' }, { id: '', x: 57, y: 0, z: 45, rot: 0, width: 2, outer: 'closed', inner: 'closed', pressure: 0, cycleMs: 0 });
+ assert.deepEqual({ ...g.world.base.doors[0], id: '' }, { id: '', x: 57, y: 0, z: 45, rot: 0, width: 2, depth: 2, outer: 'closed', inner: 'closed', pressure: 0, cycleMs: 0 });
  assert.equal(allRooms(g)[0].zone.q, 300000, 'sealing never broke'); refreshQuestProgress(g); assert.ok(g.progress.quests.completed.includes('dome'));
- for (const k of [cellKey(57, 0, 46), cellKey(58, 1, 46), cellKey(58, 0, 44), cellKey(57, 1, 44)]) assert.match(placeGlass(g, k).error, /посадка шлюза/);
- for (const x of [57, 58]) assert.match(placementProblem(g, 'refill', x, 47), /шлюза/, 'stations keep both columns of the landing free');
+ // S5.1: two deep, the chamber stands in front of the wall (row z = 46); the landings are z = 47 and z = 44.
+ for (const k of [cellKey(57, 0, 47), cellKey(58, 1, 47), cellKey(58, 0, 44), cellKey(57, 1, 44)]) assert.match(placeGlass(g, k).error, /посадка шлюза/);
+ assert.match(placeGlass(g, cellKey(57, 0, 46)).error, /занята/, 'the chamber row is the module');
+ for (const x of [57, 58]) assert.match(placementProblem(g, 'refill', x, 48), /шлюза/, 'stations keep both columns of the landing free');
  // A module in open air (no wall) is allowed; next to another module's landing it is not.
  at(g, 66, 48); assert.equal(doorProblem(g, cellKey(66, 0, 50), 0), '');
- at(g, 57, 48.5); assert.match(doorProblem(g, cellKey(57, 0, 46), 0), /^Здесь проход другого шлюза$/);
+ at(g, 61, 49); assert.match(doorProblem(g, cellKey(57, 0, 47), 0), /^Здесь проход другого шлюза$/);
 });
 
 test('D36: taking a module back — refused while a door is open or cycling or the player is in it; asks before air leaves', () => {
@@ -202,7 +205,7 @@ function s4(g: GameState, keep: (k: number) => boolean = () => true, door: any =
 test('D36 migration: a 1-wide door with wall glass beside it becomes a 2-wide module; its glass returns; rooms and air stay exact', () => {
  const g = fresh(), raw = s4(g), rooms = allRooms(g).map(r => ({ ...r.zone })), m = sanitizeState(raw);
  assert.equal(m.meta.stateVersion, STATE_VERSION); assert.equal('passage' in m.world.base, false);
- assert.deepEqual(m.world.base.doors, [{ id: 'door-1', x: 57, y: 0, z: 45, rot: 0, width: 2, outer: 'closed', inner: 'closed', pressure: 0, cycleMs: 0 }], 'the +x side first');
+ assert.deepEqual(m.world.base.doors, [{ id: 'door-1', x: 57, y: 0, z: 45, rot: 0, width: 2, outer: 'closed', inner: 'closed', pressure: 0, cycleMs: 0, depth: 2 }], 'the +x side first, two deep (S5.1: the row in front is free)');
  assert.equal(m.world.base.glass.length, raw.world.base.glass.length - 2); assert.ok(!m.world.base.glass.includes(cellKey(58, 0, 45)) && !m.world.base.glass.includes(cellKey(58, 1, 45)));
  assert.equal(countItem(m.player.inventory, 'window'), 2, 'the two blocks are in the backpack');
  assert.deepEqual(m.world.base.zones, rooms, 'every zone exactly (cell, q, T, purity, remainder)'); assert.deepEqual(allRooms(m).map(r => r.volume), [27]);
@@ -217,7 +220,7 @@ test('D36 migration: a 1-wide door with wall glass beside it becomes a 2-wide mo
  assert.deepEqual([left.world.drops.at(-1)!.x, left.world.drops.at(-1)!.z], [58, 45.5]);
  // No glass on either side (a door standing alone): a legacy one-wide module with the same door mechanics.
  const k = fresh(), lone = sanitizeState(s4(k, key => ![56, 58].some(i => [0, 1].some(l => key === cellKey(i, l, 45)))));
- assert.deepEqual({ ...lone.world.base.doors[0] }, { id: 'door-1', x: 57, y: 0, z: 45, rot: 0, width: 1, outer: 'closed', inner: 'closed', pressure: 0, cycleMs: 0 });
+ assert.deepEqual({ ...lone.world.base.doors[0] }, { id: 'door-1', x: 57, y: 0, z: 45, rot: 0, width: 1, outer: 'closed', inner: 'closed', pressure: 0, cycleMs: 0, depth: 1 });
  assert.equal(countItem(lone.player.inventory, 'window'), 0); at(lone, 57.5, 47); assert.equal(useDoor(lone, 'door-1', 'outer'), '');
 });
 
@@ -238,4 +241,52 @@ test('D36: survival and HUD — a sealed suit needs no tank in a charged chamber
  assert.equal(tankGap(g, false, 0), true, 'outside of any air the last tank is a gap');
  assert.equal(useDoor(g, 'door-1', 'inner'), ''); assert.equal(tankGap(g, false, 0), false, 'the charged chamber covers the swap');
  for (let n = 0; n < EQUALIZE_MS + SLIDE_MS; n += 50) productionTick(g, 50, null, 10); assert.equal(door(g).inner, 'open');
+});
+
+// ---------- S5.1: the module is two cells deep ----------
+/** A room with a module built today: two deep, its chamber standing one cell out of the front wall (rows z = 45, 46). */
+function deepRoom(q = 300000) {
+ const g = fresh(), d = newDoor('door-1', 57, 0, 45, 0); lay(g, CUBE().filter(k => !doorKeys({ ...d, depth: 1 }).includes(k)), [d]); g.world.base.nextId = 2;
+ Object.assign(allRooms(g)[0].zone, { q, temperature: 20, purity: 1 }); return g;
+}
+test('S5.1: a module two deep — eight cells, the chamber out of the wall, landings beyond it, the target at its middle', () => {
+ const g = deepRoom(), d = door(g);
+ assert.equal(d.depth, 2); assert.equal(doorKeys(d).length, 8);
+ assert.deepEqual(doorKeys(d).slice(4), [cellKey(57, 0, 46), cellKey(57, 1, 46), cellKey(58, 0, 46), cellKey(58, 1, 46)], 'the second row is in front of the wall');
+ assert.deepEqual(allRooms(g).map(r => r.volume), [27], 'the room keeps its 27 m³: the chamber is outside it');
+ assert.deepEqual(landingCells(d, 'front'), [cellKey(57, 0, 47), cellKey(57, 1, 47), cellKey(58, 0, 47), cellKey(58, 1, 47)]);
+ assert.deepEqual(landingCells(d, 'back'), [cellKey(57, 0, 44), cellKey(57, 1, 44), cellKey(58, 0, 44), cellKey(58, 1, 44)]);
+ assert.deepEqual(doorTarget(d), { id: 'door-1', kind: 'station', name: 'Шлюз', x: 58, z: 46, radius: 3 });
+ assert.deepEqual([landingPoint(g, d, 'front').z, landingPoint(g, d, 'back').z], [47.5, 44.5]);
+ const b = doorBoxes(d); assert.ok(b.outer.minZ > 46.9 && b.outer.maxZ < 47, 'the outer leaf just inside the outer face (z = 47)'); assert.ok(b.inner.minZ >= 45 && b.inner.maxZ < 45.1);
+ assert.equal(chamberAt(g, 58, FLOOR + 1, 46.6)?.id, 'door-1'); assert.equal(chamberAt(g, 58, FLOOR + 1, 45.3)?.id, 'door-1'); assert.equal(chamberAt(g, 58, FLOOR + 1, 47.2), null);
+});
+test('S5.1: walking through a two-deep module — into the long chamber, both doors in reach, on into the room', () => {
+ const g = deepRoom(), d = door(g), view = createGlassView(new THREE.Group()); view.sync(g);
+ const actor = new Character([], (a, b, c, e, out) => view.query(a, b, c, e, out)); Object.assign(actor, { x: 58, y: heightAt(58, 48.5), z: 48.5, yaw: Math.PI });
+ const walk = (s: number) => { for (let t = 0; t < s; t += .05) { actor.step(.05, { forward: 1, right: 0, run: false, jump: false }); view.update(g, .05); } };
+ at(g, 58, 48.5); view.update(g, 0); walk(1.5); assert.ok(actor.z > 47.2 && actor.z < 47.35, `stopped by the closed outer leaf at ${actor.z}`);
+ assert.equal(useDoor(g, 'door-1', 'outer'), ''); run(g, SLIDE_MS); view.update(g, 1); walk(4);
+ assert.ok(actor.z > 45.35 && actor.z < 45.45, `through the 2 m chamber to the inner leaf: ${actor.z}`); Object.assign(g.player, { x: actor.x, y: actor.y, z: actor.z });
+ assert.equal(chamberAt(g, actor.x, actor.y + 1, actor.z)?.id, 'door-1'); assert.equal(useDoor(g, 'door-1', 'outer'), '', 'the outer door 1.6 m behind is in reach');
+ assert.equal(useDoor(g, 'door-1', 'inner'), ''); run(g, EQUALIZE_MS + SLIDE_MS); view.update(g, 1); walk(1.2);
+ assert.ok(actor.z < 44.3, `walked into the room: ${actor.z}`); assert.equal(allRooms(g)[0].zone.q, 296000, 'entering cost the room 4 GU');
+});
+test('S5.1: placement — the chamber row needs free air in front of the wall; glass there refuses the module', () => {
+ const g = fresh(); lay(g, [...CUBE(), cellKey(57, 0, 46)]); at(g, 54, 48); addItems(g.player.inventory, 'airlock', 1);
+ assert.match(doorProblem(g, cellKey(57, 0, 45), 0), /место под камеру/);
+});
+test('S5.1 migration: an S5 module gets the second row where it fits; glass or a station in front keeps it one deep', () => {
+ const v9 = (patch?: (raw: any) => void) => { const g = fresh(), d = MOD(); lay(g, CUBE().filter(k => !doorKeys(d).includes(k)), [d]); g.world.base.nextId = 2; Object.assign(allRooms(g)[0].zone, { q: 123456, temperature: 20, purity: 1 });
+  const raw: any = JSON.parse(JSON.stringify(g)); raw.meta.stateVersion = 9; delete raw.world.base.doors[0].depth; patch?.(raw); return raw; };
+ const m = sanitizeState(v9()); assert.equal(m.meta.stateVersion, STATE_VERSION); assert.equal(m.world.base.doors[0].depth, 2); assert.deepEqual(allRooms(m).map(r => [r.volume, r.zone.q]), [[27, 123456]]);
+ // A player on the old front landing stands where the new row is: set down on the new landing.
+ const p = sanitizeState(v9(raw => Object.assign(raw.player, { x: 58, y: heightAt(58, 46.5), z: 46.5 }))); assert.equal(p.player.z, 47.5);
+ // Glass in front of the module, or a station on the new landing: one deep, as before.
+ const glass = sanitizeState(v9(raw => { raw.world.base.glass = [...raw.world.base.glass, cellKey(58, 1, 46)].sort((a: number, b: number) => a - b); }));
+ assert.equal(glass.world.base.doors[0].depth, 1);
+ const st = sanitizeState(v9(raw => { const b = makeBuilding(fresh(), 'refill', 57, heightAt(57, 48), 48); raw.world.base.buildings = [JSON.parse(JSON.stringify({ ...b, id: 'build-2' }))]; raw.world.base.nextId = 3; }));
+ assert.equal(st.world.base.doors[0].depth, 1);
+ assert.deepEqual(sanitizeState(JSON.parse(JSON.stringify(m))), m, 'idempotent');
+ const bad: any = JSON.parse(JSON.stringify(m)); bad.world.base.doors[0].depth = 3; assert.throws(() => sanitizeState(bad), /глубина/);
 });

@@ -18,13 +18,15 @@ export type DoorFace = 'outer' | 'inner';
 export type DoorState = 'closed' | 'cycling' | 'open';
 /**
  * S5 (D36) walk-through airlock module: `width` cells along the wall (2 when built; 1 only for a legacy module converted
- * from an older save) × 1 cell deep × 2 high from the anchor cell (x, y, z), the width running along +x (rot 0/2) or +z
- * (rot 1/3). Two sliding doors close its faces; the chamber between them holds `pressure` milli-GU (0…4000) and is never
- * room air. `cycleMs`: what is left of the cycle of the door marked 'cycling' (airlock.ts).
+ * from an older save) × `depth` cells deep (S5.1: 2 when built, the chamber stands out of the wall by one cell towards the
+ * front; 1 for a module of an S5 save with no room for that) × 2 high. The anchor cell (x, y, z) is in the wall row; the
+ * width runs along +x (rot 0/2) or +z (rot 1/3), the depth towards the front. Two sliding doors close its faces; the chamber
+ * between them holds `pressure` milli-GU (0…4000) and is never room air. `cycleMs`: what is left of the cycle of the door
+ * marked 'cycling' (airlock.ts).
  */
-export type Door = { id: string; x: number; y: number; z: number; rot: number; width: 1 | 2; outer: DoorState; inner: DoorState; pressure: number; cycleMs: number };
+export type Door = { id: string; x: number; y: number; z: number; rot: number; width: 1 | 2; depth: 1 | 2; outer: DoorState; inner: DoorState; pressure: number; cycleMs: number };
 /** A closed, depressurised module (a new one, or one converted from an older save). */
-export const newDoor = (id: string, x: number, y: number, z: number, rot: number, width: 1 | 2 = 2): Door => ({ id, x, y, z, rot: ((rot % 4) + 4) % 4, width, outer: 'closed', inner: 'closed', pressure: 0, cycleMs: 0 });
+export const newDoor = (id: string, x: number, y: number, z: number, rot: number, width: 1 | 2 = 2, depth: 1 | 2 = 2): Door => ({ id, x, y, z, rot: ((rot % 4) + 4) % 4, width, depth, outer: 'closed', inner: 'closed', pressure: 0, cycleMs: 0 });
 /** Air of one room; `cell` is the room's smallest cell key and is its identity. q in milli-GU. */
 export type Zone = { cell: number; q: number; temperature: number; purity: number; lossRemainder: number };
 export type Room = { index: number; cell: number; cells: number[]; volume: number };
@@ -67,7 +69,7 @@ export function columnFloor(i: number, j: number) {
 export const isGround = (i: number, k: number, j: number) => columnFloor(i, j) > cellY(k) + .5;
 /** Lowest air level of a column (`| 0` turns a −0 into 0). */
 export const lowestAir = (i: number, j: number) => Math.ceil(columnFloor(i, j) - cellY(0) - .5) | 0;
-const groundKey = (key: number) => { const c = cellOf(key); return isGround(c.i, c.k, c.j); };
+export const groundKey = (key: number) => { const c = cellOf(key); return isGround(c.i, c.k, c.j); };
 /** The v8 ground rule on the old integer levels (y ∈ [k, k+1]): only the v8 → v9 migration derives rooms with it. */
 export const groundV8 = (key: number) => { const c = cellOf(key); return columnFloor(c.i, c.j) > c.k + .5; };
 /** Cells of a box (w × h × d from its lowest corner cell). */
@@ -92,17 +94,23 @@ export const doorFront = (rot: number) => ({ x: Math.round(Math.sin(rot * Math.P
 export const doorAlong = (rot: number) => rot % 2 ? { x: 0, z: 1 } : { x: 1, z: 0 };
 /** Width of a module; an unconverted door of an older save (no `width`, migration only) is one cell wide. */
 export const widthOf = (d: { width?: number }) => d.width === 2 ? 2 : 1;
-type Shape = { x: number; y: number; z: number; rot?: number; width?: number };
-/** Cell columns of a module, from the anchor along its width. */
-export const doorColumns = (d: Shape) => { const a = doorAlong(d.rot ?? 0); return Array.from({ length: widthOf(d) }, (_, c) => ({ i: d.x + a.x * c, j: d.z + a.z * c })); };
+/** Depth of a module (S5.1); a module saved before it (no `depth`, migration only) is one cell deep. */
+export const depthOf = (d: { depth?: number }) => d.depth === 2 ? 2 : 1;
+type Shape = { x: number; y: number; z: number; rot?: number; width?: number; depth?: number };
+/** Cell columns of a module, from the anchor along its width and towards its front through its depth. */
+export const doorColumns = (d: Shape) => { const a = doorAlong(d.rot ?? 0), f = doorFront(d.rot ?? 0); return Array.from({ length: depthOf(d) }, (_, r) => Array.from({ length: widthOf(d) }, (_, c) => ({ i: d.x + a.x * c + f.x * r, j: d.z + a.z * c + f.z * r }))).flat(); };
 /** Every cell of a module (both levels of each column); [0] is the anchor's lower cell, the key a module is aimed by. */
 export const doorKeys = (d: Shape) => doorColumns(d).flatMap(c => [cellKey(c.i, d.y, c.j), cellKey(c.i, d.y + 1, c.j)]);
 /** The landing on one side of a module: the cells straight in front (or behind) of every column, at both levels. */
-export function landingCells(d: Door, side: Side) { const f = doorFront(d.rot), s = side === 'front' ? 1 : -1; return doorKeys({ ...d, x: d.x + f.x * s, z: d.z + f.z * s }); }
+export function landingCells(d: Door, side: Side) { const f = doorFront(d.rot), s = side === 'front' ? depthOf(d) : -1; return doorKeys({ ...d, depth: 1, x: d.x + f.x * s, z: d.z + f.z * s }); }
 /** Centre of a module's footprint (the map target and the leading point, D34). */
-export const doorCenter = (d: Door) => { const a = doorAlong(d.rot), w = widthOf(d); return { x: d.x + (a.x ? w / 2 : .5), z: d.z + (a.z ? w / 2 : .5) }; };
-/** [minX, maxX, minY, maxY, minZ, maxZ] of a whole module. */
-export const moduleBox = (d: Door) => { const a = doorAlong(d.rot), w = widthOf(d), y = cellY(d.y); return [d.x, d.x + (a.x ? w : 1), y, y + 2, d.z, d.z + (a.z ? w : 1)]; };
+export const doorCenter = (d: Door) => { const a = doorAlong(d.rot), f = doorFront(d.rot), w = widthOf(d), o = (depthOf(d) - 1) / 2; return { x: d.x + (a.x ? w / 2 : .5) + f.x * o, z: d.z + (a.z ? w / 2 : .5) + f.z * o }; };
+/** [minX, maxX, minY, maxY, minZ, maxZ] of a whole module (`rows` cells deep from row `from`, default all of it). */
+export const moduleBox = (d: Door, from = 0, rows = depthOf(d)) => {
+ const a = doorAlong(d.rot), f = doorFront(d.rot), w = widthOf(d), y = cellY(d.y), x0 = d.x + f.x * from, z0 = d.z + f.z * from;
+ const x1 = x0 + f.x * (rows - 1), z1 = z0 + f.z * (rows - 1);
+ return [Math.min(x0, x1), Math.max(x0, x1) + (a.x ? w : 1), y, y + 2, Math.min(z0, z1), Math.max(z0, z1) + (a.z ? w : 1)];
+};
 // ---------- Derived rooms ----------
 /** The glass that closes a set of interior cells: every face neighbour that is neither interior nor ground. */
 export function shellOf(interior: Iterable<number>) {
@@ -222,7 +230,7 @@ function standY(view: RoomsView, i: number, k: number, j: number, x: number, z: 
 /** Landing point on one side: the centre of the landing cell, 1 m from the door axis — 1.5 m from the door's inner face,
  *  which for a converted dome is exactly its old exit (dome centre + front × 3.5). */
 export function landingAt(view: RoomsView, d: Door, side: Side) {
- const f = doorFront(d.rot), s = side === 'front' ? 1 : -1, c = doorCenter(d), i = d.x + f.x * s, j = d.z + f.z * s, x = c.x + f.x * s, z = c.z + f.z * s;
+ const f = doorFront(d.rot), s = side === 'front' ? depthOf(d) : -1, c = doorCenter({ ...d, depth: 1 }), i = d.x + f.x * s, j = d.z + f.z * s, x = c.x + f.x * s, z = c.z + f.z * s;
  return { x, y: standY(view, i, d.y, j, x, z), z };
 }
 export const landingPoint = (g: GameState, d: Door, side: Side) => landingAt(roomsView(g.world.base), d, side);
@@ -308,10 +316,10 @@ export function predictRemove(g: GameState, key: number): number {
  return carry(v, base.zones, after, 10).vented / 1000;
 }
 // ---------- Placement rules ----------
-const overlaps = (a: number[], b: number[]) => a[0] < b[1] - 1e-6 && a[1] > b[0] + 1e-6 && a[2] < b[3] - 1e-6 && a[3] > b[2] + 1e-6 && a[4] < b[5] - 1e-6 && a[5] > b[4] + 1e-6;
+export const overlaps = (a: number[], b: number[]) => a[0] < b[1] - 1e-6 && a[1] > b[0] + 1e-6 && a[2] < b[3] - 1e-6 && a[3] > b[2] + 1e-6 && a[4] < b[5] - 1e-6 && a[5] > b[4] + 1e-6;
 /** [minX, maxX, minY, maxY, minZ, maxZ] of `n` stacked cells from `key` up. */
 const cellBox = (key: number, n = 1) => { const c = cellOf(key); return [c.i, c.i + 1, cellY(c.k), cellY(c.k) + n, c.j, c.j + 1]; };
-const playerBox = (x: number, y: number, z: number) => [x - .3, x + .3, y, y + 1.8, z - .3, z + .3];
+export const playerBox = (x: number, y: number, z: number) => [x - .3, x + .3, y, y + 1.8, z - .3, z + .3];
 /** Station body heights (buildings.ts colliders): a footprint of ±0.48 m around the integer centre. */
 export const STATION_HEIGHT: Record<string, number> = { workbench: 1.1, kiln: 1.35, biogenerator: 1.25, electrolyzer: 1.25, refill: 1.45, distributor: .95 };
 export const stationBox = (b: { kind: string; level?: number; x: number; y: number; z: number }) => [b.x - .48, b.x + .48, b.y, b.y + (b.kind === 'workbench' && b.level === 2 ? 1.55 : STATION_HEIGHT[b.kind] ?? 1.5), b.z - .48, b.z + .48];
@@ -341,17 +349,19 @@ export function glassProblem(g: GameState, key: number): string {
  if (reservedCells(g).has(key)) return 'Здесь посадка шлюза — оставьте её свободной';
  return '';
 }
-/** Why an airlock module (anchor cell `key`, turned `rot`) cannot stand here ('' = it can). It fills either an empty gap or
- *  a straight 2×2 run of wall glass, which it replaces (the blocks return to the backpack), so sealing never breaks. */
-export function doorProblem(g: GameState, key: number, rot: number, except?: string, width: 1 | 2 = 2): string {
+/** Why an airlock module (anchor cell `key`, turned `rot`) cannot stand here ('' = it can). Its wall row fills either an
+ *  empty gap or a straight 2×2 run of wall glass, which it replaces (the blocks return to the backpack), so sealing never
+ *  breaks; S5.1: the chamber's second row stands in front of the wall and needs free air there. */
+export function doorProblem(g: GameState, key: number, rot: number, except?: string, width: 1 | 2 = 2, depth: 1 | 2 = 2): string {
  if (g.player.vitals.health <= 0) return 'Персонаж погиб';
- const c = cellOf(key), d = newDoor('', c.i, c.k, c.j, rot, width), cells = doorKeys(d), v = roomsView(g.world.base);
+ const c = cellOf(key), d = newDoor('', c.i, c.k, c.j, rot, width, depth), cells = doorKeys(d), wall = doorKeys({ ...d, depth: 1 }), v = roomsView(g.world.base);
  for (const k of cells) { const area = areaProblem(k); if (area) return area; }
  if (!reach(g, key)) return 'Слишком далеко — подойдите ближе';
  if (g.world.base.doors.filter(d => d.id !== except).length >= DOOR_LIMIT) return `Достигнут предел ${DOOR_LIMIT} шлюзов`;
  for (const k of cells) { const o = v.doorAt.get(k); if (o && o.id !== except) return 'Здесь уже стоит шлюз'; const p = cellOf(k); if (isGround(p.i, p.k, p.j)) return 'Шлюз не ставится в грунт'; }
  // Part glass, part air: the module would stick out of the wall (or leave half a wall standing beside its chamber).
- const glassIn = cells.filter(k => v.glass.has(k)).length; if (glassIn && glassIn < cells.length) return `Шлюзу нужен ровный участок стены ${width}×2 — наведите на середину стены`;
+ const glassIn = wall.filter(k => v.glass.has(k)).length; if (glassIn && glassIn < wall.length) return `Шлюзу нужен ровный участок стены ${width}×2 — наведите на середину стены`;
+ if (cells.some(k => !wall.includes(k) && v.glass.has(k))) return 'Перед стеной нужно место под камеру шлюза — уберите стекло';
  const box = moduleBox(d);
  if (overlaps(box, playerBox(g.player.x, g.player.y, g.player.z))) return 'Место занято персонажем';
  if (g.world.base.buildings.some(b => overlaps(box, stationBox(b)))) return 'Место занято станцией';
@@ -368,7 +378,7 @@ const staticHit = (box: number[], list: readonly Box[] = boxes) => list.some(b =
  *  given layout (`solid` cells, station boxes): new modules and the v7 → v8 migration share it. `statics` (a collider
  *  list): only the rock/deposit/capsule check against it; null: the glass, ground and station checks. */
 export function landingProblem(solid: (key: number) => boolean, d: Door, side: Side, stations: readonly number[][], statics: readonly Box[] | null): string {
- const land = landingCells(d, side), f = doorFront(d.rot), s = side === 'front' ? 1 : -1, box = moduleBox({ ...d, x: d.x + f.x * s, z: d.z + f.z * s }), front = side === 'front';
+ const land = landingCells(d, side), front = side === 'front', box = moduleBox(d, front ? depthOf(d) : -1, 1);
  if (statics) return staticHit(box, statics) ? front ? 'Перед шлюзом препятствие — поверните шлюз' : 'За шлюзом препятствие — поверните шлюз' : '';
  if (land.some(solid)) return front ? 'Перед шлюзом стекло — освободите проход' : 'За шлюзом стекло — освободите проход';
  if (land.some(k => { const c = cellOf(k); return c.k === d.y && isGround(c.i, c.k, c.j); })) return 'Шлюз упирается в грунт — поставьте его выше';

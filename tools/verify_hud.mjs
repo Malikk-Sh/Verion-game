@@ -152,18 +152,18 @@ print(json.dumps({n:{k:list(im.getpixel(p)) for k,p in points.items()} for n,im 
  const before=await game.evaluate(()=>window.__vireon.getState());await game.locator('#hotbar-slots .cell').nth(1).tap();await game.waitForFunction(()=>window.__vireon.getState().hotbar===1);
  const after=await game.evaluate(()=>window.__vireon.getState());assert.equal(after.hotbar,1);assert.equal(after.yaw,before.yaw);assert.equal(after.pitch,before.pitch);check('Smaller hotbar cells select items and do not rotate the camera');
  await click('#pause-button');await click('#settings-button');await click('#visor-settings-button');
- assert.deepEqual(await game.locator('.visor-size-row input').evaluateAll(es=>es.map(e=>Number(e.value))),[100,100]);
+ assert.deepEqual(await game.locator('.visor-size-row input').evaluateAll(es=>es.map(e=>Number(e.value))),[100,100,70]);
  const ticks=await game.evaluate(()=>window.__vireon.getState().activeTicks);await game.waitForTimeout(400);assert.equal(await game.evaluate(()=>window.__vireon.getState().activeTicks),ticks);
  for(const [width,height]of [[568,320],[667,320],[844,390],[1366,768]]){await game.setViewportSize({width,height});assert.ok(await game.locator('#visor-settings-panel').evaluate(e=>e.scrollHeight<=e.clientHeight+1&&[...e.querySelectorAll('input,button')].filter(c=>c.getClientRects().length).every(c=>{const p=e.getBoundingClientRect(),r=c.getBoundingClientRect();return r.top>=p.top&&r.bottom<=p.bottom&&r.left>=p.left&&r.right<=p.right})));}
  await game.setViewportSize({width:844,height:390});await shot('visor-settings');check('Separate visor settings fit four screens and pause expedition time');
  const setVisor=async(key,value)=>game.locator('#visor-'+key).evaluate((e,v)=>{e.value=String(v);e.dispatchEvent(new Event('input',{bubbles:true}))},value);
- const previous=await game.evaluate(()=>JSON.parse(localStorage.getItem('vireon.settings')));await setVisor('strength',0);await setVisor('spread',135);
+ const previous=await game.evaluate(()=>JSON.parse(localStorage.getItem('vireon.settings')));await setVisor('strength',0);await setVisor('spread',135);await setVisor('opacity',45);
  assert.equal(await game.locator('#visor').evaluate(e=>getComputedStyle(e).getPropertyValue('--visor-strength').trim()),'0');
- await game.reload();await ready();await click('#title-settings');await click('#visor-settings-button');assert.deepEqual(await game.locator('.visor-size-row input').evaluateAll(es=>es.map(e=>Number(e.value))),[0,135]);
+ await game.reload();await ready();await click('#title-settings');await click('#visor-settings-button');assert.deepEqual(await game.locator('.visor-size-row input').evaluateAll(es=>es.map(e=>Number(e.value))),[0,135,45]);
  await setVisor('strength',120);await click('#visor-settings-back');await click('#hud-settings-button');await click('#hud-reset');
- assert.deepEqual(await game.evaluate(()=>JSON.parse(localStorage.getItem('vireon.settings')).visor),{strength:120,spread:135});
+ assert.deepEqual(await game.evaluate(()=>JSON.parse(localStorage.getItem('vireon.settings')).visor),{strength:120,spread:135,opacity:45});
  await game.keyboard.press('Escape');assert.equal(await game.locator('#settings').isVisible(),true);await click('#visor-settings-button');await click('#visor-reset');
- const afterVisor=await game.evaluate(()=>JSON.parse(localStorage.getItem('vireon.settings')));assert.deepEqual(afterVisor.visor,{strength:100,spread:100});
+ const afterVisor=await game.evaluate(()=>JSON.parse(localStorage.getItem('vireon.settings')));assert.deepEqual(afterVisor.visor,{strength:100,spread:100,opacity:70});
  for(const key of ['quality','sound','bob','fov','hud'])assert.deepEqual(afterVisor[key],previous[key]);
  await game.keyboard.press('Escape');assert.equal(await game.locator('#settings').isVisible(),true);await click('#settings-back');await continueAfterReload();await click('#pause-button');await click('#settings-button');await click('#visor-settings-button');await click('#visor-preview');assert.equal(await game.evaluate(()=>window.__vireon.getState().running),true);
  check('Visor preferences persist including 0%; independent resets, Escape navigation and gameplay preview work');

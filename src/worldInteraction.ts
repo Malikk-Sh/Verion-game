@@ -57,8 +57,9 @@ export function createWorldInteraction(scene: THREE.Scene, camera: THREE.Camera)
  const okLine = new THREE.LineBasicMaterial({ color: 0x64e6bd, transparent: true, opacity: .95 }), badLine = new THREE.LineBasicMaterial({ color: 0xe76d62, transparent: true, opacity: .95 });
  const cellGhost = (h: number) => { const geo = new THREE.BoxGeometry(1.02, h + .02, 1.02), g = new THREE.Group(), fill = new THREE.Mesh(geo, okMat), edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), okLine); fill.renderOrder = edges.renderOrder = 6; g.add(fill, edges); g.visible = false; scene.add(g); return { g, fill, edges }; };
  const blockGhost = cellGhost(1), doorGhost = cellGhost(2), doorArrow = new THREE.Mesh(new THREE.ConeGeometry(.14, .32, 3), okMat);
- // The module ghost is 2 × 2 × 1 (D36): the cell ghost stretched along its width; the arrow points out of the outer door.
- doorGhost.fill.scale.x = doorGhost.edges.scale.x = 2.02 / 1.02; doorArrow.rotation.x = Math.PI / 2; doorArrow.position.set(0, -.92, .72); doorGhost.g.add(doorArrow);
+ // The module ghost is 2 wide × 2 high × 2 deep (D36, S5.1): the cell ghost stretched along its width and depth; the arrow
+ // points out of the outer door.
+ doorGhost.fill.scale.x = doorGhost.edges.scale.x = doorGhost.fill.scale.z = doorGhost.edges.scale.z = 2.02 / 1.02; doorArrow.rotation.x = Math.PI / 2; doorArrow.position.set(0, -.92, 1.22); doorGhost.g.add(doorArrow);
  function showCell(id: string, key: number, valid: boolean) {
   const gh = id === 'airlock' ? doorGhost : blockGhost, { i, k, j } = cellOf(key), c = id === 'airlock' ? doorCenter(newDoor('', i, k, j, cellRot)) : { x: i + .5, z: j + .5 };
   gh.fill.material = valid ? okMat : badMat; gh.edges.material = valid ? okLine : badLine; doorArrow.material = valid ? okMat : badMat;
@@ -92,6 +93,9 @@ export function createWorldInteraction(scene: THREE.Scene, camera: THREE.Camera)
    if (id === 'airlock' && !struck.door && n[1] === 0) {
     const low = v.glass.has(struck.key - 1) ? struck.key - 1 : struck.key, c = cellOf(low), a = doorAlong(cellRot), hit = ray.ray.at(struck.distance, new THREE.Vector3()), frac = a.x ? hit.x - c.i : hit.z - c.j;
     const before = cellKey(c.i - a.x, c.k, c.j - a.z), options = frac < .5 ? [before, low] : [low, before];
+    // S5.1: the chamber stands out of the wall on the outer side: aimed at a room's wall from inside, the module turns round
+    // so its outer door still faces away from the room.
+    const f = doorFront(cellRot); if ((v.tag.get(cellKey(c.i + f.x, c.k, c.j + f.z)) ?? -1) >= 0) cellRot = (cellRot + 2) % 4;
     cell = options.find(k => !doorProblem(g, k, cellRot)) ?? options[0];
    }
    else {

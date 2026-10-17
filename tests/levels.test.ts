@@ -59,7 +59,7 @@ test('D35: a 3-high wall on the pad shows three whole blocks above the ground an
  assert.equal(view.stats().meshes, 1, 'all glass is one mesh'); assert.equal(view.stats().castShadow, false);
  const drawn = view.group.children.find(o => o.name === 'glass') as THREE.Mesh; assert.equal(drawn.castShadow, false); assert.equal((drawn.material as THREE.Material).depthWrite, false);
  // A standing body beside the wall is clear of it; one stepped into it is not.
- assert.equal(bodyInSolid(roomsView(g.world.base), 57.5, .5, 46.5), false); assert.equal(bodyInSolid(roomsView(g.world.base), 56.5, .5, 45.4), true);
+ assert.equal(bodyInSolid(roomsView(g.world.base), 57.5, .5, 47.5), false, 'in front of the two-deep module'); assert.equal(bodyInSolid(roomsView(g.world.base), 56.5, .5, 45.4), true);
  assert.equal(bodyInSolid(roomsView(g.world.base), 56.5, 3.5, 45.5), false, 'standing on top of the wall (3.5 m)');
 });
 
@@ -84,7 +84,7 @@ test('D35: v8 → v9 keeps the keys; a room with an airlock on the pad keeps its
  const g = fresh(); lay(g, CUBE().filter(k => !doorKeys(DOOR).includes(k)), [DOOR]); g.world.base.nextId = 2;
  const room = allRooms(g)[0]; Object.assign(room.zone, { q: 321987, temperature: 18.5, purity: .73, lossRemainder: 412 });
  const raw = JSON.parse(JSON.stringify(g)); raw.meta.stateVersion = 8;
- const m = sanitizeState(raw); assert.equal(m.meta.stateVersion, STATE_VERSION); assert.equal(STATE_VERSION, 9);
+ const m = sanitizeState(raw); assert.equal(m.meta.stateVersion, STATE_VERSION); assert.equal(STATE_VERSION, 10);
  assert.deepEqual(m.world.base.glass, g.world.base.glass); assert.deepEqual(m.world.base.doors, g.world.base.doors);
  assert.deepEqual(m.world.base.zones, g.world.base.zones, 'the zone is kept exactly (q, T, purity, loss remainder)');
  assert.deepEqual(allRooms(m).map(r => [r.cell, r.volume, r.zone.q]), [[room.cell, 27, 321987]]);
