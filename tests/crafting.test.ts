@@ -20,9 +20,9 @@ test('Workbench I pauses away, resumes near; only one nearby bench uses the play
 test('A pocket recipe that does not fit the four bench II output slots (dismantle_dome) stays in the pocket',()=>{
  const {g,b}=setup();equip(g);stock(g,{...WORKBENCH_UPGRADE.inputs,cable:1});upgradeBuilding(g,b.id);const gen=makeBuilding(g,'biogenerator',44,0,42);gen.energy=GEN_BUFFER;connect(g,'cable',gen.id,b.id);
  // 64 glass blocks (stack 16 = 4 slots) + 1 airlock need 5 slots: on the bench the batch finished but could never be delivered.
- g.player.inventory[1]=null;stock(g,{dome:1});const r=RECIPE_BY_ID.get('dismantle_dome')!;assert.equal(craftOwner(b,r),'hand');assert.equal(craftOwner(b,RECIPE_BY_ID.get('grass_parts')!),b.id);
+ g.player.inventory[1]=null;stock(g,{dome:1});const r=RECIPE_BY_ID.get('dismantle_dome')!;assert.equal(craftOwner(g,b,r),'hand');assert.equal(craftOwner(g,b,RECIPE_BY_ID.get('grass_parts')!),b.id);
  assert.equal(queueJob(g,'dismantle_dome',b.id,1),'Неверная очередь');assert.equal(startJob(g,'dismantle_dome',b.id),'Нужна подходящая станция');assert.equal(countItem(g.player.inventory,'dome'),1);
- assert.equal(startJob(g,'dismantle_dome',craftOwner(b,r)),'');tick(g,2100);assert.equal(g.world.base.hand,null);assert.equal(b.job,null);
+ assert.equal(startJob(g,'dismantle_dome',craftOwner(g,b,r)),'');tick(g,2100);assert.equal(g.world.base.hand,null);assert.equal(b.job,null);
  assert.equal(countItem(g.player.inventory,'window'),64);assert.equal(countItem(g.player.inventory,'airlock'),1);assert.equal(countItem(g.player.inventory,'dome'),0);
  const bad:any=structuredClone(g);bad.world.base.buildings.find((v:any)=>v.id===b.id).queue=['dismantle_dome'];assert.throws(()=>sanitizeState(bad),/рецепт/);
 });
@@ -61,11 +61,20 @@ test('Full output holds one completed batch through reload; removing power canno
 test('Workbench II runs pocket recipes (grass -> fiber) away from the player and counts the autonomous batch',()=>{
  const {g,b}=setup();equip(g);stock(g,{...WORKBENCH_UPGRADE.inputs,grass:30,cable:1});upgradeBuilding(g,b.id);const gen=makeBuilding(g,'biogenerator',44,0,42);gen.energy=GEN_BUFFER;connect(g,'cable',gen.id,b.id);
  // S4 bug: the bench II window sent the pocket recipe to the pocket (30 batches of fiber in the hands), so no batch was ever made "without you".
- const grass=RECIPE_BY_ID.get('grass_parts')!;assert.equal(craftOwner(b,grass),b.id);assert.equal(craftOwner(undefined,grass),'hand');assert.equal(queueJob(g,'grass_parts',b.id,5),'');assert.equal(g.world.base.hand,null);assert.equal(countItem(b.input,'grass'),5);
+ const grass=RECIPE_BY_ID.get('grass_parts')!;assert.equal(craftOwner(g,b,grass),b.id);assert.equal(craftOwner(g,undefined,grass),'hand');assert.equal(queueJob(g,'grass_parts',b.id,5),'');assert.equal(g.world.base.hand,null);assert.equal(countItem(b.input,'grass'),5);
  g.player.x=80;tick(g,1100);refreshQuestProgress(g);assert.ok(g.progress.quests.facts.includes('system:auto'));assert.equal(countItem(b.output,'fiber'),2);assert.equal(countItem(b.output,'pulp'),1);assert.deepEqual(sanitizeState(g),g);
  tick(g,5000);assert.equal(countItem(b.output,'fiber'),10);assert.equal(b.queue.length,0);assert.equal(b.job,null);
  // Bench I keeps pocket recipes in the pocket; no other station accepts them.
- const one=makeBuilding(g,'workbench',46,0,42),kiln=makeBuilding(g,'kiln',48,0,42);assert.equal(craftOwner(one,grass),'hand');assert.equal(craftOwner(one,RECIPE_BY_ID.get('craft_wire')!),one.id);assert.equal(craftOwner(kiln,grass),'hand');
+ const one=makeBuilding(g,'workbench',46,0,42),kiln=makeBuilding(g,'kiln',48,0,42);assert.equal(craftOwner(g,one,grass),'hand');assert.equal(craftOwner(g,one,RECIPE_BY_ID.get('craft_wire')!),one.id);assert.equal(craftOwner(g,kiln,grass),'hand');
  g.player.x=46;assert.equal(startJob(g,'grass_parts',one.id),'Нужна подходящая станция');g.player.x=48;assert.equal(startJob(g,'grass_parts',kiln.id),'Нужна подходящая станция');
  const bad:any=structuredClone(g);bad.world.base.buildings.find((v:any)=>v.id===one.id).queue=['grass_parts'];assert.throws(()=>sanitizeState(bad),/рецепт/);
+});
+test('Next to an unpowered (or switched-off) bench II, pocket recipes stay in the pocket; power sends them to the queue',()=>{
+ const {g,b}=setup();equip(g);stock(g,{...WORKBENCH_UPGRADE.inputs,grass:6,cable:1});upgradeBuilding(g,b.id);const grass=RECIPE_BY_ID.get('grass_parts')!;
+ // No cable: the queue could never run, so the window keeps the pocket (S5 review: grass went into the bench and fiber never came).
+ assert.equal(craftOwner(g,b,grass),'hand');assert.equal(craftOwner(g,b,RECIPE_BY_ID.get('craft_wire')!),b.id);assert.equal(startJob(g,'grass_parts',craftOwner(g,b,grass)),'');tick(g,1100);assert.equal(countItem(g.player.inventory,'fiber'),2);assert.equal(countItem(b.input,'grass'),0);
+ // A cable to an empty generator is still no power; fiber in its input is (it burns it on the next tick).
+ const gen=makeBuilding(g,'biogenerator',44,0,42);connect(g,'cable',gen.id,b.id);assert.equal(craftOwner(g,b,grass),'hand');
+ gen.input[0]={itemId:'fiber',count:1};assert.equal(craftOwner(g,b,grass),b.id);gen.input[0]=null;gen.energy=GEN_BUFFER;assert.equal(craftOwner(g,b,grass),b.id);
+ b.enabled=false;assert.equal(craftOwner(g,b,grass),'hand');gen.enabled=false;b.enabled=true;assert.equal(craftOwner(g,b,grass),'hand');
 });

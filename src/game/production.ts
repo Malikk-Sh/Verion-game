@@ -64,8 +64,10 @@ export const runsOn = (b: { kind: string; level?: number }, r: Recipe) => r.stat
 /** Slots a set of stacks takes (stateful tools/tanks one each). A pocket recipe that would not fit the four input or
  * output slots of bench II (the legacy dismantle_dome: 64 glass blocks + an airlock = 5) stays in the pocket. */
 const slotsOf = (o: Record<string, number>) => Object.entries(o).reduce((n,[id,c])=>n+(!ITEMS[id]?0:TOOLS[id]||TANKS[id]?c:Math.ceil(c/(ITEMS[id].stack??1))),0);
-/** Where a recipe chosen in a station window (or in the pocket workshop, `b` undefined) is made. */
-export const craftOwner = (b: Building | undefined, r: Recipe) => b && runsOn(b, r) ? b.id : 'hand';
+/** Where a recipe chosen in a station window (or in the pocket workshop, `b` undefined) is made. A pocket recipe goes to
+ * bench II only while the bench can run it (switched on, a generator with energy or fuel on its cable); otherwise it stays
+ * in the pocket, so the fiber for an empty generator never waits for the power it is meant to make. */
+export const craftOwner = (g: GameState, b: Building | undefined, r: Recipe) => b && runsOn(b, r) && (r.station !== 'hand' || b.enabled && hasPower(g, b)) ? b.id : 'hand';
 export const electricPort = (b: {kind:string;level?:number}) => !['capsule','kiln'].includes(b.kind) && (b.kind !== 'workbench' || b.level === 2);
 export function upgradeBuilding(g: GameState, id: string): string {
  const b=machine(g,id);if(!b || b.kind!=='workbench')return 'Для этой постройки пока нет улучшения';
@@ -193,6 +195,9 @@ export function linkOptions(g: GameState, id: string) {
 export function poweredComponent(g: GameState, id: string) {
  const seen=new Set([id]),q=[id];while(q.length){const v=q.shift()!;for(const l of g.world.base.links)if(l.kind==='cable'){const n=l.from===v?l.to:l.to===v?l.from:null;if(n&&!seen.has(n)){seen.add(n);q.push(n);}}}return seen;
 }
+export const generatorsOf = (g: GameState, b: Building) => { const net = poweredComponent(g, b.id); return g.world.base.buildings.filter(v => v.kind === 'biogenerator' && net.has(v.id)); };
+// A generator inside a room may still spend its stored energy, but never burns fuel there (productionTick).
+export const hasPower = (g: GameState, b: Building) => generatorsOf(g, b).some(v => v.enabled && (v.energy > 0 || !stationRoom(g, v) && (v.fuel > 0 || countItem(v.input, 'fiber') > 0)));
 export type ProductionTick = { changed: boolean; passage: {x:number;y:number;z:number} | null };
 /**
  * Read-only view of the last simulated tick for visuals and station screens: accepted energy per

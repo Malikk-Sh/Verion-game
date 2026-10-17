@@ -1,6 +1,6 @@
 import { countItem } from './inventory';
 import { ITEMS, TANKS } from './defs';
-import { RECIPES, RECIPE_BY_ID, poweredComponent, telemetry, powerRate, supplyRate, gasRate, roomRate, ELECTROLYZER_O2, FIBER_EU, GEN_BUFFER, O2_PER_WU, PORT_O2, nearby, type Building } from './production';
+import { RECIPES, RECIPE_BY_ID, generatorsOf, hasPower, telemetry, powerRate, supplyRate, gasRate, roomRate, ELECTROLYZER_O2, FIBER_EU, GEN_BUFFER, O2_PER_WU, PORT_O2, nearby, type Building } from './production';
 import type { GameState } from './state';
 import { around, capacityOf, structureRoom, distributorsNeeded, habitableQ, habitableRoom, leakAt, roomAtCell, roomDistributors, stationRoom, DISTRIBUTOR_M3, type RoomInfo } from './rooms';
 /**
@@ -11,9 +11,6 @@ import { around, capacityOf, structureRoom, distributorsNeeded, habitableQ, habi
 export type Tone = 'ok' | 'idle' | 'warn' | 'off';
 export type Check = { ok: boolean; label: string; fix: string };
 export type StationStatus = { tone: Tone; title: string; hint: string; checks?: Check[] };
-const generatorIn = (g: GameState, b: Building) => { const net = poweredComponent(g, b.id); return g.world.base.buildings.filter(v => v.kind === 'biogenerator' && net.has(v.id)); };
-// A generator inside a room may still spend its stored energy, but never burns fuel there (productionTick).
-const hasPower = (g: GameState, b: Building) => generatorIn(g, b).some(v => v.enabled && (v.energy > 0 || !stationRoom(g, v) && (v.fuel > 0 || countItem(v.input, 'fiber') > 0)));
 export function stationStatus(g: GameState, b: Building): StationStatus {
  if (!b.enabled) return { tone: 'off', title: 'Выключено', hint: 'Нажмите «Включить», чтобы станция снова работала.' };
  const r = b.job ? RECIPE_BY_ID.get(b.job.recipeId) : undefined, running = !!b.job && !!r && b.job.workMs < r.seconds * 1000, pct = r && b.job ? Math.floor(Math.min(1, b.job.workMs / (r.seconds * 1000)) * 100) : 0;
@@ -44,7 +41,7 @@ export function stationStatus(g: GameState, b: Building): StationStatus {
    const powered = hasPower(g, b), draw = powerRate(b.id);
    if (b.job && !running) return { tone: 'warn', title: 'Буфер O₂ полон', hint: 'Подключите трубу к капсуле, заправке или распределителю, либо заправьте баллон.' };
    if (running && draw > 0) return { tone: 'ok', title: `Электролиз ${pct}%`, hint: `Потребляет ${draw.toFixed(0)} EU/с · вода ${water} WU` };
-   if ((running || water > 0) && !powered) return { tone: 'warn', title: 'Нет питания', hint: generatorIn(g, b).length ? 'В генераторе нет волокна — загрузите топливо.' : 'Соедините кабелем с биогенератором.' };
+   if ((running || water > 0) && !powered) return { tone: 'warn', title: 'Нет питания', hint: generatorsOf(g, b).length ? 'В генераторе нет волокна — загрузите топливо.' : 'Соедините кабелем с биогенератором.' };
    if (running) return { tone: 'warn', title: 'Мало энергии', hint: 'Генератор не успевает — добавьте второй или уменьшите нагрузку.' };
    if (tank && TANKS[tank.itemId] && (tank.milliGU ?? 0) < TANKS[tank.itemId].capacity && b.oxygen > 0) return { tone: powered ? 'ok' : 'warn', title: powered ? 'Заправляет баллон' : 'Нет питания', hint: `Баллон ${Math.round((tank.milliGU ?? 0) / 1000)} / ${TANKS[tank.itemId].capacity / 1000} GU` };
    if (!water) return { tone: 'idle', title: 'Ждёт воду', hint: 'Вода — из печи: лёд + волокно. Положите её в слот воды.' };
@@ -73,7 +70,7 @@ export function stationStatus(g: GameState, b: Building): StationStatus {
    if (b.job && !running) return { tone: 'warn', title: 'Выход заполнен', hint: 'Заберите готовые предметы.' };
    if (running && b.level === 1) return nearby(g, b) ? { tone: 'ok', title: `Сборка ${pct}%`, hint: outName } : { tone: 'warn', title: 'Пауза', hint: 'Верстак I работает, только когда вы рядом.' };
    if (running) return powerRate(b.id) > 0 ? { tone: 'ok', title: `Автосборка ${pct}%`, hint: outName + (b.queue.length ? ` · в очереди ${b.queue.length}` : '') } : { tone: 'warn', title: 'Нет питания', hint: 'Верстак II работает от кабеля: 4 EU/с.' };
-   if (b.level === 2 && !generatorIn(g, b).length) return { tone: 'warn', title: 'Не подключён', hint: 'Протяните кабель от биогенератора: 4 EU/с во время сборки.' };
+   if (b.level === 2 && !generatorsOf(g, b).length) return { tone: 'warn', title: 'Не подключён', hint: 'Протяните кабель от биогенератора: 4 EU/с во время сборки.' };
    if (b.level === 2 && !hasPower(g, b)) return { tone: 'warn', title: 'Нет питания', hint: 'Генератору в сети нужно волокно.' };
    return { tone: 'idle', title: b.level === 2 ? 'Питание есть · очередь пуста' : 'Свободен', hint: 'Выберите рецепт.' };
   }
