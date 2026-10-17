@@ -484,6 +484,7 @@ export function createWorld(scene:THREE.Scene,wind=new Wind()){
  const motes=createMotes();scene.add(motes.mesh);
  // S5: low ribbons of blowing sand in gusts (CPU: a few per frame; one draw call while any is visible).
  const drift=createDrift(),sand=new SandDrift(),look=new THREE.Vector3();scene.add(drift.mesh);
+ let sheltered=false;
  const hemi=new THREE.HemisphereLight('#bcd3dc','#8a7358',1.15);scene.add(hemi);
  const sun=new THREE.DirectionalLight('#ffd9a8',3.4);sun.castShadow=true;scene.add(sun,sun.target);
  const sc=sun.shadow.camera;sc.left=-42;sc.right=42;sc.top=42;sc.bottom=-42;sc.near=1;sc.far=260;sun.shadow.bias=-.00008;sun.shadow.normalBias=.08;sun.shadow.radius=1.5;sun.shadow.autoUpdate=false;sun.shadow.needsUpdate=true;
@@ -549,8 +550,9 @@ export function createWorld(scene:THREE.Scene,wind=new Wind()){
   sky.mesh.position.copy(camera.position);time+=dt;sky.uniforms.time.value=time;
   // Shared wind (frozen with the scene; still under reduced motion): grass, clouds, motes, sand drift; fx and audio read it too.
   wind.update(dt);windUniform.value=wind.time;windDir.value.set(wind.dirX,wind.dirZ);windGust.value=wind.gust;sky.uniforms.cloud.value.set(wind.cloudX,wind.cloudZ);
-  const mu=motes.uniforms;motes.mesh.visible=!reducedMotion();mu.uOffset.value.set(wind.driftX,wind.driftZ);mu.uTime.value=wind.time;mu.uWind.value.set(wind.vx,0,wind.vz);mu.uGust.value=wind.gust;mu.uOrigin.value.copy(camera.position);
-  camera.getWorldDirection(look);look.y=0;if(look.lengthSq()<1e-6)look.set(0,0,1);look.normalize();sand.update(dt,wind,camera.position.x,camera.position.z,heightAt,groundColorAt,reducedMotion(),look.x,look.z);drift.uniforms.uTime.value=wind.time;drift.sync(sand.sheets,wind);
+  // S5.1: no wind dust under a roof (capsule, glass room, closed airlock chamber): the motes and the sand ribbons go.
+  const mu=motes.uniforms;motes.mesh.visible=!reducedMotion()&&!sheltered;mu.uOffset.value.set(wind.driftX,wind.driftZ);mu.uTime.value=wind.time;mu.uWind.value.set(wind.vx,0,wind.vz);mu.uGust.value=wind.gust;mu.uOrigin.value.copy(camera.position);
+  camera.getWorldDirection(look);look.y=0;if(look.lengthSq()<1e-6)look.set(0,0,1);look.normalize();sand.update(dt,wind,camera.position.x,camera.position.z,heightAt,groundColorAt,reducedMotion()||sheltered,look.x,look.z);drift.uniforms.uTime.value=wind.time;drift.sync(sand.sheets,wind);
   mu.uPx.value=(camera as THREE.PerspectiveCamera).projectionMatrix.elements[5]*renderer.domElement.height/2;
   if(phase!==targetPhase){const d=wrapS(targetPhase-phase);phase=Math.abs(d)<=Math.max(2,dt*320)?targetPhase:((phase+Math.sign(d)*dt*320)%CYCLE_S+CYCLE_S)%CYCLE_S;applyPhase(phase);}
   // Incremental re-bake when the light has turned by more than ~3° (S4; was 1.5°); then a 1.5 s cross-fade.
@@ -581,5 +583,5 @@ export function createWorld(scene:THREE.Scene,wind=new Wind()){
   measure?.('animation',performance.now()-at);
  }
  setQuality('standard');
- return{setTime,setQuality,prepare,invalidateShadows:()=>{if(!sun.shadow.needsUpdate)shadowRedraws++;sun.shadow.needsUpdate=true;},get shadowRedraws(){return shadowRedraws;},lights,lightRoots,wind,motes,drift:{get live(){return drift.live;},get cap(){return sand.cap;},get born(){return sand.born;}},groundColorAt,sunLight:sun,hemiLight:hemi,get sunDirection(){return sunTrue;},update,setNodeAmount,syncVeins,nodeGroups,deposits,followSky:(_p:THREE.Vector3)=>{},landmarks:LANDMARKS,grassCount:GRASS.length,meshes,terrain,get quality(){return quality;},get nightValue(){return k;}};
+ return{setSheltered:(v:boolean)=>{sheltered=v;},get sheltered(){return sheltered;},setTime,setQuality,prepare,invalidateShadows:()=>{if(!sun.shadow.needsUpdate)shadowRedraws++;sun.shadow.needsUpdate=true;},get shadowRedraws(){return shadowRedraws;},lights,lightRoots,wind,motes,drift:{get live(){return drift.live;},get cap(){return sand.cap;},get born(){return sand.born;}},groundColorAt,sunLight:sun,hemiLight:hemi,get sunDirection(){return sunTrue;},update,setNodeAmount,syncVeins,nodeGroups,deposits,followSky:(_p:THREE.Vector3)=>{},landmarks:LANDMARKS,grassCount:GRASS.length,meshes,terrain,get quality(){return quality;},get nightValue(){return k;}};
 }

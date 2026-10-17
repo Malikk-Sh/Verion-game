@@ -3,7 +3,7 @@ import { GRASS_PATCHES, allDeposits, bodyHalf, depositById, depositLeft, isVeinI
 import { stationStatus, type Tone } from '../game/stationStatus';
 import { endpoint } from '../game/production';
 import { stationName, stationRadius, nodeRadius, clampWaypoint, doorTarget, type Waypoint } from '../game/navigation';
-import { allRooms, cellKey, cellOf, doorAlong, doorRooms, habitableQ, habitableRoom, roomsView, widthOf, type RoomInfo } from '../game/rooms';
+import { allRooms, cellKey, cellOf, depthOf, doorAlong, doorRooms, habitableQ, habitableRoom, roomsView, widthOf, type RoomInfo } from '../game/rooms';
 import { reducedMotion } from '../motion';
 import { itemName } from '../game/mining';
 import type { GameState } from '../game/state';
@@ -45,7 +45,7 @@ const groupTone = (rooms: (RoomInfo | null | undefined)[]): Tone => { const r = 
 export function glassPrints(g: GameState): MapFootprint[] {
  const shapes = glassShapes(g); if (!shapes.length) return [];
  const info = allRooms(g), out: MapFootprint[] = shapes.map(s => ({ x: s.x, z: s.z, w: s.w, d: s.d, rot: 0, tone: groupTone(s.rooms.map(i => info[i])) }));
- for (const d of g.world.base.doors) { const r = doorRooms(g, d), t = doorTarget(d), along = doorAlong(d.rot).x === 1; out.push({ id: d.id, x: t.x, z: t.z, w: along ? widthOf(d) : 1, d: along ? 1 : widthOf(d), rot: 0, tone: roomTone([r.front, r.back]), label: t.name }); }
+ for (const d of g.world.base.doors) { const r = doorRooms(g, d), t = doorTarget(d), along = doorAlong(d.rot).x === 1; out.push({ id: d.id, x: t.x, z: t.z, w: along ? widthOf(d) : depthOf(d), d: along ? depthOf(d) : widthOf(d), rot: 0, tone: roomTone([r.front, r.back]), label: t.name }); }
  return out;
 }
 mapFootprintSources.push(glassPrints);
@@ -139,28 +139,28 @@ export function createMap(d: Deps) {
   const p = d.player(), t = cardTarget(card);
   if (!t) { showCard(null); return; }
   const dist = Math.hypot(t.x - p.x, t.z - p.z), data: [string, string][] = [['Расстояние', fmt(dist)], ['Направление', directionName(t.x - p.x, t.z - p.z)]];
-  let kind = '', title = t.name, text = '', canGo = true;
+  // S5.1: a card is facts only (kind, distance, direction, state, stock): no descriptive prose in this sandbox.
+  let kind = '', title = t.name, canGo = true;
   if (card.kind === 'landmark') {
-   const l = LANDMARKS.find(v => v.id === card!.id)!; kind = l.kind; text = l.description;
+   const l = LANDMARKS.find(v => v.id === card!.id)!; kind = l.kind;
    data.push(['Состояние', d.visited.has(l.id) ? 'Просканировано' : d.discovered.has(l.id) ? 'Найдено' : 'Не найдено']);
   } else if (card.kind === 'node') {
    const ids = card.ids ?? [card.id], n = depositById(g, card.id)!, left = ids.reduce((s, id) => s + depositLeft(g, id), 0), amount = ids.reduce((s, id) => s + (depositById(g, id)?.amount ?? 0), 0);
-   kind = 'Залежь · ' + MAT[n.material].name.toLowerCase(); text = left > 0 ? `Осталось ${left} / ${amount}${ids.length > 1 ? ` · ${ids.length} выхода рядом` : ''}` : n.regrowSeconds ? 'Всё собрано — растения отрастают в активное время.' : 'Запас исчерпан.';
+   kind = 'Залежь · ' + MAT[n.material].name.toLowerCase(); data.push(['Запас', left > 0 ? `${left} / ${amount}` : n.regrowSeconds ? 'отрастает' : 'исчерпан']); if (ids.length > 1) data.push(['Выходов рядом', String(ids.length)]);
    if (n.regrowSeconds) data.push(['Отрастает', `1 растение за ${n.regrowSeconds} с`]);
    data.push(['Добыча', itemName(n.itemId)]); canGo = left > 0;
   } else if (card.kind === 'station' && card.id.startsWith('door-')) {
    // An airlock stands for its glass room: the room behind it (or in front), its volume and air.
    const door = g.world.base.doors.find(v => v.id === card!.id)!, sides = doorRooms(g, door), r = sides.back ?? sides.front;
    kind = 'Помещение · ' + (r ? habitableRoom(r) ? 'пригодно для дыхания' : 'мало воздуха' : 'не замкнуто');
-   text = r ? `Стеклянное помещение со шлюзом. Двери открываются по очереди: наведите на дверь и нажмите кнопку действия, затем пройдите в камеру.` : 'Шлюз стоит в стене, но помещение за ним не замкнуто.';
    if (r) data.push(['Объём', `${r.volume} м³`], ['Воздух', `${Math.floor(r.zone.q / 1000)} / ${habitableQ(r.volume) / 1000} GU`]);
   } else if (card.kind === 'station') {
-   const b = g.world.base.buildings.find(v => v.id === card!.id)!, st = stationStatus(g, b); kind = 'Станция · ' + TONE_NAME[st.tone]; text = `${st.title}. ${st.hint}`;
+   const b = g.world.base.buildings.find(v => v.id === card!.id)!, st = stationStatus(g, b); kind = 'Станция · ' + TONE_NAME[st.tone]; data.push(['Состояние', st.title]);
   } else if (card.kind === 'drop') {
-   const dr = g.world.drops.find(v => v.id === card!.id)!, n = dr.items.reduce((s, v) => s + v.count, 0); kind = 'Груз на земле'; text = `${n} предм. Подойдите и нажмите «Поднять».`;
-  } else { kind = 'Ваша метка'; text = 'Метка ставится долгим нажатием на карту.'; data.push(['Координаты', `${Math.round(t.x)} · ${Math.round(t.z)}`]); }
+   const dr = g.world.drops.find(v => v.id === card!.id)!, n = dr.items.reduce((s, v) => s + v.count, 0); kind = 'Груз на земле'; data.push(['Предметов', String(n)]);
+  } else { kind = 'Ваша метка'; data.push(['Координаты', `${Math.round(t.x)} · ${Math.round(t.z)}`]); }
   const here = dist < t.radius, leading = d.selected() === (card.kind === 'point' ? 'point' : card.id);
-  el('map-card-kind').textContent = kind; el('map-card-title').textContent = title; el('map-card-text').textContent = text;
+  el('map-card-kind').textContent = kind; el('map-card-title').textContent = title;
   const dl = el('map-card-data'), key = JSON.stringify(data); if (dl.dataset.key !== key) { dl.dataset.key = key; dl.replaceChildren(...data.map(([k, v]) => row(k, v))); }
   go.disabled = !canGo || here; const label = here ? 'Вы здесь' : !canGo ? 'Нечего вести' : leading ? 'Ведём · закрыть' : 'Вести';
   if (go.textContent !== label) go.textContent = label; go.setAttribute('aria-label', `${label}: ${title}`);

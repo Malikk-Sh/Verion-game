@@ -81,15 +81,76 @@ export class Ambience {
   const g=c.createGain(),t=c.currentTime;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.22,t+.03);g.gain.exponentialRampToValueAtTime(.001,t+2);
   s.connect(f).connect(g).connect(this.master);s.start(t,Math.random()*1.5,2.05);
  }
- /** Airlock (D36): 'hiss' — 3 s of gas filling or leaving the chamber (softer and lower than a breach), 'slide' — the
-  *  leaves' motor whir with a latch at the end, 'clunk' — a heavy metal thud as a door seals. */
- airlock(kind:'hiss'|'slide'|'clunk'){
-  const c=this.ctx;if(!c||!this.enabled)return;
-  if(kind==='hiss'){const s=c.createBufferSource();s.buffer=this.noise;const f=c.createBiquadFilter();f.type='bandpass';f.frequency.value=1700;f.Q.value=.7;
-   const g=c.createGain(),t=c.currentTime;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.12,t+.15);g.gain.setValueAtTime(.12,t+2.4);g.gain.exponentialRampToValueAtTime(.001,t+3);
-   s.connect(f).connect(g).connect(this.master);s.start(t,Math.random()*.9,3.05);this.ring('sine',95,.12,.18,this.master);return;}
-  if(kind==='slide'){this.ring('sawtooth',70,.035,.75,this.master,0,110);this.burst('bandpass',900,2,.05,.7,this.master);this.ring('sine',180,.08,.09,this.master,.72);this.burst('lowpass',260,.9,.16,.12,this.master,.72);return;}
-  this.burst('lowpass',180,.8,.36,.22,this.master);this.ring('sine',70,.26,.2,this.master,0,45);this.ring('triangle',620,.04,.12,this.master,.01);
+ // ---------- S5.1 airlock and landing: layered voices, a shared metal-room reverb, distance and side ----------
+ private verb:ConvolverNode|null=null;
+ /** A short procedural impulse (dense noise, exponential 0.7 s tail, slightly brighter early part): the steel chamber. */
+ private reverb(){
+  const c=this.ctx!;if(this.verb)return this.verb;const n=Math.floor(c.sampleRate*.9),ir=c.createBuffer(2,n,c.sampleRate);
+  for(let ch=0;ch<2;ch++){const d=ir.getChannelData(ch);for(let i=0;i<n;i++){const t=i/c.sampleRate;d[i]=(Math.random()*2-1)*Math.exp(-t/.16)*(t<.012?.4:1);}}
+  const v=this.verb=c.createConvolver();v.buffer=ir;const wet=c.createGain();wet.gain.value=.32;v.connect(wet).connect(this.master);return v;
+ }
+ /** One voice bus: level, side (pan) and a send to the chamber reverb. */
+ private bus(level:number,pan:number,wet:number){const c=this.ctx!,g=c.createGain();g.gain.value=level;g.connect(this.out(pan));if(wet>0){const s=c.createGain();s.gain.value=wet;g.connect(s).connect(this.reverb());}return g;}
+ /** Filtered noise with a gain envelope [[time, gain]…] and an optional filter-frequency path [[time, Hz]…]. */
+ private flow(type:BiquadFilterType,q:number,env:[number,number][],freq:[number,number][],to:AudioNode,rate=1){
+  const c=this.ctx!,t=c.currentTime,s=c.createBufferSource();s.buffer=this.noise;s.loop=true;s.playbackRate.value=rate;const f=c.createBiquadFilter();f.type=type;f.Q.value=q;
+  f.frequency.setValueAtTime(freq[0][1],t);for(const [at,hz] of freq.slice(1))f.frequency.exponentialRampToValueAtTime(hz,t+at);
+  const g=c.createGain();g.gain.setValueAtTime(0,t);for(const [at,v] of env)g.gain.linearRampToValueAtTime(v,t+at);
+  const end=env[env.length-1][0];s.connect(f).connect(g).connect(to);s.start(t,Math.random()*3);s.stop(t+end+.05);return g;
+ }
+ /** An oscillator with a pitch path and a gain envelope (both [[time, value]…]). */
+ private voice(type:OscillatorType,pitch:[number,number][],env:[number,number][],to:AudioNode,at=0){
+  const c=this.ctx!,t=c.currentTime+at,o=c.createOscillator();o.type=type;o.frequency.setValueAtTime(pitch[0][1],t);for(const [a,hz] of pitch.slice(1))o.frequency.exponentialRampToValueAtTime(hz,t+a);
+  const g=c.createGain();g.gain.setValueAtTime(0,t);for(const [a,v] of env)g.gain.linearRampToValueAtTime(v,t+a);o.connect(g).connect(to);o.start(t);o.stop(t+env[env.length-1][0]+.05);return {o,g};
+ }
+ /** Tremolo on a gain (turbulence, roller rumble): an LFO of `hz` and `depth` for `dur` s. */
+ private wobble(target:AudioParam,hz:number,depth:number,dur:number){const c=this.ctx!,l=c.createOscillator(),d=c.createGain(),t=c.currentTime;l.frequency.value=hz;d.gain.value=depth;l.connect(d).connect(target);l.start(t);l.stop(t+dur);}
+ /** Heavy metal impact: a falling sub thud, a dull body, inharmonic steel partials ringing out and a gravel-free click. */
+ private impact(to:AudioNode,weight:number,at=0){
+  this.voice('sine',[[0,72],[.3,38]],[[.004,.42*weight],[.36,0]],to,at);
+  this.burst('lowpass',240,.8,.3*weight,.22,to,at);this.burst('bandpass',2600,1.4,.08*weight,.035,to,at);
+  [233,377,611,912,1387].forEach((hz,i)=>this.voice('triangle',[[0,hz*(1+(Math.random()-.5)*.01)]],[[.006,.035*weight/(1+i*.5)],[.5+.25*i,0]],to,at));
+ }
+ /**
+  * Airlock (D36, S5.1 sound). 'fill': the valve clicks open, gas rushes in with a rising pitch and turbulence and settles
+  * as the pressure evens out (3 s); 'vent': a decompression whoosh that falls away outside; 'slide': the leaf drive —
+  * servo hum, gear whine and roller rumble — ending in the latch; 'clunk': the door seals (heavy impact, steel ring,
+  * a short pneumatic sigh). `level` 0…1 (distance), `pan` −1…1 (side). All with the chamber's reverb.
+  */
+ airlock(kind:'fill'|'vent'|'slide'|'clunk',level=1,pan=0){
+  const c=this.ctx;if(!c||!this.enabled||level<=.01)return;const o=this.bus(.9*level,pan*.6,.35);
+  if(kind==='fill'||kind==='vent'){
+   const fill=kind==='fill';
+   this.burst('lowpass',320,.9,.22,.09,o);this.voice('sine',[[0,150],[.12,90]],[[.004,.16],[.14,0]],o);this.burst('highpass',3200,.8,.05,.04,o,.01);
+   const main=this.flow('bandpass',.9,fill?[[.25,.16],[2.3,.15],[3,0]]:[[.06,.24],[.6,.17],[2.4,.08],[3,0]],fill?[[0,520],[2.4,1700],[3,2200]]:[[0,2200],[2.6,480],[3,360]],o);
+   this.wobble(main.gain,fill?9:6,.035,3);
+   const fizz=this.flow('highpass',.7,fill?[[.3,.035],[2.4,.03],[3,0]]:[[.05,.06],[1.6,.03],[3,0]],[[0,fill?4200:5200],[3,fill?5600:3600]],o,1.6);this.wobble(fizz.gain,13,.015,3);
+   this.flow('lowpass',.7,fill?[[.4,.08],[2.5,.06],[3,0]]:[[.08,.14],[1,.07],[3,0]],[[0,fill?140:220],[3,fill?190:110]],o);
+   this.burst('lowpass',260,.9,.12,.08,o,3);this.voice('sine',[[0,110],[.1,70]],[[.004,.08],[.12,0]],o,3);
+   return;
+  }
+  if(kind==='slide'){
+   this.voice('sawtooth',[[0,52],[.25,78],[.7,74],[.8,60]],[[.05,.05],[.72,.045],[.82,0]],o);this.voice('square',[[0,104.5],[.25,156],[.8,120]],[[.05,.012],[.72,.01],[.82,0]],o);
+   const whine=this.voice('sine',[[0,380],[.3,620],[.75,600],[.82,420]],[[.08,.025],[.7,.02],[.82,0]],o);this.wobble(whine.o.frequency,7,6,.85);
+   const roll=this.flow('bandpass',1.1,[[.05,.1],[.72,.09],[.82,0]],[[0,180],[.8,260]],o);this.wobble(roll.gain,22,.05,.85);
+   this.burst('highpass',2800,.9,.09,.03,o,.78);this.voice('triangle',[[0,1850]],[[.004,.035],[.07,0]],o,.78);this.impact(o,.35,.79);
+   return;
+  }
+  this.impact(o,1);this.flow('highpass',.8,[[.06,0],[.1,.07],[.45,0]],[[0,3800],[.45,2400]],o);
+ }
+ /**
+  * S5.1 landing after a jump or a fall: `drop` is the height fallen (m). Boots on regolith (a gravel crunch), a body
+  * thud whose weight and depth grow with the drop, the suit's gear rattling from about 1.5 m and a second settling
+  * thump from about 3 m. A small hop (< 0.3 m) gives only a soft scuff.
+  */
+ land(drop:number,inside=false){
+  const c=this.ctx;if(!c||!this.enabled)return;const k=Math.max(0,Math.min(1,(drop-.3)/3.7)),o=this.bus(.55+.45*k,0,inside?.25:0);
+  this.burst(inside?'bandpass':'lowpass',inside?1300:560+260*(1-k),inside?1.6:.8,.12+.2*k,.12+.14*k,o);
+  this.burst('bandpass',2400+800*Math.random(),1.2,.05+.07*k,.06+.05*k,o,.012);
+  if(drop<.3)return;
+  this.voice('sine',[[0,95-25*k],[.18+.2*k,40-8*k]],[[.004,.16+.34*k],[.2+.25*k,0]],o);
+  if(k>.3){this.burst('bandpass',3200,3,.05*k,.08,o,.02);this.voice('triangle',[[0,880]],[[.004,.02*k],[.12,0]],o,.03);this.voice('triangle',[[0,1320]],[[.004,.015*k],[.1,0]],o,.05);}
+  if(k>.65){this.burst('lowpass',300,.8,.12*k,.16,o,.11);this.voice('sine',[[0,70],[.15,45]],[[.004,.12*k],[.18,0]],o,.11);}
  }
  /** Interface tones; `at` delays (s) and `level` scales one (the mined-item chime follows the crack quieter). */
  tone(kind:'ui'|'scan'|'discover'|'boot'|'item'|'warn',at=0,level=1){

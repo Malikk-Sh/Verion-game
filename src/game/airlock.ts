@@ -1,5 +1,5 @@
 import type { Box } from '../world';
-import { breathingRoom, cellY, doorAlong, doorById, doorCenter, doorFront, doorRooms, habitableRoom, widthOf, type Door, type DoorFace, type RoomInfo } from './rooms';
+import { breathingRoom, cellY, depthOf, doorAlong, doorById, doorCenter, doorFront, doorRooms, habitableRoom, widthOf, type Door, type DoorFace, type RoomInfo } from './rooms';
 import type { GameState } from './state';
 /**
  * S5 (D36) walk-through airlock: two sliding doors and a small chamber between them (the module's own cells, never room
@@ -25,8 +25,8 @@ export const faceRoom = (g: GameState, d: Door, face: DoorFace) => doorRooms(g, 
 /** The door that is cycling, if any. */
 export const cyclingFace = (d: Door): DoorFace | null => d.outer === 'cycling' ? 'outer' : d.inner === 'cycling' ? 'inner' : null;
 /**
- * World box of a part of a module given in its own frame: `u` along the width (0…w), `v` through the module from the
- * inner face (0) to the outer face (1), `y` above the threshold level (cellY of the anchor).
+ * World box of a part of a module given in its own frame: `u` along the width (0…w), `v` in metres through the module
+ * from the inner face (0) to the outer face (its depth, 1 or 2), `y` above the threshold level (cellY of the anchor).
  */
 export function partBox(d: Door, u0: number, u1: number, v0: number, v1: number, y0: number, y1: number, id = 'build-' + d.id): Box {
  const a = doorAlong(d.rot), f = doorFront(d.rot), base = cellY(d.y), flip = f.x + f.z < 0, lo = flip ? 1 - v1 : v0, hi = flip ? 1 - v0 : v1;
@@ -35,16 +35,16 @@ export function partBox(d: Door, u0: number, u1: number, v0: number, v1: number,
 /** Colliders of a module: two side jambs, the lintel and the threshold (down 0.6 m into whatever it stands on), and the
  *  leaf of each door (it blocks unless that door is open). */
 export function doorBoxes(d: Door) {
- const w = widthOf(d), J = jambOf(w);
- return { frame: [partBox(d, 0, J, 0, 1, -.6, 2), partBox(d, w - J, w, 0, 1, -.6, 2), partBox(d, 0, w, 0, 1, LINTEL, 2), partBox(d, 0, w, 0, 1, -.6, SILL)], outer: leafBox(d, 'outer'), inner: leafBox(d, 'inner') };
+ const w = widthOf(d), J = jambOf(w), D = depthOf(d);
+ return { frame: [partBox(d, 0, J, 0, D, -.6, 2), partBox(d, w - J, w, 0, D, -.6, 2), partBox(d, 0, w, 0, D, LINTEL, 2), partBox(d, 0, w, 0, D, -.6, SILL)], outer: leafBox(d, 'outer'), inner: leafBox(d, 'inner') };
 }
-export const leafBox = (d: Door, face: DoorFace) => { const w = widthOf(d), J = jambOf(w), v = face === 'outer' ? 1 - LEAF_AT : LEAF_AT; return partBox(d, J, w - J, v - LEAF_T / 2, v + LEAF_T / 2, 0, LINTEL); };
+export const leafBox = (d: Door, face: DoorFace) => { const w = widthOf(d), J = jambOf(w), v = face === 'outer' ? depthOf(d) - LEAF_AT : LEAF_AT; return partBox(d, J, w - J, v - LEAF_T / 2, v + LEAF_T / 2, 0, LINTEL); };
 const hits = (b: Box, x: number, y: number, z: number) => b.minX < x + .3 && b.maxX > x - .3 && b.minZ < z + .3 && b.maxZ > z - .3 && b.minY < y + 1.8 && b.maxY > y;
 /** The standing body (feet at y, the controller's 0.6 m square) is in the plane of a door's leaf. */
 export const leafBlocked = (d: Door, face: DoorFace, x: number, y: number, z: number) => hits(leafBox(d, face), x, y, z);
 /** The module whose chamber contains the point (the player: the chest, y + 1). */
 export function chamberAt(g: GameState, x: number, y: number, z: number) {
- for (const d of g.world.base.doors) { const b = partBox(d, 0, widthOf(d), 0, 1, 0, 2); if (x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ && y >= b.minY && y <= b.maxY) return d; }
+ for (const d of g.world.base.doors) { const b = partBox(d, 0, widthOf(d), 0, depthOf(d), 0, 2); if (x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ && y >= b.minY && y <= b.maxY) return d; }
  return null;
 }
 /** The chamber the player breathes in: charged with the full 4 GU (its charge carries the breath, nothing is drawn). */
@@ -58,7 +58,7 @@ export function chamberRoom(g: GameState): RoomInfo | null {
 /** The player breathes without tanks here: a habitable room, a chamber open to one, or a charged chamber (survival, HUD). */
 export const shelteredAir = (g: GameState) => !!(breathingRoom(g) ?? chamberRoom(g) ?? breathingChamber(g));
 /** The player stands beyond this door, outside the module (the other door is then out of reach, past the chamber). */
-export function beyondFace(g: GameState, d: Door, face: DoorFace) { const c = doorCenter(d), f = doorFront(d.rot), side = (g.player.x - c.x) * f.x + (g.player.z - c.z) * f.z; return face === 'outer' ? side > .5 : side < -.5; }
+export function beyondFace(g: GameState, d: Door, face: DoorFace) { const c = doorCenter(d), f = doorFront(d.rot), h = depthOf(d) / 2, side = (g.player.x - c.x) * f.x + (g.player.z - c.z) * f.z; return face === 'outer' ? side > h : side < -h; }
 /**
  * The player asks a door to open (when closed) or to close (when open). Returns '' or why not. Opening: refused while
  * the other door stands open (interlock); a cycle of the other door is cancelled instead (from inside the chamber either
@@ -113,7 +113,7 @@ export function faceHit(d: Door, o: { x: number; y: number; z: number }, dir: { 
  for (const face of ['outer', 'inner'] as const) {
   const b = leafBox(d, face), xPlane = b.maxX - b.minX < b.maxZ - b.minZ, p = xPlane ? (b.minX + b.maxX) / 2 : (b.minZ + b.maxZ) / 2, od = xPlane ? o.x : o.z, dd = xPlane ? dir.x : dir.z;
   if (Math.abs(dd) < 1e-6) continue; const t = (p - od) / dd; if (t <= 0 || t > max || (best && t >= best.distance)) continue;
-  const all = partBox(d, 0, w, 0, 1, 0, 2), x = o.x + dir.x * t, y = o.y + dir.y * t, z = o.z + dir.z * t;
+  const all = partBox(d, 0, w, 0, depthOf(d), 0, 2), x = o.x + dir.x * t, y = o.y + dir.y * t, z = o.z + dir.z * t;
   if ((xPlane ? z >= all.minZ && z <= all.maxZ : x >= all.minX && x <= all.maxX) && y >= all.minY && y <= all.maxY) best = { face, distance: t };
  }
  return best;

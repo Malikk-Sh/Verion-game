@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { reducedMotion } from './motion';
 import { heightAt, type Box } from './world';
-import { allRooms, around, cellCenter, cellY, levelAt, roomCenter, cellKey, cellOf, columnFloor, doorCenter, doorColumns, doorById, habitableRoom, isGround, roomAtCell, roomsRevision, roomsView, widthOf, type Door, type DoorFace } from './game/rooms';
+import { allRooms, around, cellCenter, cellY, levelAt, roomCenter, cellKey, cellOf, columnFloor, depthOf, doorCenter, doorColumns, doorById, habitableRoom, isGround, roomAtCell, roomsRevision, roomsView, widthOf, type Door, type DoorFace } from './game/rooms';
 import { CHAMBER_Q, LINTEL, doorBoxes, doorLamp, doorPhase, shownPressure, simOpen } from './game/airlock';
 import type { GameState } from './game/state';
 import { buildDoor, type DoorVisual } from './stationModels';
@@ -168,7 +168,7 @@ export function createGlassView(root: THREE.Group, fx?: Fx) {
   *  fraction of each door, the last state (for sounds) and the steam timer. */
  type Shown = { d: Door; v: DoorVisual; frame: Box[]; leaf: Record<DoorFace, Box & { y0: number; y1: number }>; open: Record<DoorFace, number>; last: string; puff: number };
  const doors = new Map<string, Shown>();
- let sound: ((kind: 'hiss' | 'slide' | 'clunk', at: { x: number; y: number; z: number }) => void) | null = null, moving = false;
+ let sound: ((kind: 'fill' | 'vent' | 'slide' | 'clunk', at: { x: number; y: number; z: number }) => void) | null = null, moving = false;
  const skirt: Skirt = { ground: isGround, height: heightAt };
  let rev = -1, glass = new Set<number>(), doorCells = new Set<number>();
  const groundAt = (k: number) => { const c = cellOf(k); return isGround(c.i, c.k, c.j); };
@@ -244,10 +244,10 @@ export function createGlassView(root: THREE.Group, fx?: Fx) {
   for (const k of doorCells) if (!nextDoorCells.has(k)) touch(k);
   for (const k of nextDoorCells) if (!doorCells.has(k)) touch(k);
   glass = new Set(view.glass); doorCells = nextDoorCells;
-  for (const [id, s] of doors) { const d = nextDoors.get(id); if (!d || d.x !== s.d.x || d.y !== s.d.y || d.z !== s.d.z || d.rot !== s.d.rot || d.width !== s.d.width) { dropDoor(s); doors.delete(id); } }
+  for (const [id, s] of doors) { const d = nextDoors.get(id); if (!d || d.x !== s.d.x || d.y !== s.d.y || d.z !== s.d.z || d.rot !== s.d.rot || d.width !== s.d.width || d.depth !== s.d.depth) { dropDoor(s); doors.delete(id); } }
   for (const d of g.world.base.doors) if (!doors.has(d.id)) {
    // A plinth under the threshold down to the lowest terrain corner of its columns (visual only, like the glass skirt).
-   const drop = cellY(d.y) - Math.min(...doorColumns(d).map(c => columnFloor(c.i, c.j))), v = buildDoor(widthOf(d), drop), c = doorCenter(d);
+   const drop = cellY(d.y) - Math.min(...doorColumns(d).map(c => columnFloor(c.i, c.j))), v = buildDoor(widthOf(d), drop, depthOf(d)), c = doorCenter(d);
    v.group.position.set(c.x, cellY(d.y), c.z); v.group.rotation.y = d.rot * Math.PI / 2; v.group.name = d.id;
    const b = doorBoxes(d), leaf = { outer: { ...b.outer, y0: b.outer.minY, y1: b.outer.maxY }, inner: { ...b.inner, y0: b.inner.minY, y1: b.inner.maxY } };
    for (const x of [...b.frame, leaf.outer, leaf.inner]) hash.insert(x);
@@ -281,13 +281,13 @@ export function createGlassView(root: THREE.Group, fx?: Fx) {
    s.v.update(dt, { outer: s.open.outer, inner: s.open.inner, lamps: [doorLamp(d, 'outer'), doorLamp(d, 'inner')], pressure: shownPressure(g, d) / CHAMBER_Q, busy: !!ph && ph.kind !== 'slide' }, still);
    // Sounds on each change of state: hiss while equalising, a hum as the leaves slide, a clunk when a door seals or stops.
    const state = d.outer + d.inner + (ph?.kind ?? ''); if (state !== s.last) { const near = Math.hypot(g.player.x - at.x, g.player.z - at.z) < 25;
-    if (s.last && near) sound?.(ph?.kind === 'fill' || ph?.kind === 'vent' ? 'hiss' : ph?.kind === 'slide' ? 'slide' : 'clunk', at); s.last = state; }
+    if (s.last && near) sound?.(ph?.kind ?? 'clunk', at); s.last = state; }
    if (ph) moving = true;
    // Steam puffs in the chamber while it fills or vents (out of the grilles under the lintel, and out of the outer doorway when venting).
    if (fx && dt > 0 && !still && (ph?.kind === 'fill' || ph?.kind === 'vent') && (s.puff -= dt) <= 0) {
     s.puff = .12; const a = s.v.group, side = (Math.random() - .5) * widthOf(d) * .6, y = cellY(d.y) + LINTEL - .1;
-    const p = new THREE.Vector3(side, 0, (Math.random() - .5) * .3).applyAxisAngle(UP, a.rotation.y); fx.steam(c.x + p.x, y, c.z + p.z);
-    if (ph.kind === 'vent') { const q = new THREE.Vector3(side, 0, .55).applyAxisAngle(UP, a.rotation.y); fx.steam(c.x + q.x, cellY(d.y) + .3, c.z + q.z); }
+    const p = new THREE.Vector3(side, 0, (Math.random() - .5) * .3 * depthOf(d)).applyAxisAngle(UP, a.rotation.y); fx.steam(c.x + p.x, y, c.z + p.z);
+    if (ph.kind === 'vent') { const q = new THREE.Vector3(side, 0, depthOf(d) / 2 + .05).applyAxisAngle(UP, a.rotation.y); fx.steam(c.x + q.x, cellY(d.y) + .3, c.z + q.z); }
    }
   }
   lampClock -= dt; if (lampClock <= 0 && lamps) { lampClock = .25; const rooms = allRooms(g); glow = roomCells.map(c => { const r = rooms.find(v => v.cell === c); return r && habitableRoom(r) ? 1 : 0; }); }

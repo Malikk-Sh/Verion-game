@@ -18,7 +18,7 @@ export async function render(kind: 'window' | 'airlock', size = 512): Promise<st
   const mesh = new THREE.Mesh(joinChunks([f]), glassMaterial()); mesh.position.set(-.5, -cellY(0) - .5, -.5); root.add(mesh);
  } else {
   // S5 (D36): the 2-wide walk-through module, its outer door half open on the hazard threshold, lamps green, chamber charged.
-  const d = buildDoor(2); d.update(0, { outer: .22, inner: 0, lamps: ['ready', 'locked'], pressure: 1, busy: false }, true); d.group.position.y = -1; d.group.rotation.y = .55; root.add(d.group);
+  const d = buildDoor(2); d.update(0, { outer: .22, inner: 0, lamps: ['ready', 'locked'], pressure: 1, busy: false }, true); d.group.position.y = -1; d.group.rotation.y = .05; root.add(d.group);
  }
  const camera = new THREE.PerspectiveCamera(24, 1, .1, 50), dir = new THREE.Vector3(1.05, .78, 1.35).normalize();
  // Three-quarter view from the front right, framed so the model fills about 80% of the square.

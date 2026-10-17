@@ -2,10 +2,12 @@
 export const VISOR_CONTROLS = {
  strength: { label: 'Сила эффекта', min: 0, max: 150 },
  spread: { label: 'Размер затемнения', min: 60, max: 140 },
+ // S5.1: opacity of the holographic frame sprite (multiplied by the strength; 0 hides the frame, the shading stays).
+ opacity: { label: 'Непрозрачность рамки', min: 0, max: 100 },
 } as const;
 export type VisorGroup = keyof typeof VISOR_CONTROLS;
 export type VisorSettings = Record<VisorGroup,number>;
-export const defaultVisorSettings = ():VisorSettings => ({ strength:100,spread:100 });
+export const defaultVisorSettings = ():VisorSettings => ({ strength:100,spread:100,opacity:70 });
 export function parseVisorSettings(value:unknown):VisorSettings {
  const result=defaultVisorSettings();
  if(!value||typeof value!=='object')return result;
@@ -19,4 +21,5 @@ export function applyVisorSettings(value:VisorSettings) {
  const prefs=parseVisorSettings(value),root=document.documentElement;
  root.style.setProperty('--visor-strength',String(prefs.strength/100));
  root.style.setProperty('--visor-spread',String(prefs.spread/100));
+ root.style.setProperty('--visor-opacity',String(prefs.opacity/100));
 }

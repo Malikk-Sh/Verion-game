@@ -159,7 +159,7 @@ try{
    m=(await state()).map;q=at(door.x+.5,door.z+.5);const mid={x:mb.x+mb.width/2,y:mb.y+mb.height/2},far=Math.hypot(mid.x-q.x,mid.y-q.y)>=60,to=far?mid:{x:q.x+(q.x>mid.x?-80:80),y:q.y};await page.evaluate(([a,b])=>{const c=document.getElementById('map'),ev=(t,x,y)=>c.dispatchEvent(new PointerEvent(t,{pointerId:7,pointerType:'touch',isPrimary:true,bubbles:true,clientX:x,clientY:y}));ev('pointerdown',a.x,a.y);for(let i=1;i<=6;i++)ev('pointermove',a.x+(b.x-a.x)*i/6,a.y+(b.y-a.y)*i/6);ev('pointerup',b.x,b.y);},[q,to]);assert.equal((await state()).map.card,null,'a drag pans, it does not open a card');
    while((m=(await state()).map).zoom<24){const want=Math.min(24,m.zoom*Math.exp(.6));q=at(door.x+.5,door.z+.5);await page.mouse.move(q.x,q.y);await page.mouse.wheel(0,-400);assert.ok(Math.abs((await state()).map.zoom-want)<1e-6,'one wheel notch zooms to '+want);}
    await page.waitForFunction(k=>window.__vireon.getState().map.draws>k,(await state()).map.draws);m=(await state()).map;
-   const cols=new Set([...(await snapshot()).world.base.glass.map(k=>Math.floor(k/128)),(door.x+256)*1024+door.z+256]);assert.equal(m.columns,cols.size,'every glass column of the room is drawn at 24 px/m');
+   const cols=new Set([...(await snapshot()).world.base.glass.map(k=>Math.floor(k/128)),...[0,1].flatMap(c=>[0,1].map(r=>(door.x+c+256)*1024+door.z+r+256))]);/* the module: 2 wide × 2 deep (S5.1), rot 0 */assert.equal(m.columns,cols.size,'every glass column of the room is drawn at 24 px/m');
    q=at(door.x+.5,door.z+.5);assert.ok(q.x>mb.x&&q.x<mb.x+mb.width&&q.y>mb.y&&q.y<mb.y+mb.height,'the airlock is on screen');await page.mouse.click(q.x,q.y);assert.deepEqual((await state()).map.card,{kind:'station',id:door.id});
    await shot('map-max');}
   await page.click('#map-guide');s=await state();assert.equal(s.selected,'guide');if(s.dialog==='map-panel')await page.click('#close-map');assert.equal((await state()).running,true);
@@ -170,7 +170,7 @@ try{
  rs=await rooms();assert.deepEqual(rs.map(r=>r.volume).sort((a,b)=>a-b),[2,27]);assert.equal(rs.find(r=>r.volume===2).q,0);check('A second shell built against the wall closes a small empty room of its own');
  // ---------- D36: walking through the airlock module, both ways, with real presses ----------
  const doorNow=async()=>(await state()).doors.find(d=>d.id===door),air=async()=>(await snapshot()).world.base.zones.find(z=>z.cell===rs.find(r=>r.volume===27).cell).q;
- const inBox=p=>p.x>56&&p.x<59&&p.z>42&&p.z<45,inChamber=p=>p.x>57&&p.x<59&&p.z>45&&p.z<46;
+ const inBox=p=>p.x>56&&p.x<59&&p.z>42&&p.z<45,inChamber=p=>p.x>57&&p.x<59&&p.z>45&&p.z<47;
  /** Turns on the spot (no step) towards a point, then waits until the reticle rests on that door of the airlock. */
  const aimDoor=async(face,point)=>{const p=(await state()).position;await look([p.x,p.z,p.y],point);await aimed(([id,f])=>{const s=window.__vireon.getState();return s.worldTarget===id&&s.struck?.face===f&&s.action==='door';},[door,face],'Not aimed at the '+face+' door');};
  /** Holds W (a real key) until `done(position)` holds, then lets go and waits until the body stands still. */
@@ -178,7 +178,7 @@ try{
   let last=null;await page.waitForFunction(()=>window.__vireon.getState().input.forward===0);for(;;){const p=(await state()).position;if(last&&Math.hypot(p.x-last.x,p.z-last.z)<1e-6)return p;last=p;await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));}};
  // The distributor rests while the room air is counted to the milli-GU (only the room's own technical leak remains).
  await configure(async([d])=>{const s=window.__vireon.snapshot();s.world.base.buildings.find(b=>b.id===d).enabled=false;window.__vireon.setState(s);},[dist]);
- await slot(0);await look([58,47.4],[58,1.7,45.95]);await aimDoor('outer',[58,1.7,45.95]);
+ await slot(0);await look([58,47.4],[58,1.7,46.95]);await aimDoor('outer',[58,1.7,46.95]);
  assert.equal(await page.locator('#aim-name').textContent(),'Внешняя дверь шлюза');assert.equal(await page.locator('#aim-meta').textContent(),'Закрыта · в камере 0 GU');assert.equal(await page.locator('#action').getAttribute('aria-label'),'Открыть');await shot('airlock-outside');
  const q0=await air();await page.locator('#action').click();
  await page.waitForFunction(id=>window.__vireon.getState().doors.find(d=>d.id===id).outer==='open',door);
@@ -189,7 +189,7 @@ try{
  // Interlock: the inner door stays shut while the outer one is open.
  await aimDoor('inner',[58,1.7,45.05]);assert.equal(await page.locator('#aim-meta').textContent(),'Закрыта: открыта другая дверь');
  await page.keyboard.press('f');await page.waitForFunction(()=>window.__vireon.getState().toast.text==='Сначала закройте другую дверь');assert.equal((await doorNow()).inner,'closed');
- await aimDoor('outer',[58,1.7,45.95]);assert.equal(await page.locator('#action').getAttribute('aria-label'),'Закрыть');await page.keyboard.press('f');
+ await aimDoor('outer',[58,1.7,46.95]);assert.equal(await page.locator('#action').getAttribute('aria-label'),'Закрыть');await page.keyboard.press('f');
  await page.waitForFunction(id=>window.__vireon.getState().doors.find(d=>d.id===id).outer==='closed',door);
  // The inner door: the chamber fills from the room first (4 GU at the request, 3 s), then the leaves slide.
  await aimDoor('inner',[58,1.7,45.05]);const q1=await air();await page.keyboard.press('f');
@@ -206,15 +206,15 @@ try{
  check('Expanding behind a second wall: taking the wall between them out merges the rooms without losing air');
  // Out again: into the charged chamber, the inner door shut, then the outer one vents the chamber outside (3 s) and slides.
  const roomAir=async()=>(await snapshot()).world.base.zones[0].q;
- await look([58,43.6],[58,1.7,46]);p=await walk(p=>p.z>45.38,'the chamber from the room');assert.ok(inChamber(p)&&p.z<45.64,JSON.stringify(p));assert.equal((await state()).chamber,door);
+ await look([58,43.6],[58,1.7,46]);p=await walk(p=>p.z>45.38,'the chamber from the room');assert.ok(inChamber(p)&&p.z<46.6,JSON.stringify(p));assert.equal((await state()).chamber,door);
  await aimDoor('inner',[58,1.7,45.05]);assert.equal(await page.locator('#action').getAttribute('aria-label'),'Закрыть');await page.keyboard.press('f');await page.waitForFunction(id=>window.__vireon.getState().doors.find(d=>d.id===id).inner==='closed',door);
- await aimDoor('outer',[58,1.7,45.95]);const q2=await roomAir();await page.keyboard.press('f');
+ await aimDoor('outer',[58,1.7,46.95]);const q2=await roomAir();await page.keyboard.press('f');
  await page.waitForFunction(id=>window.__vireon.getState().doors.find(d=>d.id===id).outer==='cycling',door);assert.equal((await doorNow()).pressure,4000);assert.match(await page.locator('#aim-meta').textContent(),/^Сброс давления наружу · [1-4] с$/);await shot('airlock-venting');
  await page.waitForFunction(id=>window.__vireon.getState().doors.find(d=>d.id===id).outer==='open',door,{timeout:20000});dn=await doorNow();assert.deepEqual([dn.outer,dn.inner,dn.pressure],['open','closed',0]);
  assert.ok(q2-await roomAir()<1500,'venting the chamber takes nothing from the room (only its own leak)');
- p=await walk(p=>p.z>46.6,'outside');assert.ok(!inBox(p)&&!inChamber(p),JSON.stringify(p));assert.equal((await state()).chamber,null);
+ p=await walk(p=>p.z>47.6,'outside');assert.ok(!inBox(p)&&!inChamber(p),JSON.stringify(p));assert.equal((await state()).chamber,null);
  // Taking the module back is refused while a door stands open; closed, it is the outer door again.
- await aimDoor('outer',[58,1.7,45.95]);await page.keyboard.press('r');await page.waitForFunction(()=>window.__vireon.getState().toast.text==='Сначала закройте обе двери шлюза');assert.equal((await snapshot()).world.base.doors.length,1);
+ await aimDoor('outer',[58,1.7,46.95]);await page.keyboard.press('r');await page.waitForFunction(()=>window.__vireon.getState().toast.text==='Сначала закройте обе двери шлюза');assert.equal((await snapshot()).world.base.doors.length,1);
  await page.keyboard.press('f');await page.waitForFunction(id=>window.__vireon.getState().doors.find(d=>d.id===id).outer==='closed',door);dn=await doorNow();assert.deepEqual([dn.outer,dn.inner,dn.pressure,dn.cycleMs],['closed','closed',0,0]);
  check('From inside the player walks into the charged chamber, closes the inner door, the outer one vents the chamber and opens; he walks out, R is refused while it is open, F closes it');
  await configure(async([d])=>{const s=window.__vireon.snapshot();s.world.base.buildings.find(b=>b.id===d).enabled=true;window.__vireon.setState(s);},[dist]);
