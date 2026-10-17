@@ -272,9 +272,13 @@ test('S5.1: walking through a two-deep module — into the long chamber, both do
  assert.equal(useDoor(g, 'door-1', 'inner'), ''); run(g, EQUALIZE_MS + SLIDE_MS); view.update(g, 1); walk(1.2);
  assert.ok(actor.z < 44.3, `walked into the room: ${actor.z}`); assert.equal(allRooms(g)[0].zone.q, 296000, 'entering cost the room 4 GU');
 });
-test('S5.1: placement — the chamber row needs free air in front of the wall; glass there refuses the module', () => {
+test('S5.1: placement — the chamber row needs free outside air in front of the wall; glass or another room there refuses the module', () => {
  const g = fresh(); lay(g, [...CUBE(), cellKey(57, 0, 46)]); at(g, 54, 48); addItems(g.player.inventory, 'airlock', 1);
  assert.match(doorProblem(g, cellKey(57, 0, 45), 0), /место под камеру/);
+ // A wall between two rooms: the chamber row would be the other room's air — refused, both rooms keep their cells and gas.
+ const h = fresh(); lay(h, [...new Set([...CUBE(), ...shellOf(boxCells(56, 0, 46, 3, 3, 3))])]); at(h, 54, 48); addItems(h.player.inventory, 'airlock', 1);
+ assert.deepEqual(allRooms(h).map(r => r.volume), [27, 27]);
+ assert.match(doorProblem(h, cellKey(57, 0, 45), 0), /другое помещение/); assert.match(placeDoor(h, cellKey(57, 0, 45), 0).error, /другое помещение/);
 });
 test('S5.1 migration: an S5 module gets the second row where it fits; glass or a station in front keeps it one deep', () => {
  const v9 = (patch?: (raw: any) => void) => { const g = fresh(), d = MOD(); lay(g, CUBE().filter(k => !doorKeys(d).includes(k)), [d]); g.world.base.nextId = 2; Object.assign(allRooms(g)[0].zone, { q: 123456, temperature: 20, purity: 1 });

@@ -351,7 +351,7 @@ export function glassProblem(g: GameState, key: number): string {
 }
 /** Why an airlock module (anchor cell `key`, turned `rot`) cannot stand here ('' = it can). Its wall row fills either an
  *  empty gap or a straight 2×2 run of wall glass, which it replaces (the blocks return to the backpack), so sealing never
- *  breaks; S5.1: the chamber's second row stands in front of the wall and needs free air there. */
+ *  breaks; S5.1: the chamber's second row stands in front of the wall and needs free outside air there (no glass, no room). */
 export function doorProblem(g: GameState, key: number, rot: number, except?: string, width: 1 | 2 = 2, depth: 1 | 2 = 2): string {
  if (g.player.vitals.health <= 0) return 'Персонаж погиб';
  const c = cellOf(key), d = newDoor('', c.i, c.k, c.j, rot, width, depth), cells = doorKeys(d), wall = doorKeys({ ...d, depth: 1 }), v = roomsView(g.world.base);
@@ -362,6 +362,7 @@ export function doorProblem(g: GameState, key: number, rot: number, except?: str
  // Part glass, part air: the module would stick out of the wall (or leave half a wall standing beside its chamber).
  const glassIn = wall.filter(k => v.glass.has(k)).length; if (glassIn && glassIn < wall.length) return `Шлюзу нужен ровный участок стены ${width}×2 — наведите на середину стены`;
  if (cells.some(k => !wall.includes(k) && v.glass.has(k))) return 'Перед стеной нужно место под камеру шлюза — уберите стекло';
+ if (cells.some(k => !wall.includes(k) && (v.tag.get(k) ?? -1) >= 0)) return 'Перед стеной другое помещение — камере шлюза нужен наружный воздух';
  const box = moduleBox(d);
  if (overlaps(box, playerBox(g.player.x, g.player.y, g.player.z))) return 'Место занято персонажем';
  if (g.world.base.buildings.some(b => overlaps(box, stationBox(b)))) return 'Место занято станцией';
