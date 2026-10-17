@@ -22,7 +22,7 @@
 
 ## Попробовать
 
-Открыть [игру на Vercel](https://verion-game.vercel.app/): `main` содержит S2.x, S3 и S4 (PR #4, PR #6 и PR #10); S5 вливается следующим pull request ([VERDANA_S5](docs/prototypes/VERDANA_S5.md)). Автономный HTML больше не обновляется по поручению Малика от 4.10; прежние файлы остаются историческими образцами. [Управление и проверки S1](docs/prototypes/VERDANA_S1.md); визуальные образцы B4, B3 и B2 сохранены для сравнения.
+Открыть [игру на Vercel](https://verion-game.vercel.app/): `main` содержит S2.x, S3 и S4 (PR #4, PR #6 и PR #10); S5 вливается через PR #12 ([VERDANA_S5](docs/prototypes/VERDANA_S5.md)). Автономный HTML больше не обновляется по поручению Малика от 4.10; прежние файлы остаются историческими образцами. [Управление и проверки S1](docs/prototypes/VERDANA_S1.md); визуальные образцы B4, B3 и B2 сохранены для сравнения.
 
 Для разработки: `npm ci`, затем `npm run dev`. Проверки: `npm test`, сборка без автономного HTML: `npx --no-install tsc --noEmit` и `npx --no-install vite build`; браузер: `npm run verify:survival`, `npm run verify:s1` и `npm run verify:hud` после установки Chromium. Для двух вкладок в программном WebGL можно задать `VIREON_TEST_FRAME_DELAY_MS=120` — ограничение кадров только в тестовом браузере, не замер FPS телефона.
 
