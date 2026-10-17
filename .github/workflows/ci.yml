@@ -25,7 +25,9 @@ jobs:
   browser_suite:
     name: browser / ${{ matrix.suite }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # verify:performance measures every quality preset plus the S5 glass room (Low and High, four views each, each after
+    # the terrain settles); on a hosted runner that takes longer than the other suites.
+    timeout-minutes: ${{ matrix.suite == 'performance' && 25 || 15 }}
     strategy:
       fail-fast: false
       matrix:
