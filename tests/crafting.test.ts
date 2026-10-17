@@ -76,5 +76,7 @@ test('Next to an unpowered (or switched-off) bench II, pocket recipes stay in th
  // A cable to an empty generator is still no power; fiber in its input is (it burns it on the next tick).
  const gen=makeBuilding(g,'biogenerator',44,0,42);connect(g,'cable',gen.id,b.id);assert.equal(craftOwner(g,b,grass),'hand');
  gen.input[0]={itemId:'fiber',count:1};assert.equal(craftOwner(g,b,grass),b.id);gen.input[0]=null;gen.energy=GEN_BUFFER;assert.equal(craftOwner(g,b,grass),b.id);
+ // A leftover too small for one batch (and nothing to burn) keeps the recipe in the pocket: the batch would stall holding the fiber.
+ const need=WORKBENCH_UPGRADE.EU_per_second*grass.seconds*1000;gen.energy=need-1;assert.equal(craftOwner(g,b,grass),'hand');gen.energy=need;assert.equal(craftOwner(g,b,grass),b.id);gen.energy=GEN_BUFFER;
  b.enabled=false;assert.equal(craftOwner(g,b,grass),'hand');gen.enabled=false;b.enabled=true;assert.equal(craftOwner(g,b,grass),'hand');
 });

@@ -260,9 +260,16 @@ export function createGlassView(root: THREE.Group, fx?: Fx) {
  }
  function dropDoor(s: Shown) { group.remove(s.v.group); s.v.dispose(); for (const x of [...s.frame, s.leaf.outer, s.leaf.inner]) hash.remove(x); }
  function reset() { chunks.clear(); join(); for (const s of doors.values()) dropDoor(s); doors.clear(); hash.clear(); solids.clear(); glass = new Set(); doorCells = new Set(); rev = -1; clearTint(); showLeak([]); vent = null; }
+ /** Leaf colliders follow the doors: a leaf blocks unless its door is open (it closes at once: the body was checked out of
+  *  its plane). Also run right after the player works a door, before the next movement step. */
+ function syncLeaves(g: GameState) {
+  for (const s of doors.values()) { const d = doorById(g, s.d.id); if (!d) continue;
+   for (const f of ['outer', 'inner'] as const) { const l = s.leaf[f], block = d[f] !== 'open'; if ((l.maxY > l.minY) !== block) { l.minY = block ? l.y0 : -1e4; l.maxY = block ? l.y1 : -1e4; } } }
+ }
  /** `dt` is real frame time (0 while frozen). */
  function update(g: GameState, dt: number) {
   const still = reducedMotion(); warmDoor.group.visible = false; moving = false;
+  syncLeaves(g);
   for (const s of doors.values()) {
    const d = doorById(g, s.d.id); if (!d) continue;
    const ph = doorPhase(g, d), c = doorCenter(d), at = { x: c.x, y: cellY(d.y) + 1, z: c.z };
@@ -270,8 +277,6 @@ export function createGlassView(root: THREE.Group, fx?: Fx) {
     // Opening follows the simulation (the slide is the end of the cycle); closing eases shut in 0.8 s. Reduced motion snaps.
     const target = still ? d[f] === 'open' ? 1 : 0 : simOpen(d, f), was = s.open[f];
     s.open[f] = still || target >= was ? target : Math.max(target, was - dt / .8); if (s.open[f] !== was || s.open[f] !== target) moving = true;
-    // The leaf blocks unless its door is open (it closes at once: the body was checked out of its plane).
-    const l = s.leaf[f], block = d[f] !== 'open'; if ((l.maxY > l.minY) !== block) { l.minY = block ? l.y0 : -1e4; l.maxY = block ? l.y1 : -1e4; }
    }
    s.v.update(dt, { outer: s.open.outer, inner: s.open.inner, lamps: [doorLamp(d, 'outer'), doorLamp(d, 'inner')], pressure: shownPressure(g, d) / CHAMBER_Q, busy: !!ph && ph.kind !== 'slide' }, still);
    // Sounds on each change of state: hiss while equalising, a hum as the leaves slide, a clunk when a door seals or stops.
@@ -307,6 +312,7 @@ export function createGlassView(root: THREE.Group, fx?: Fx) {
   doorOpen: (id: string) => { const s = doors.get(id); return s ? { ...s.open } : null; },
   /** Shows the hidden warm-up meshes for one renderer.compile (a quality change recompiles the lit programs). */
   warmup(on: boolean) { warm.visible = warmDoor.group.visible = on; },
+  syncLeaves,
   stats: () => ({ chunks: [...chunks.values()].filter(c => c.faces).length, meshes: mesh ? 1 : 0, castShadow: !!mesh?.castShadow, faces: [...chunks.values()].reduce((a, c) => a + (c.faces?.faces ?? 0), 0), trims: [...chunks.values()].reduce((a, c) => a + (c.faces?.trims ?? 0), 0), doors: doors.size, lamps: lamps?.count ?? 0, boxes: hash.count, leak: leak?.mesh.count ?? 0, tint: !!tint }),
   };
 }

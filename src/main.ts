@@ -18,7 +18,7 @@ import { itemArt } from './ui/art';
 import { createProductionPanel } from './ui/production';
 import { createBuildings } from './buildings';
 import { productionTick, manualWork, releaseHandOnDeath, machine } from './game/production';
-import { allRooms, around, doorById, doorKeys, habitableRoom, removeDoor, removeGlass, roomAtCell, roomDoors, structureRoom, type RoomEdit } from './game/rooms';
+import { allRooms, around, doorById, doorKeys, doorRooms, habitableRoom, removeDoor, removeGlass, roomAtCell, roomDoors, structureRoom, type DoorFace, type RoomEdit } from './game/rooms';
 import { structureStatus } from './game/stationStatus';
 import { chamberAt, doorStatus, shelteredAir, useDoor } from './game/airlock';
 import * as THREE from 'three';
@@ -92,7 +92,7 @@ function boot(){
  let game:GameState|null=null,store:SaveStore|null=null,saver:Saver|null=null,storeError='',slotId:string|null=null;
  let holdMine=false,holdRefill=false,aimNode:string|null=null,aimNear=Infinity,aimReason='',mineRatio=0,nearDrop:string|null=null,slots:SlotRecord[]=[],actionKind='none',hudKey='';
  /** S5 (D37): what the selected scanner reads now (null when the scanner is not selected or nothing is in reach). */
- let scanAim:{kind:'landmark'}|{kind:'deposit';id:string}|{kind:'station';id:string}|{kind:'room';key:number;door:string|null}|null=null;
+ let scanAim:{kind:'landmark'}|{kind:'deposit';id:string}|{kind:'station';id:string}|{kind:'room';key:number;door:string|null;face?:DoorFace}|null=null;
  let refillTanks=false;
  // S4 mining feel: the strike timeline of the current hold (strikes.ts) drives the swing, the reticle ring and every impact cue.
  let swingActive=false,swingStruck=false,swingNeed=0,swingPoseValue=0,kickT=1,kickPitch=0,kickYaw=0,lastHit='',strikesLanded=0,ringNeed=0,heldModel:string|null=null;
@@ -240,7 +240,7 @@ function boot(){
  /** One press on the aimed airlock door (D36): open it (the chamber equalises first when needed) or close it. */
  function useAimedDoor(){
   const id=interaction.target,face=interaction.struck?.face;if(!game||!id||!face)return;
-  const error=useDoor(game,id,face);if(error){toast('Шлюз',error);audio.tone('warn');}else{hudKey='';void saver?.save();}updateAimUI();
+  const error=useDoor(game,id,face);if(error){toast('Шлюз',error);audio.tone('warn');}else{built.glass.syncLeaves(game);hudKey='';void saver?.save();}updateAimUI();
  }
  function retrieveStation(){if(!game||!running)return;if(!nearMachine){removeStructure();return;}const error=packStation(game,nearMachine);toast(error?'Не удалось забрать':'Станция в рюкзаке',error||'Содержимое сохранено');if(!error){built.sync(game);world.invalidateShadows();hudKey='';updateHotbar();void saver?.save();}}
  el('retrieve-station').onclick=retrieveStation;
@@ -360,7 +360,9 @@ function boot(){
   if(t.kind==='landmark'){if(!nearest)return;visited.add(nearest.id);const y=heightAt(nearest.x,nearest.z);r={kind:nearest.kind,title:nearest.name,text:nearest.description,rows:[['Координаты',`${Math.round(nearest.x)} · ${Math.round(nearest.z)}`],['Высота',`${y>=0?'+':''}${y.toFixed(1)} м`],['От капсулы',`${Math.round(Math.hypot(nearest.x-40,nearest.z-40))} м`]]};if(nearest.id===selected)selected='guide';}
   else if(t.kind==='deposit')r=scanDeposit(game,t.id);
   else if(t.kind==='station'){const b=machine(game,t.id);if(b)r=scanStation(game,b);}
-  else r=scanRoom(around(t.key).map(n=>roomAtCell(game!,n)).find(Boolean)??structureRoom(game,t.key,256),t.door?doorById(game,t.door):undefined);
+  else{// At an airlock the room behind the aimed door (the other side when that one is the open outside).
+   const d=t.door?doorById(game,t.door):undefined,sides=d?doorRooms(game,d):null,aimed=sides?(t.face==='outer'?sides.front??sides.back:sides.back??sides.front):null;
+   r=scanRoom(aimed??around(t.key).map(n=>roomAtCell(game!,n)).find(Boolean)??structureRoom(game,t.key,256),d);}
   if(!r)return;lastScan=t.kind;audio.tone('scan');hand.scan();
   const sweep=el('scan-sweep');sweep.hidden=true;void sweep.offsetWidth;sweep.hidden=false;
   el('info-kind').textContent=r.kind;el('info-title').textContent=r.title;el('info-text').textContent=r.text;
@@ -594,7 +596,7 @@ function boot(){
   scanAim=null;
   if(game&&selected?.itemId==='scanner'&&['mine','machine','upgrade','room','door','capsule','none'].includes(kind)){
    const st=interaction.target,door=st?.startsWith('door-')?doorById(game,st):undefined;
-   scanAim=kind==='mine'&&n?{kind:'deposit',id:n.id}:kind==='machine'||kind==='upgrade'?{kind:'station',id:nearMachine!}:kind==='room'||kind==='door'?(door?{kind:'room',key:doorKeys(door)[0],door:door.id}:{kind:'room',key:Number(st!.slice(6)),door:null}):nearest?{kind:'landmark'}:null;
+   scanAim=kind==='mine'&&n?{kind:'deposit',id:n.id}:kind==='machine'||kind==='upgrade'?{kind:'station',id:nearMachine!}:kind==='room'||kind==='door'?(door?{kind:'room',key:doorKeys(door)[0],door:door.id,face:interaction.struck?.face??undefined}:{kind:'room',key:Number(st!.slice(6)),door:null}):nearest?{kind:'landmark'}:null;
    kind=scanAim?'scan':'none';label='Сканировать';iconId='i-scan';blocked='';el('aim-meta').textContent='';el('aim-wear').textContent='';box.classList.remove('blocked');(el('aim-bar').firstElementChild as HTMLElement).style.transform='scaleX(0)';
    const b=nearMachine?machine(game,nearMachine):undefined;el('aim-name').textContent=!scanAim?'':scanAim.kind==='deposit'?n!.name:scanAim.kind==='station'&&b?stationName(b):scanAim.kind==='room'?(door?'Шлюз':'Стеклоблок'):nearest?.name??'';
   }

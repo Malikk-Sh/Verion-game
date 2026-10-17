@@ -66,9 +66,12 @@ export const runsOn = (b: { kind: string; level?: number }, r: Recipe) => r.stat
  * output slots of bench II (the legacy dismantle_dome: 64 glass blocks + an airlock = 5) stays in the pocket. */
 const slotsOf = (o: Record<string, number>) => Object.entries(o).reduce((n,[id,c])=>n+(!ITEMS[id]?0:TOOLS[id]||TANKS[id]?c:Math.ceil(c/(ITEMS[id].stack??1))),0);
 /** Where a recipe chosen in a station window (or in the pocket workshop, `b` undefined) is made. A pocket recipe goes to
- * bench II only while the bench can run it (switched on, a generator with energy or fuel on its cable); otherwise it stays
+ * bench II only while the bench can run it (switched on, its network can finish the batch: canFinish); otherwise it stays
  * in the pocket, so the fiber for an empty generator never waits for the power it is meant to make. */
-export const craftOwner = (g: GameState, b: Building | undefined, r: Recipe) => b && runsOn(b, r) && (r.station !== 'hand' || b.enabled && hasPower(g, b)) ? b.id : 'hand';
+export const craftOwner = (g: GameState, b: Building | undefined, r: Recipe) => b && runsOn(b, r) && (r.station !== 'hand' || b.enabled && canFinish(g, b, r)) ? b.id : 'hand';
+/** The bench's network can finish a batch: a generator with fuel or fiber to burn (outside rooms), or stored energy for the
+ *  whole batch. A small leftover alone is not enough: the batch would stall and hold the fiber meant to restart it. */
+const canFinish = (g: GameState, b: Building, r: Recipe) => { const gens = generatorsOf(g, b).filter(v => v.enabled); return gens.some(v => !stationRoom(g, v) && (v.fuel > 0 || countItem(v.input, 'fiber') > 0)) || gens.reduce((n, v) => n + v.energy, 0) >= energyRate(b, r) * r.seconds * 1000; };
 export const electricPort = (b: {kind:string;level?:number}) => !['capsule','kiln'].includes(b.kind) && (b.kind !== 'workbench' || b.level === 2);
 export function upgradeBuilding(g: GameState, id: string): string {
  const b=machine(g,id);if(!b || b.kind!=='workbench')return 'Для этой постройки пока нет улучшения';
