@@ -1,6 +1,6 @@
 import { CAPSULE_CAPACITY } from './production';
 import { breathingRoom, capacityOf } from './rooms';
-import { breathingChamber, chamberRoom, CHAMBER_Q } from './airlock';
+import { breathingChamber, chamberRoom, shelteredAir, CHAMBER_Q } from './airlock';
 import { TANKS } from './defs';
 import { emptyInventory, removeItems, type Slot } from './inventory';
 import { oxygenGU, oxygenCapacityGU, wornParts } from './backpack';
@@ -135,7 +135,7 @@ export const tankCapacity = (slot: NonNullable<Slot>) => TANKS[slot.itemId].capa
 export function lastAirText(state: GameState) { const s = state.player.survival, left = s.recoveryMs >= 2000 ? 5000 : Math.max(0, 5000 - s.suffocationMs); return `Это последний воздух: без баллона удушье ${left >= 1000 ? `через ${Math.floor(left / 1000)} с` : 'сразу'}. Повторите, чтобы снять.`; }
 export function tankGap(state: GameState, insideCapsule: boolean, b: 0 | 1, incoming: Slot = null): boolean {
   if (wornParts(state) < 4 || state.player.survival.emergencyMs > 0) return false;
-  if ((insideCapsule && state.world.capsuleMilliGU > 0) || breathingRoom(state) || chamberRoom(state) || breathingChamber(state)) return false;
+  if ((insideCapsule && state.world.capsuleMilliGU > 0) || shelteredAir(state)) return false;
   if ((state.player.bottles[b ? 0 : 1]?.milliGU ?? 0) > 0 || (incoming?.milliGU ?? 0) > 0) return false;
   return (state.player.bottles[b]?.milliGU ?? 0) > 0;
 }

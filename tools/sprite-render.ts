@@ -16,10 +16,13 @@ export async function render(kind: 'window' | 'airlock', size = 512): Promise<st
   // The very mesh the game draws for a lone block (D35): six clear faces and the edge trim of the glass material.
   const one = new Set([cellKey(0, 0, 0)]), f = chunkFaces(one, k => one.has(k), undefined, { solid: k => one.has(k), door: () => false });
   const mesh = new THREE.Mesh(joinChunks([f]), glassMaterial()); mesh.position.set(-.5, -cellY(0) - .5, -.5); root.add(mesh);
- } else { const d = buildDoor(); d.update(0, { status: 'work', outer: 0, inner: 0 }, true); d.group.position.y = -1; root.add(d.group); }
+ } else {
+  // S5 (D36): the 2-wide walk-through module, its outer door half open on the hazard threshold, lamps green, chamber charged.
+  const d = buildDoor(2); d.update(0, { outer: .22, inner: 0, lamps: ['ready', 'locked'], pressure: 1, busy: false }, true); d.group.position.y = -1; d.group.rotation.y = .55; root.add(d.group);
+ }
  const camera = new THREE.PerspectiveCamera(24, 1, .1, 50), dir = new THREE.Vector3(1.05, .78, 1.35).normalize();
  // Three-quarter view from the front right, framed so the model fills about 80% of the square.
- camera.position.copy(dir.multiplyScalar(kind === 'window' ? 4.6 : 6.4)); camera.lookAt(0, kind === 'window' ? 0 : -.05, 0);
+ camera.position.copy(dir.multiplyScalar(kind === 'window' ? 4.6 : 7.4)); camera.lookAt(0, kind === 'window' ? 0 : -.05, 0);
  renderer.render(scene, camera); const url = canvas.toDataURL('image/webp', .9);
  renderer.dispose(); pmrem.dispose(); return url;
 }

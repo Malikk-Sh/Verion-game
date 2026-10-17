@@ -6,14 +6,14 @@ import { heightAt, EYE, type Box } from '../src/world.ts';
 import { createWorldInteraction } from '../src/worldInteraction.ts';
 import { chunkFaces, createGlassView, joinChunks, TRIM } from '../src/glass.ts';
 import {
- around, cellKey, cellOf, cellCenter, cellY, levelAt, columnFloor, isGround, lowestAir, deriveRooms, groundV8, roomsView, bumpRooms, allRooms, groundCell, shellOf, boxCells, bodyInSolid, doorKeys, type Door,
+ around, cellKey, cellOf, cellCenter, cellY, levelAt, columnFloor, isGround, lowestAir, deriveRooms, groundV8, roomsView, bumpRooms, allRooms, groundCell, shellOf, boxCells, bodyInSolid, doorKeys, newDoor, type Door,
 } from '../src/game/rooms.ts';
 
 /** S5 (D35): the vertical lattice sits 0.5 m up — level k spans y ∈ [k + 0.5, k + 1.5) — so blocks rest flush on the pad. */
 const fresh = () => newGame('w-levels', 7, 1, heightAt(40, 42));
 function lay(g: GameState, keys: number[], doors: Door[] = []) { g.world.base.glass = [...new Set([...g.world.base.glass, ...keys])].sort((a, b) => a - b); g.world.base.doors.push(...doors); bumpRooms(g); return roomsView(g.world.base); }
 const CUBE = () => shellOf(boxCells(56, 0, 42, 3, 3, 3));
-const DOOR: Door = { id: 'door-1', x: 57, y: 0, z: 45, rot: 0 };
+const DOOR: Door = newDoor('door-1', 57, 0, 45, 0);
 const ys = (f: { position: Float32Array }) => Array.from(f.position).filter((_, n) => n % 3 === 1);
 
 test('D35: one helper pair converts levels and heights; on the flat 0.5 m pad level 0 rests flush on the ground', () => {
@@ -54,8 +54,8 @@ test('D35: a 3-high wall on the pad shows three whole blocks above the ground an
  // The door: threshold on the pad, lintel 2 m above it; collision boxes match the drawn blocks.
  assert.equal(cellY(DOOR.y), heightAt(57.5, 45.5)); assert.equal(cellY(DOOR.y + 2) - cellY(DOOR.y), 2);
  const view = createGlassView(new THREE.Group()); view.sync(g); const out: Box[] = []; view.query(54, 44, 61, 47, out);
- const door = out.find(b => b.id === 'build-door-1')!, low = out.find(b => b.id === 'glass-' + cellKey(56, 0, 45))!, top = out.find(b => b.id === 'glass-' + cellKey(56, 2, 45))!;
- assert.deepEqual([door.minY, door.maxY], [.5, 2.5]); assert.deepEqual([low.minY, low.maxY], [.5, 1.5]); assert.deepEqual([top.minY, top.maxY], [2.5, 3.5]);
+ const door = out.filter(b => b.id === 'build-door-1'), low = out.find(b => b.id === 'glass-' + cellKey(56, 0, 45))!, top = out.find(b => b.id === 'glass-' + cellKey(56, 2, 45))!;
+ assert.deepEqual(door.map(b => [+b.minY.toFixed(3), +b.maxY.toFixed(3)]).sort((p, q) => p[0] - q[0] || p[1] - q[1]), [[-.1, .54], [-.1, 2.5], [-.1, 2.5], [.5, 2.4], [.5, 2.4], [2.4, 2.5]], 'threshold and jambs reach 0.6 m into the pad, the two leaves stand on it, the lintel tops out 2 m above it'); assert.deepEqual([low.minY, low.maxY], [.5, 1.5]); assert.deepEqual([top.minY, top.maxY], [2.5, 3.5]);
  assert.equal(view.stats().meshes, 1, 'all glass is one mesh'); assert.equal(view.stats().castShadow, false);
  const drawn = view.group.children.find(o => o.name === 'glass') as THREE.Mesh; assert.equal(drawn.castShadow, false); assert.equal((drawn.material as THREE.Material).depthWrite, false);
  // A standing body beside the wall is clear of it; one stepped into it is not.

@@ -1,7 +1,7 @@
 import { countItem } from './inventory';
 import { allDeposits, depositLeft } from './resources';
 import { RECIPE_BY_ID, WORKBENCH_UPGRADE, type Building } from './production';
-import { allRooms, cellOf, habitableQ, habitableRoom, roomCenter, roomDoors, roomy, stationRoom, type Room, type RoomInfo } from './rooms';
+import { allRooms, cellOf, doorCenter, habitableQ, habitableRoom, roomCenter, roomDoors, roomy, stationRoom, type Room, type RoomInfo } from './rooms';
 export { roomy };
 import { ITEMS } from './defs';
 import { questStatus } from './quests';
@@ -35,7 +35,7 @@ export function nearestStation(g: GameState, kind: string, level?: number): Guid
 const has = (g: GameState, kind: string) => g.world.base.buildings.some(b => b.kind === kind);
 /** The compass goes to the nearest airlock or glass room (S4). */
 export function nearestShelter(g: GameState, rooms: RoomInfo[] = allRooms(g)): GuideTarget | null {
- const spots: GuideTarget[] = [...g.world.base.doors.map(d => ({ name: ITEMS.airlock.name, x: d.x + .5, z: d.z + .5, kind: 'station' as const })), ...rooms.map(r => { const c = roomCenter(r); return { name: 'Помещение', x: c.x, z: c.z, kind: 'area' as const }; })];
+ const spots: GuideTarget[] = [...g.world.base.doors.map(d => ({ name: ITEMS.airlock.name, ...doorCenter(d), kind: 'station' as const })), ...rooms.map(r => { const c = roomCenter(r); return { name: 'Помещение', x: c.x, z: c.z, kind: 'area' as const }; })];
  return spots.sort((a, b) => dist(g, a.x, a.z) - dist(g, b.x, b.z))[0] ?? null;
 }
 /** A room at least 3 × 3 inside and 3 high (the journal's box; any closed room still counts for the milestone). */

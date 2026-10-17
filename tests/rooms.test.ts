@@ -12,10 +12,11 @@ import { stationStatus, roomStatus, structureStatus } from '../src/game/stationS
 import { refreshQuestProgress } from '../src/game/quests.ts';
 import { guideStep, nearestShelter, roomy, stepTarget } from '../src/game/guide.ts';
 import { spawnVein } from '../src/game/nature.ts';
+import { useDoor } from '../src/game/airlock.ts';
 import {
  cellKey, cellOf, cellY, levelAt, columnFloor, isGround, lowestAir, deriveRooms, roomsView, bumpRooms, allRooms, roomAt, roomAtCell, editRooms, predictRemove, leakAt,
- placeGlass, removeGlass, placeDoor, removeDoor, beginPassage, landingPoint, doorById, stationRoom, habitableRoom, breathingRoom, cyclingRoom,
- GLASS_LIMIT, DOOR_LIMIT, ROOM_LIMIT, shellOf, boxCells, groundRoom, bodyInSolid, groundCell, landingCells, type Door,
+ placeGlass, removeGlass, placeDoor, removeDoor, landingPoint, doorById, stationRoom, habitableRoom, breathingRoom, newDoor, doorKeys,
+ GLASS_LIMIT, DOOR_LIMIT, ROOM_LIMIT, shellOf, boxCells, groundRoom, bodyInSolid, groundCell, landingCells, landingProblem, stationBox, type Door,
 } from '../src/game/rooms.ts';
 
 const fresh = () => newGame('w-rooms', 7, 1, heightAt(40, 42));
@@ -24,8 +25,11 @@ const shell = (x0: number, k0: number, z0: number, w: number, h: number, d: numb
 /** Sets the layout directly (test setup), then lets the cached rooms rebuild. */
 function lay(g: GameState, keys: number[], doors: Door[] = []) { g.world.base.glass = [...new Set([...g.world.base.glass, ...keys])].sort((a, b) => a - b); g.world.base.doors.push(...doors); bumpRooms(g); return roomsView(g.world.base); }
 const near = (g: GameState, x: number, z: number) => Object.assign(g.player, { x, y: heightAt(x, z), z });
+/** Why the player could not walk through module `d` ('' = both landings clear of glass, modules, ground, stations and the static colliders). */
+const through = (g: GameState, d: Door) => { const v = roomsView(g.world.base), solid = (k: number) => v.glass.has(k) || (v.doorAt.has(k) && v.doorAt.get(k)!.id !== d.id), st = g.world.base.buildings.map(stationBox);
+ for (const side of ['front', 'back'] as const) for (const list of [null, boxes]) { const p = landingProblem(solid, d, side, st, list); if (p) return p; } return ''; };
 const stock = (g: GameState, items: Record<string, number>) => { for (const [id, n] of Object.entries(items)) assert.equal(addItems(g.player.inventory, id, n), 0); };
-const tick = (g: GameState, ms: number, outside = 10) => { let last = null; for (let n = 0; n < ms; n += 50) last = productionTick(g, 50, null, outside).passage ?? last; return last; };
+const tick = (g: GameState, ms: number, outside = 10) => { for (let n = 0; n < ms; n += 50) productionTick(g, 50, null, outside); };
 /** The base pad: flat at y = 0.5, its lowest air level is k = 0 (the ground cell below is k = −1). */
 const CUBE = () => shell(56, 0, 42, 3, 3, 3);
 
@@ -128,56 +132,6 @@ test('Rooms: placing and removing glass — every refusal has a reason and chang
  void station;
 });
 
-test('Rooms: an airlock replaces wall glass without breaking the seal; its landings stay free; taking it out asks first', () => {
- const g = fresh(); lay(g, CUBE()); const room = allRooms(g)[0]; room.zone.q = 300000; near(g, 54, 47); stock(g, { airlock: 1, window: 2 });
- const at = cellKey(57, 0, 45), before = structuredClone(g);
- assert.match(placeDoor(g, cellKey(57, 2, 45), 0).error, /стекло/, 'its back landing would be the wall above'); assert.deepEqual(g, before);
- const r = placeDoor(g, at, 0); assert.equal(r.error, ''); assert.equal(r.ventGU, 0);
- assert.equal(g.world.base.glass.length, 43); assert.equal(countItem(g.player.inventory, 'window'), 4); assert.equal(countItem(g.player.inventory, 'airlock'), 0);
- const door = g.world.base.doors[0]; assert.deepEqual({ ...door, id: '' }, { id: '', x: 57, y: 0, z: 45, rot: 0 }); assert.equal(allRooms(g)[0].zone.q, 300000, 'sealing never broke');
- refreshQuestProgress(g); assert.ok(g.progress.quests.completed.includes('dome'), 'a room with an airlock is the shelter');
- assert.match(placeGlass(g, cellKey(57, 0, 46)).error, /посадка шлюза/); assert.match(placeGlass(g, cellKey(57, 1, 44)).error, /посадка шлюза/);
- assert.match(placementProblem(g, 'refill', 58, 47), /шлюза/); assert.match(placementProblem(g, 'biogenerator', 57, 43), /выхлоп/);
- // Removing the airlock opens the room: confirm first.
- near(g, 54, 47); const ask = removeDoor(g, door.id); assert.equal(ask.needConfirm, true); assert.equal(ask.ventGU, 300);
- const out = removeDoor(g, door.id, true); assert.equal(out.error, ''); assert.equal(allRooms(g).length, 0); assert.equal(countItem(g.player.inventory, 'airlock'), 1);
-});
-
-test('Rooms: the airlock cycle — in needs the full 4 GU and locks breathing, out is always possible, landings follow the ground', () => {
- const g = fresh(); lay(g, CUBE().filter(k => k !== cellKey(57, 0, 45) && k !== cellKey(57, 1, 45)), [{ id: 'door-1', x: 57, y: 0, z: 45, rot: 0 }]); g.world.base.nextId = 2;
- const room = allRooms(g)[0], door = doorById(g, 'door-1')!; assert.equal(room.volume, 27);
- near(g, 57.5, 49); assert.match(beginPassage(g, 'door-1'), /меньше 4 GU/); assert.equal(g.world.base.passage, null);
- near(g, 57.5, 50.5); room.zone.q = 8000; assert.match(beginPassage(g, 'door-1'), /Подойдите/);
- near(g, 57.5, 49); assert.equal(beginPassage(g, 'door-1'), ''); assert.equal(allRooms(g)[0].zone.q, 4000);
- assert.deepEqual(g.world.base.passage, { doorId: 'door-1', direction: 'in', remainingMs: 6000, paid: true });
- assert.equal(cyclingRoom(g)?.volume, 27); assert.match(beginPassage(g, 'door-1'), /занят/);
- // Nothing comes down during the cycle, so the room that the paid 4 GU cover cannot vanish under the player.
- { const before = JSON.stringify(g.world.base); assert.match(removeGlass(g, cellKey(56, 0, 45), true).error, /конца цикла/); assert.match(removeDoor(g, 'door-1', true).error, /занят/); assert.equal(JSON.stringify(g.world.base), before); }
- g.player.bottles = [null, null]; for (let i = 0; i < 100; i++) survivalTick(g, .05, false); assert.equal(g.player.survival.suffocationMs, 0, 'the paid 4 GU carry the cycle');
- const copy = sanitizeState(JSON.parse(JSON.stringify(g))); assert.deepEqual(copy, g, 'a cycle survives a save');
- const inside = tick(g, 6000)!; assert.deepEqual(inside, landingPoint(g, door, 'back')); assert.equal(inside.x, 57.5); assert.equal(inside.z, 44.5); assert.equal(inside.y, heightAt(57.5, 44.5));
- Object.assign(g.player, inside); assert.equal(roomAt(g, inside.x, inside.y + 1, inside.z)?.volume, 27);
- // Leaving an empty room is always possible; the player lands on the terrain outside.
- allRooms(g)[0].zone.q = 0; assert.equal(beginPassage(g, 'door-1'), ''); assert.equal(g.world.base.passage!.direction, 'out'); assert.equal(cyclingRoom(g), null);
- const outside = tick(g, 6000)!; assert.deepEqual(outside, { x: 57.5, y: heightAt(57.5, 45.5 + 1), z: 46.5 });
- // Off the pad the landing follows the ground under it.
- const h = fresh(); lay(h, [], [{ id: 'door-1', x: 140, y: lowestAir(140, 70) + 1, z: 70, rot: 1 }]); h.world.base.nextId = 2; bumpRooms(h);
- const d = doorById(h, 'door-1')!, back = landingPoint(h, d, 'back'), front = landingPoint(h, d, 'front');
- assert.equal(back.y, heightAt(139.5, 70.5)); assert.equal(front.y, heightAt(141.5, 70.5)); assert.notEqual(back.y, front.y);
- // A door with no room on either side is a plain doorway: free and instant.
- near(h, front.x, front.z + .5); assert.equal(beginPassage(h, 'door-1'), ''); assert.equal(h.world.base.passage!.remainingMs, 0); assert.deepEqual(tick(h, 50), back);
-});
-
-test('Rooms: an inner door charges 4 GU from the destination when it has them; otherwise it is free', () => {
- const g = fresh(); lay(g, [...new Set([...shell(56, 0, 42, 3, 3, 3), ...shell(60, 0, 42, 3, 3, 3)])].filter(k => k !== cellKey(59, 0, 43) && k !== cellKey(59, 1, 43)), [{ id: 'door-1', x: 59, y: 0, z: 43, rot: 1 }]); g.world.base.nextId = 2; bumpRooms(g);
- const a = roomAt(g, 57.5, 1.5, 43.5)!, b = roomAt(g, 61.5, 1.5, 43.5)!; a.zone.q = 100000; b.zone.q = 3000;
- near(g, 57.5, 43.5); assert.equal(beginPassage(g, 'door-1'), ''); assert.deepEqual(g.world.base.passage, { doorId: 'door-1', direction: 'out', remainingMs: 6000, paid: false });
- assert.equal(roomAt(g, 61.5, 1.5, 43.5)!.zone.q, 3000); const there = tick(g, 6000)!; assert.deepEqual([there.x, there.z], [60.5, 43.5]);
- Object.assign(g.player, there); roomAt(g, 57.5, 1.5, 43.5)!.zone.q = 100000;
- assert.equal(beginPassage(g, 'door-1'), ''); assert.equal(roomAt(g, 57.5, 1.5, 43.5)!.zone.q, 96000); assert.equal(g.world.base.passage!.paid, true); assert.equal(cyclingRoom(g)?.volume, 27);
- assert.deepEqual([tick(g, 6000)!.x, b.volume], [58.5, 27]);
-});
-
 test('Rooms: a distributor fills only a room it stands in; one serves 256 m³; a generator never burns in a room', () => {
  const g = fresh(); near(g, 50, 47); lay(g, shell(56, 0, 40, 9, 5, 6)); const room = allRooms(g)[0]; assert.equal(room.volume, 270);
  const gen = makeBuilding(g, 'biogenerator', 52, .62, 44), d1 = makeBuilding(g, 'distributor', 60, .62, 42); gen.energy = 1000000; d1.oxygen = 480000;
@@ -201,7 +155,7 @@ test('Rooms: limits — 8192 glass blocks, 32 airlocks, 64 rooms', () => {
  const g = fresh(), plane: number[] = []; for (let i = 0; i < 91 && plane.length < GLASS_LIMIT; i++) for (let j = 0; j < 91 && plane.length < GLASS_LIMIT; j++) plane.push(cellKey(-100 + i, 80, -100 + j));
  lay(g, plane); Object.assign(g.player, { x: -60, y: 78.5, z: -60 }); stock(g, { window: 1, airlock: 1 });
  assert.match(placeGlass(g, cellKey(-60, 82, -58)).error, /8192/);
- const doors: Door[] = Array.from({ length: DOOR_LIMIT }, (_, n) => ({ id: 'door-' + (n + 1), x: -150 + n * 3, y: 40, z: -150, rot: 0 }));
+ const doors: Door[] = Array.from({ length: DOOR_LIMIT }, (_, n) => newDoor('door-' + (n + 1), -150 + n * 3, 40, -150, 0));
  const h = fresh(); lay(h, [], doors); h.world.base.nextId = 100; Object.assign(h.player, { x: -60, y: 39, z: -150 });
  assert.match(placeDoor(h, cellKey(-60, 40, -146), 0).error, /32 шлюзов/);
  // A row of one-cell rooms high above the ground (glass floor and roof), then one more.
@@ -213,7 +167,7 @@ test('Rooms: limits — 8192 glass blocks, 32 airlocks, 64 rooms', () => {
 });
 
 test('Save v8: strict glass, doors and zones; a vanished room drops its gas; too much air or overlaps fail', () => {
- const g = fresh(); lay(g, CUBE()); allRooms(g)[0].zone.q = 400000; g.world.base.doors.push({ id: 'door-1', x: 70, y: 0, z: 50, rot: 2 }); g.world.base.nextId = 2; bumpRooms(g);
+ const g = fresh(); lay(g, CUBE()); allRooms(g)[0].zone.q = 400000; g.world.base.doors.push(newDoor('door-1', 70, 0, 50, 2)); g.world.base.nextId = 2; bumpRooms(g);
  const ok = sanitizeState(JSON.parse(JSON.stringify(g))); assert.deepEqual(ok, g); assert.equal(ok.meta.stateVersion, STATE_VERSION);
  const bad = (patch: (s: any) => void, why: RegExp) => { const s: any = JSON.parse(JSON.stringify(g)); patch(s); assert.throws(() => sanitizeState(s), why); };
  bad(s => s.world.base.glass.push(s.world.base.glass[0]), /glass/);
@@ -222,7 +176,6 @@ test('Save v8: strict glass, doors and zones; a vanished room drops its gas; too
  bad(s => { s.world.base.doors[0].x = 57; s.world.base.doors[0].z = 45; }, /шлюз/);
  bad(s => { s.world.base.doors[0].id = 'door-2'; }, /nextId/);
  bad(s => { s.world.base.zones[0].q = 27 * 20000 + 1; }, /вместимости/);
- bad(s => { s.world.base.passage = { doorId: 'door-9', direction: 'in', remainingMs: 10, paid: true }; }, /шлюз/);
  bad(s => { s.world.base.glass = Array(GLASS_LIMIT + 1).fill(0); }, /glass/);
  const gone: any = JSON.parse(JSON.stringify(g)); gone.world.base.glass = gone.world.base.glass.slice(1);
  const loaded = sanitizeState(gone); assert.deepEqual(loaded.world.base.zones, [], 'the opened room lost its air; no error');
@@ -250,15 +203,16 @@ test('Save v7 → v8: a dome becomes a 4×4×3 glass room with its air, airlock 
  assert.deepEqual(m.world.base.buildings.map(b => b.kind), ['distributor', 'workbench']); assert.ok(m.world.base.buildings.every(b => !('zone' in b)));
  const rooms = allRooms(m); assert.equal(rooms.length, 1); assert.equal(rooms[0].volume, 48);
  assert.deepEqual(rooms[0].zone, { cell: cellKey(56, 0, 42), q: 500000, temperature: 18, purity: .8, lossRemainder: 5 });
- // Shell: 48 wall + 16 roof + 12 corner blocks, two of them replaced by the airlock in the middle of the old +x front.
- assert.equal(m.world.base.glass.length, 74); assert.deepEqual(m.world.base.doors, [{ id: 'door-4', x: 60, y: 0, z: 44, rot: 1 }]); assert.equal(m.world.base.nextId, 5);
+ // Shell: 48 wall + 16 roof + 12 corner blocks, four of them replaced by the 2×2 airlock (D36) in the middle of the old +x front.
+ assert.equal(m.world.base.glass.length, 72); assert.deepEqual(m.world.base.doors, [newDoor('door-4', 60, 0, 44, 1)]); assert.equal(m.world.base.nextId, 5);
+ assert.equal(countItem(m.player.inventory, 'window'), 2, 'the two blocks the module widened over are in the backpack');
  assert.equal(stationRoom(m, m.world.base.buildings[0])?.volume, 48, 'the distributor stays inside'); assert.equal(stationRoom(m, m.world.base.buildings[1]), null);
  assert.deepEqual(m.player.inventory[3], { itemId: 'dome', count: 1 }); assert.equal('zone' in m.player.inventory[4]!.packed!, false);
  assert.ok(m.progress.quests.facts.includes('item:dome') && m.progress.quests.facts.includes('craft:craft_dome'), 'old facts stay valid');
  refreshQuestProgress(m); assert.ok(m.progress.quests.completed.includes('dome') && m.progress.quests.completed.includes('distributor'));
  assert.deepEqual(sanitizeState(JSON.parse(JSON.stringify(m))), m, 'round trip');
- // The old exit spot (dome + front × 3.5) is exactly the new outer landing.
- assert.deepEqual([landingPoint(m, m.world.base.doors[0], 'front').x, landingPoint(m, m.world.base.doors[0], 'front').z], [61.5, 44.5]);
+ // The old exit spot (dome + front × 3.5, X61.5/Z44.5) is on the new outer landing, half a metre from its centre.
+ assert.deepEqual([landingPoint(m, m.world.base.doors[0], 'front').x, landingPoint(m, m.world.base.doors[0], 'front').z], [61.5, 45]);
  // A dome on the very edge of the old building area keeps its shell, 3 cells past it.
  const corner = v7(fresh(), { x: -195, z: -195, rot: 3, q: 1000 }); corner.world.base.buildings = corner.world.base.buildings.slice(0, 1); const edge = sanitizeState(corner); assert.equal(cellOf(edge.world.base.glass[0]).i, -198); assert.deepEqual(sanitizeState(JSON.parse(JSON.stringify(edge))), edge);
  // Every rotation keeps the airlock on its turned side (the fixture's distributor at dome − 1 x stands aside here)…
@@ -271,7 +225,7 @@ test('Save v7 → v8: a dome becomes a 4×4×3 glass room with its air, airlock 
 test('Save v7 → v8: a passage through a dome ends at once at its landing point; the pocket recipe takes an old dome apart', () => {
  for (const direction of ['in', 'out'] as const) {
   const old = v7(fresh(), { x: 58, z: 44, rot: 0, q: 4000 }); old.world.base.passage = { domeId: 'build-1', direction, remainingMs: 3000 }; Object.assign(old.player, { x: 58, z: 47.5 });
-  const m = sanitizeState(old), door = m.world.base.doors[0]; assert.equal(m.world.base.passage, null);
+  const m = sanitizeState(old), door = m.world.base.doors[0]; assert.equal('passage' in m.world.base, false); assert.equal(door.width, 2);
   const at = landingPoint(m, door, direction === 'in' ? 'back' : 'front'); assert.deepEqual([m.player.x, m.player.y, m.player.z], [at.x, at.y, at.z]);
   assert.equal(!!roomAt(m, m.player.x, m.player.y + 1, m.player.z), direction === 'in');
  }
@@ -286,7 +240,7 @@ test('Save v7 → v8: a player saved beside the old dome wall (the shell is 1 m 
   const m = sanitizeState(old), door = m.world.base.doors[0], p = m.player;
   assert.equal(bodyInSolid(roomsView(m.world.base), p.x, p.y, p.z), false, `${at.x}/${at.z} is free to move`);
   const front = landingPoint(m, door, 'front'); assert.deepEqual([p.x, p.y, p.z], [front.x, front.y, front.z]); assert.equal(roomAt(m, p.x, p.y + 1, p.z), null);
-  assert.equal(beginPassage(m, door.id), '', 'and can walk in');
+  assert.equal(through(m, door), '', 'and can walk in'); assert.equal(useDoor(m, door.id, 'outer'), '');
  }
  // Inside, leaning on the old wall (chest inside the old dome): the room side, on the terrain (the platform is gone).
  const old = v7(fresh(), { x: 58, z: 44, rot: 0, q: 500000 }); Object.assign(old.player, { x: 59.85, y: .62, z: 43 });
@@ -301,17 +255,17 @@ test('Save v7 → v8: a migrated airlock never opens onto glass, a station or a 
  const pair = v7(fresh(), { x: 58, z: 44, rot: 1, q: 500000 }); pair.world.base.buildings = [pair.world.base.buildings[0], { ...structuredClone(pair.world.base.buildings[0]), id: 'build-3', x: 64, rot: 0 }];
  const two = sanitizeState(pair); assert.deepEqual(allRooms(two).map(r => [r.volume, r.zone.q]), [[48, 500000], [48, 500000]]);
  for (const d of two.world.base.doors) for (const side of ['back', 'front'] as const) {
-  const g = cloneState(two), at = landingPoint(g, d, side); Object.assign(g.player, at); assert.equal(beginPassage(g, d.id), '', `${d.id} from its ${side} side`);
+  const g = cloneState(two), at = landingPoint(g, d, side); Object.assign(g.player, at); assert.equal(through(g, d), '', `${d.id} from its ${side} side`); assert.equal(useDoor(g, d.id, side === 'front' ? 'outer' : 'inner'), '');
  }
  assert.notEqual(two.world.base.doors[0].rot, 1, 'the first dome no longer opens into the second');
  // Stations the old spot checks allowed at dome + (1, 1) and in front of the old exit: the door takes the other middle column.
  const st = v7(fresh(), { x: 58, z: 44, rot: 0, q: 500000 }), body = st.world.base.buildings[1];
  st.world.base.buildings = [st.world.base.buildings[0], { ...structuredClone(body), id: 'build-2', x: 59, z: 45 }, { ...structuredClone(body), id: 'build-3', kind: 'refill', x: 59, z: 48, y: heightAt(59, 48) }];
- const s2 = sanitizeState(st), d = s2.world.base.doors[0]; assert.deepEqual([d.x, d.z, d.rot], [57, 46, 0]);
- for (const side of ['back', 'front'] as const) { const g = cloneState(s2); Object.assign(g.player, landingPoint(g, d, side)); assert.equal(beginPassage(g, d.id), '', `enter/exit from ${side}`); }
- // A door with a rock (here the stone outcrop at X30/Z52) on its far landing does not start a cycle that would end inside it.
- const g = fresh(), y = lowestAir(30, 50); lay(g, [], [{ id: 'door-r', x: 30, y, z: 50, rot: 0 }]); Object.assign(g.player, landingPoint(g, doorById(g, 'door-r')!, 'back'));
- assert.match(beginPassage(g, 'door-r'), /Проход загорожен/);
+ const s2 = sanitizeState(st), d = s2.world.base.doors[0]; assert.deepEqual([d.x, d.z, d.rot, d.width], [56, 46, 0, 2], 'D36: the module widens to the side away from the station');
+ for (const side of ['back', 'front'] as const) { const g = cloneState(s2); Object.assign(g.player, landingPoint(g, d, side)); assert.equal(through(g, d), '', `enter/exit from ${side}`); }
+ // A module never stands with a rock (here the stone outcrop at X30/Z52) on a landing: the walk through would end inside it.
+ const g = fresh(), y = lowestAir(30, 50); near(g, 30, 47.5); stock(g, { airlock: 1 });
+ assert.match(placeDoor(g, cellKey(30, y, 50), 0).error, /Перед шлюзом препятствие/); assert.equal(through(g, newDoor('door-r', 30, y, 50, 0)), 'Перед шлюзом препятствие — поверните шлюз');
 });
 
 test('Save v7 → v8: stations that stood on the dome platform go down to the terrain; others keep their height', () => {
@@ -370,9 +324,9 @@ test('Save v8 → glass: the airlock is checked against the migrated save\'s own
  // A collider left in `boxes` by a world loaded earlier (here on the landing the save chose) changes nothing.
  const at = landingPoint(m, d, 'front'); boxes.push(box('vein-99', at.x, at.y + .5, at.z, 1.6, 1, 1.6));
  try { assert.deepEqual(run([vein]).world.base.doors[0], d, 'same file, same airlock'); } finally { boxes.pop(); }
- // Loaded (applyNodes lays the save's colliders into `boxes`): the passage starts from both sides.
+ // Loaded (applyNodes lays the save's colliders into `boxes`): the module can be walked through from both sides.
  const live = boxes.splice(0, boxes.length); boxes.push(...worldColliders(m.world.nodes, m.world.veins));
- try { for (const side of ['back', 'front'] as const) { const k = cloneState(m); Object.assign(k.player, landingPoint(k, d, side)); assert.equal(beginPassage(k, d.id), '', `from the ${side} side`); } }
+ try { for (const side of ['back', 'front'] as const) { const k = cloneState(m); Object.assign(k.player, landingPoint(k, d, side)); assert.equal(through(k, d), '', `from the ${side} side`); } }
  finally { boxes.length = 0; boxes.push(...live); }
 });
 
@@ -420,12 +374,12 @@ test('Aim: the nearer of a deposit and a glass wall wins — a deposit walled in
 });
 
 test('Quests: an airlock in a box smaller than 3×3×3 does not complete the shelter milestone', () => {
- const door = (): Door[] => [{ id: 'door-1', x: 57, y: 0, z: 45, rot: 0 }], open = (k: number) => k !== cellKey(57, 0, 45) && k !== cellKey(57, 1, 45);
+ const door = (): Door[] => [newDoor('door-1', 57, 0, 45, 0)], open = (k: number) => !doorKeys(door()[0]).includes(k);
  const g = fresh(); lay(g, shell(56, 0, 42, 3, 2, 3).filter(open), door()); assert.equal(allRooms(g).length, 1);
  refreshQuestProgress(g); assert.equal(g.progress.quests.completed.includes('dome'), false, 'a 2-high box is not the journal shelter');
  // The journal agrees: an airlock in a small box next to a doorless 3×3×3 room does not tick «Шлюз в стене».
- { const h = fresh(), small = shell(62, 0, 42, 3, 2, 3).filter(k => k !== cellKey(63, 0, 45) && k !== cellKey(63, 1, 45));
-  lay(h, [...CUBE(), ...small], [{ id: 'door-1', x: 63, y: 0, z: 45, rot: 0 }]); assert.equal(allRooms(h).length, 2);
+ { const h = fresh(), d = newDoor('door-1', 63, 0, 45, 0), small = shell(62, 0, 42, 3, 2, 3).filter(k => !doorKeys(d).includes(k));
+  lay(h, [...CUBE(), ...small], [d]); assert.equal(allRooms(h).length, 2);
   refreshQuestProgress(h); assert.equal(h.progress.quests.completed.includes('dome'), false); assert.deepEqual(guideStep(h, 'dome').tasks.map(t => t.done).slice(1), [true, false]); }
  g.world.base.glass = []; g.world.base.doors = []; lay(g, CUBE().filter(open), door()); refreshQuestProgress(g); assert.ok(g.progress.quests.completed.includes('dome'));
 });

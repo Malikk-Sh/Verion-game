@@ -1,5 +1,5 @@
 import type { Box } from '../world';
-import { cellY, doorAlong, doorById, doorFront, doorRooms, habitableRoom, widthOf, type Door, type DoorFace, type RoomInfo } from './rooms';
+import { breathingRoom, cellY, doorAlong, doorById, doorCenter, doorFront, doorRooms, habitableRoom, widthOf, type Door, type DoorFace, type RoomInfo } from './rooms';
 import type { GameState } from './state';
 /**
  * S5 (D36) walk-through airlock: two sliding doors and a small chamber between them (the module's own cells, never room
@@ -13,8 +13,12 @@ import type { GameState } from './state';
  */
 export const CHAMBER_Q = 4000, EQUALIZE_MS = 3000, SLIDE_MS = 800;
 /** Module frame in its own metres, shared by the colliders, the aim and the model (stationModels.ts): side jambs, the
- *  threshold top, the lintel bottom (body height 1.8 m + clearance), the leaf planes 5 cm inside each face, leaf thickness. */
+ *  threshold top, the lintel bottom (body height 1.8 m + clearance), the leaf planes 5 cm inside each face, leaf thickness.
+ *  A legacy one-wide module has slim jambs so its 0.8 m doorway still lets the 0.6 m body through. */
 export const JAMB = .18, SILL = .04, LINTEL = 1.9, LEAF_AT = .05, LEAF_T = .05;
+export const jambOf = (width: number) => width === 2 ? JAMB : .1;
+/** Doors are worked from up to this distance (eye to the module centre, metres; the aim reaches 4.5 m). */
+export const DOOR_REACH = 5;
 export const otherFace = (f: DoorFace): DoorFace => f === 'outer' ? 'inner' : 'outer';
 /** The room behind one door (null: the open outside). The front side is the outer door's. */
 export const faceRoom = (g: GameState, d: Door, face: DoorFace) => doorRooms(g, d)[face === 'outer' ? 'front' : 'back'];
@@ -31,10 +35,10 @@ export function partBox(d: Door, u0: number, u1: number, v0: number, v1: number,
 /** Colliders of a module: two side jambs, the lintel and the threshold (down 0.6 m into whatever it stands on), and the
  *  leaf of each door (it blocks unless that door is open). */
 export function doorBoxes(d: Door) {
- const w = widthOf(d);
- return { frame: [partBox(d, 0, JAMB, 0, 1, -.6, 2), partBox(d, w - JAMB, w, 0, 1, -.6, 2), partBox(d, 0, w, 0, 1, LINTEL, 2), partBox(d, 0, w, 0, 1, -.6, SILL)], outer: leafBox(d, 'outer'), inner: leafBox(d, 'inner') };
+ const w = widthOf(d), J = jambOf(w);
+ return { frame: [partBox(d, 0, J, 0, 1, -.6, 2), partBox(d, w - J, w, 0, 1, -.6, 2), partBox(d, 0, w, 0, 1, LINTEL, 2), partBox(d, 0, w, 0, 1, -.6, SILL)], outer: leafBox(d, 'outer'), inner: leafBox(d, 'inner') };
 }
-export const leafBox = (d: Door, face: DoorFace) => { const w = widthOf(d), v = face === 'outer' ? 1 - LEAF_AT : LEAF_AT; return partBox(d, JAMB, w - JAMB, v - LEAF_T / 2, v + LEAF_T / 2, 0, LINTEL); };
+export const leafBox = (d: Door, face: DoorFace) => { const w = widthOf(d), J = jambOf(w), v = face === 'outer' ? 1 - LEAF_AT : LEAF_AT; return partBox(d, J, w - J, v - LEAF_T / 2, v + LEAF_T / 2, 0, LINTEL); };
 const hits = (b: Box, x: number, y: number, z: number) => b.minX < x + .3 && b.maxX > x - .3 && b.minZ < z + .3 && b.maxZ > z - .3 && b.minY < y + 1.8 && b.maxY > y;
 /** The standing body (feet at y, the controller's 0.6 m square) is in the plane of a door's leaf. */
 export const leafBlocked = (d: Door, face: DoorFace, x: number, y: number, z: number) => hits(leafBox(d, face), x, y, z);
@@ -51,6 +55,8 @@ export function chamberRoom(g: GameState): RoomInfo | null {
  for (const f of ['outer', 'inner'] as const) if (d[f] === 'open') { const r = faceRoom(g, d, f); if (r && habitableRoom(r)) return r; }
  return null;
 }
+/** The player breathes without tanks here: a habitable room, a chamber open to one, or a charged chamber (survival, HUD). */
+export const shelteredAir = (g: GameState) => !!(breathingRoom(g) ?? chamberRoom(g) ?? breathingChamber(g));
 /**
  * The player asks a door to open (when closed) or to close (when open). Returns '' or why not. Opening: refused while
  * the other door stands open (interlock); a cycle of the other door is cancelled instead (from inside the chamber either
@@ -60,7 +66,8 @@ export function chamberRoom(g: GameState): RoomInfo | null {
 export function useDoor(g: GameState, id: string, face: DoorFace): string {
  const d = doorById(g, id); if (!d) return 'Нет такого шлюза';
  if (g.player.vitals.health <= 0) return 'Персонаж погиб';
- const p = g.player, other = otherFace(face);
+ const p = g.player, other = otherFace(face), c = doorCenter(d);
+ if (Math.hypot(p.x - c.x, p.z - c.z) > DOOR_REACH) return 'Подойдите к шлюзу';
  if (d[face] === 'open') { if (leafBlocked(d, face, p.x, p.y, p.z)) return 'Дверь заблокирована'; d[face] = 'closed'; return ''; }
  if (d[face] === 'cycling') return 'Шлюз выравнивает давление — подождите';
  if (d[other] === 'open') return 'Сначала закройте другую дверь';
@@ -106,10 +113,11 @@ export function faceHit(d: Door, o: { x: number; y: number; z: number }, dir: { 
  }
  return best;
 }
-/** Aim label of a door: its name, what F does, the state in words and whether the interlock holds it. */
+/** Aim label of a door: its name, the action, the state in words and whether the interlock holds it (key hints live in
+ *  the settings help, D38). */
 export function doorStatus(g: GameState, d: Door, face: DoorFace) {
  const name = face === 'outer' ? 'Внешняя дверь шлюза' : 'Внутренняя дверь шлюза', ph = doorPhase(g, d), gu = Math.round(shownPressure(g, d) / 100) / 10, lamp = doorLamp(d, face);
- const meta = d[face] === 'open' ? 'Открыта · F — закрыть' : d[face] === 'cycling' ? ph!.kind === 'fill' ? `Наполнение камеры из помещения · ${ph!.seconds} с` : ph!.kind === 'vent' ? `Сброс давления наружу · ${ph!.seconds} с` : 'Открывается'
-  : lamp === 'locked' ? 'Закрыта: открыта другая дверь' : `Закрыта · в камере ${String(gu).replace('.', ',')} GU · F — открыть`;
+ const meta = d[face] === 'open' ? 'Открыта' : d[face] === 'cycling' ? ph!.kind === 'fill' ? `Наполнение камеры из помещения · ${ph!.seconds} с` : ph!.kind === 'vent' ? `Сброс давления наружу · ${ph!.seconds} с` : 'Открывается'
+  : lamp === 'locked' ? 'Закрыта: открыта другая дверь' : `Закрыта · в камере ${String(gu).replace('.', ',')} GU`;
  return { name, meta, action: d[face] === 'open' ? 'Закрыть' : 'Открыть', lamp };
 }

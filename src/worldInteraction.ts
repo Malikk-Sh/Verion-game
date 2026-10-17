@@ -49,7 +49,7 @@ export function createWorldInteraction(scene: THREE.Scene, camera: THREE.Camera)
  const wireMat = new THREE.LineDashedMaterial({ color: 0x68daeb, dashSize: .35, gapSize: .18, transparent: true, opacity: .95, depthTest: false });
  const wire = new THREE.Line(new THREE.BufferGeometry(), wireMat); wire.renderOrder = 10; scene.add(wire); wire.visible = false;
  const ray = new THREE.Raycaster(), direction = new THREE.Vector3(), hitPoint = new THREE.Vector3(), box = new THREE.Box3(), lo = new THREE.Vector3(), hi = new THREE.Vector3();
- let x = 0, z = 0, rot = 0, problem = '', source: string | null = null, selection = '', target: string | null = null, link = { valid: false, cost: 0, distance: 0, reason: '' };
+ let x = 0, z = 0, rot = 0, problem = '', source: string | null = null, selection = '', target: string | null = null, targetAt = Infinity, link = { valid: false, cost: 0, distance: 0, reason: '' };
  const isBody = (id: string) => (BUILDABLE as readonly string[]).includes(id), isCell = (id: string) => id === 'window' || id === 'airlock';
  // ---------- Glass building: the struck block, the target cell and its ghost ----------
  let struck: Struck | null = null, cell: number | null = null, cellRot = 0, support = -1;
@@ -125,6 +125,7 @@ export function createWorldInteraction(scene: THREE.Scene, camera: THREE.Camera)
    box.set(lo.set(b.minX, b.minY, b.minZ), hi.set(b.maxX, b.maxY, b.maxZ));
    const hit = ray.ray.intersectBox(box, hitPoint); if (hit && hit.distanceTo(camera.position) < Math.min(best, OPEN_REACH)) { best = hit.distanceTo(camera.position); target = b.id; }
   }
+  targetAt = target ? best : Infinity;
   if (!target) {
    const inside = p.x > 37.5 && p.x < 42.5 && p.z > 37 && p.z < 43.1;
    const hit = ray.ray.intersectBox(CAPSULE_BOX(heightAt(40, 40)), hitPoint);
@@ -157,6 +158,8 @@ export function createWorldInteraction(scene: THREE.Scene, camera: THREE.Camera)
   // Blocks under the reticle: removal (R) from 6 m, the room window from 4.5 m; a station seen through the glass wins, and so does a nearer deposit.
   strike(g, GLASS_AIM); if (struck && struck.distance >= nearer) struck = null;
   if (!target && !linking && struck && struck.distance <= ROOM_REACH) target = struck.door ?? 'glass:' + struck.key;
+  // An airlock door is solid: it wins over a station behind it (glass does not, D31 aims through it).
+  else if (!linking && struck?.face && struck.distance <= ROOM_REACH && struck.distance < targetAt && target !== 'capsule') target = struck.door;
   if (isBody(id)) {
    let hit: THREE.Vector3 | undefined;
    for (let d = .5; d <= 12; d += .1) { const q = ray.ray.at(d, new THREE.Vector3()); if (q.y <= heightAt(q.x, q.z) + .12) { hit = q; break; } }

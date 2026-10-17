@@ -3,7 +3,7 @@ import { reducedMotion } from './motion';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import type { BuildingKind } from './game/defs';
-import { JAMB, LEAF_AT, LEAF_T, LINTEL, SILL } from './game/airlock';
+import { jambOf, LEAF_AT, LEAF_T, LINTEL, SILL } from './game/airlock';
 
 /**
  * Procedural low-poly station models (S3). Static detail is merged per material and cached per
@@ -180,7 +180,7 @@ const CHAMFER = new RoundedBoxGeometry(1, 1, 1, 1, .09);
 const C = { frame: '#2c3539', face: '#3a4549', steel: '#9ea8ab', bolt: '#c3cacb', hazard: '#f0a020', dark: '#15191b', hull: '#d9dcd4', seal: '#1c2022', glass: '#24495a', grate: '#20272a', pipe: '#7d8a8f', panel: '#232b2e', green: '#3fae6a', red: '#c4483d' };
 /** Static frame of a module `w` wide; `drop`: a plinth under the threshold down to the terrain (0: none). */
 function doorFrame(w: number, drop: number) {
- const p = new Paint(), h = w / 2, J = JAMB, mid = (LINTEL + 2) / 2;
+ const p = new Paint(), h = w / 2, J = jambOf(w), mid = (LINTEL + 2) / 2;
  for (const s of [-1, 1]) {
   const x = s * (h - J / 2);
   p.bevel(C.frame, x, 1, 0, J, 2, 1);
@@ -221,7 +221,7 @@ function portholeGeometry() {
 export function buildDoor(width: 1 | 2 = 2, drop = 0): DoorVisual {
  DOOR_MAT ??= new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .55, metalness: .45 });
  LIGHT_MAT ??= new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false });
- const w = width, h = w / 2, lw = h - JAMB, key = w + ':' + (drop > .02 ? drop.toFixed(2) : '0'), own = drop > .02;
+ const w = width, h = w / 2, JAMB = jambOf(w), lw = h - JAMB, key = w + ':' + (drop > .02 ? drop.toFixed(2) : '0'), own = drop > .02;
  const frameGeo = own ? doorFrame(w, drop) : DOOR_GEO.get(key) ?? (DOOR_GEO.set(key, doorFrame(w, 0)), DOOR_GEO.get(key)!);
  const leafKey = 'leaf' + w, leafGeo = DOOR_GEO.get(leafKey) ?? (DOOR_GEO.set(leafKey, leafGeometry(lw)), DOOR_GEO.get(leafKey)!), holeGeo = DOOR_GEO.get('hole') ?? (DOOR_GEO.set('hole', portholeGeometry()), DOOR_GEO.get('hole')!);
  const group = new THREE.Group(), frame = new THREE.Mesh(frameGeo, DOOR_MAT); frame.castShadow = frame.receiveShadow = true; group.add(frame);

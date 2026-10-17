@@ -18,9 +18,9 @@ import { itemArt } from './ui/art';
 import { createProductionPanel } from './ui/production';
 import { createBuildings } from './buildings';
 import { productionTick, manualWork, releaseHandOnDeath, machine } from './game/production';
-import { allRooms, around, breathingRoom, doorById, doorKeys, habitableRoom, removeDoor, removeGlass, roomAtCell, roomDoors, structureRoom, type RoomEdit } from './game/rooms';
+import { allRooms, around, doorById, doorKeys, habitableRoom, removeDoor, removeGlass, roomAtCell, roomDoors, structureRoom, type RoomEdit } from './game/rooms';
 import { structureStatus } from './game/stationStatus';
-import { chamberAt, doorStatus, useDoor } from './game/airlock';
+import { chamberAt, doorStatus, shelteredAir, useDoor } from './game/airlock';
 import * as THREE from 'three';
 import './style.css';
 import './ui/hud.css';
@@ -177,7 +177,7 @@ function boot(){
  el('import-button').onclick=()=>el<HTMLInputElement>('import-file').click();
  el<HTMLInputElement>('import-file').addEventListener('change',e=>{const input=e.target as HTMLInputElement,file=input.files?.[0];input.value='';if(file)void importFile(file);});
  // ---------- Inventory / suit screens (live: game time keeps running) ----------
- const panels=createPanels({game:()=>game,insideCapsule:()=>insideCapsule(),hazard:()=>!insideCapsule()&&!(game&&breathingRoom(game)),tone:k=>audio.tone(k),recipe:id=>production.openRecipe(id),
+ const panels=createPanels({game:()=>game,insideCapsule:()=>insideCapsule(),hazard:()=>!insideCapsule()&&!(game&&shelteredAir(game)),tone:k=>audio.tone(k),recipe:id=>production.openRecipe(id),
   changed:what=>{if(what==='drop')syncDrops();hudKey='';updateHotbar();updateVisor();},
   show:which=>{if(started&&(running||liveDialogs.has(dialog)))setDialog(which);},close:()=>{void saver?.save();resume();}});
  const openPanel=(which:'inventory-panel'|'suit-panel')=>{audio.tone('ui');if(dialog===which){void saver?.save();resume();return;}if(running||liveDialogs.has(dialog)){if(which==='inventory-panel'&&dialog!=='suit-panel')panels.reset();setDialog(which);}};
@@ -566,7 +566,7 @@ function boot(){
    // D36: F opens or closes the aimed door; the lamp colour (red: the other door is open) also tints the label.
    const door=doorById(game,interaction.target),face=interaction.struck?.face;(el('aim-bar').firstElementChild as HTMLElement).style.transform='scaleX(0)';
    if(door&&face){const st=doorStatus(game,door,face);kind='door';label=st.action;iconId='i-hand';el('aim-name').textContent=st.name;el('aim-meta').textContent=st.meta;box.classList.toggle('blocked',st.lamp==='locked');}
-   else if(door){el('aim-name').textContent='Шлюз';el('aim-meta').textContent='Наведите на дверь · R — забрать';box.classList.remove('blocked');}}
+   else if(door){kind='room';label='Открыть шлюз';iconId='i-plug';el('aim-name').textContent='Шлюз';el('aim-meta').textContent=door.width===2?'Камера '+String(Math.round(door.pressure/100)/10).replace('.',',')+' GU':'Шлюз прежней версии';box.classList.remove('blocked');}}
   else if(game&&!nearMachine&&interaction.target?.startsWith('glass:')){
    const key=Number(interaction.target.slice(6));
    // Cheap caption (no leak search every frame): the room beside the block or the box it belongs to (≤ 64 blocks).
@@ -689,7 +689,7 @@ function boot(){
   const alert=el('survival-alert');
   const critical=started&&g.player.vitals.health>0&&(ratio<=.2||g.player.vitals.health<=20||g.player.vitals.satiety===0);
   alert.setAttribute('aria-hidden',String(!critical));document.body.dataset.hazard=critical?'critical':'safe';
-  const text=!critical?'':ratio<=.2?(source.emergency?'АВАРИЙНЫЙ РЕЗЕРВ ЗАКАНЧИВАЕТСЯ':!inCapsule&&!breathingRoom(g)&&wornParts(g)<4?'КОСТЮМ НЕГЕРМЕТИЧЕН':'КИСЛОРОД КРИТИЧЕСКИ НИЗКИЙ'):g.player.vitals.health<=20?'ЗДОРОВЬЕ КРИТИЧЕСКИ НИЗКО':'СЫТОСТЬ ИСЧЕРПАНА';
+  const text=!critical?'':ratio<=.2?(source.emergency?'АВАРИЙНЫЙ РЕЗЕРВ ЗАКАНЧИВАЕТСЯ':!inCapsule&&!shelteredAir(g)&&wornParts(g)<4?'КОСТЮМ НЕГЕРМЕТИЧЕН':'КИСЛОРОД КРИТИЧЕСКИ НИЗКИЙ'):g.player.vitals.health<=20?'ЗДОРОВЬЕ КРИТИЧЕСКИ НИЗКО':'СЫТОСТЬ ИСЧЕРПАНА';
   const textNode=el('survival-alert-text');if(textNode.textContent!==text)textNode.textContent=text;
  }
  function updateVisor(){el('visor').hidden=!game?.player.suit.helmet;}

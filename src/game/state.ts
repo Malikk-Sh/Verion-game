@@ -8,7 +8,7 @@ import { covers, veinDelay, VEIN_CAP, VEIN_TOTAL, RESPAWN_MAX, VEIN_DELAY_RANGE 
 import { CYCLE_TICKS, START_OFFSET_TICKS, isDay, phaseSeconds } from './daycycle';
 import { freshQuestProgress, QUEST_FACTS, type QuestProgress } from './questFacts';
 import { QUEST_IDS, type QuestId } from './questCatalog';
-import { bodyInSolid, carry, groundV8, levelAt, doorFits, landingCells, stationBox, cellKey, cellOf, capacityOf, deriveRooms, doorAlong, doorCenter, doorFront, doorKeys, groundRoom, isGround, landingAt, lowestAir, storable, STORE_MARGIN, shellOf, CELL_MAX, CELL_MIN, DOOR_LIMIT, GLASS_LIMIT, LEVEL_MAX, LEVEL_MIN, ROOM_LIMIT, ROOM_MAX, type Door, type DoorState, type Zone } from './rooms';
+import { bodyInSolid, carry, groundV8, levelAt, doorFits, landingCells, stationBox, cellKey, cellOf, capacityOf, deriveRooms, doorAlong, doorCenter, doorFront, doorKeys, groundRoom, landingAt, newDoor, lowestAir, storable, STORE_MARGIN, shellOf, CELL_MAX, CELL_MIN, DOOR_LIMIT, GLASS_LIMIT, LEVEL_MAX, LEVEL_MIN, ROOM_LIMIT, ROOM_MAX, type Door, type DoorState, type Zone } from './rooms';
 import { CHAMBER_Q, EQUALIZE_MS, SLIDE_MS } from './airlock';
 /**
  * Complete persistent game state. Plain JSON only: no class instances, GPU objects or
@@ -163,11 +163,13 @@ export function migrateRaw(raw:unknown):unknown{
 const needsModules=(r:Obj)=>{const b=isObj(r.world)&&isObj(r.world.base)?r.world.base:null;return !!b&&('passage' in b||Array.isArray(b.doors)&&b.doors.some(d=>isObj(d)&&!('width' in d)));};
 /**
  * S4 doors → S5 airlock modules (D36). A door becomes a module two cells wide when the wall cells beside it along the wall
- * (either side, the side whose new landings are clear first) are glass at both of its levels: that glass becomes the
- * module's second column and returns to the backpack (a pile at the module when the backpack is full). Otherwise it
- * stays a legacy module one cell wide with the same doors. Glass and module cells are both solid, so every room and its
- * air stay exactly as they were. Both doors start closed with the chamber at outside pressure. A passage still running
- * in the save ends as it used to: the player stands on the landing it was leading to. Idempotent; never lowers the version.
+ * (first the +x/+z side, then the other) are glass at both of its levels and the wider module fits by the rules of a new
+ * one (doorFits: both landings clear of glass, modules, ground, stations, rocks, deposits and veins of this save, and off
+ * the landings of other modules): that glass becomes the module's second column and returns to the backpack (a pile at
+ * the module when the backpack is full). Otherwise it stays a legacy module one cell wide with the same doors. Glass and
+ * module cells are both solid, so every room and its air stay exactly as they were. Both doors start closed with the
+ * chamber at outside pressure. A passage still running in the save ends as it used to: the player stands on the landing
+ * it was leading to. Idempotent; never lowers the version.
  */
 export function toModules(r:Obj):Obj{
  const next=structuredClone(r),world=obj(next.world,'world'),base=obj(world.base,'world.base'),pl=obj(next.player,'player'),m=obj(next.meta,'meta');
@@ -175,18 +177,22 @@ export function toModules(r:Obj):Obj{
  const doors=Array.isArray(base.doors)?base.doors:[],num=(v:unknown)=>typeof v==='number'&&Number.isInteger(v);
  // Malformed fields are left to strict validation (which rejects them).
  if(Array.isArray(base.glass)&&base.glass.every(num)&&doors.every(d=>isObj(d)&&['x','y','z','rot'].every(k=>num(d[k])))){
-  const glass=new Set(base.glass as number[]),taken=new Set((doors as Door[]).flatMap(d=>doorKeys(d)));let returned=0,at:{x:number;z:number}|null=null;
-  for(const d of doors as Obj[]){if('width' in d)continue;
-   const rot=((Number(d.rot)%4)+4)%4,a=doorAlong(rot),f=doorFront(rot),x=Number(d.x),y=Number(d.y),z=Number(d.z),pair=(i:number,j:number)=>[cellKey(i,y,j),cellKey(i,y+1,j)];
-   // The new column's landings: no glass, module or ground in front of or behind it.
-   const clear=(i:number,j:number)=>[1,-1].every(s=>pair(i+f.x*s,j+f.z*s).every(k=>{const c=cellOf(k);return !glass.has(k)&&!taken.has(k)&&!isGround(c.i,c.k,c.j);}));
-   const pick=([[x+a.x,z+a.z,x,z],[x-a.x,z-a.z,x-a.x,z-a.z]] as const).find(([i,j])=>pair(i,j).every(k=>glass.has(k))&&clear(i,j));
-   Object.assign(d,{rot,width:pick?2:1,outer:'closed',inner:'closed',pressure:0,cycleMs:0});
-   if(pick){for(const k of pair(pick[0],pick[1])){glass.delete(k);taken.add(k);}returned+=2;d.x=pick[2];d.z=pick[3];at??=doorCenter(d as Door);}
+  const glass=new Set(base.glass as number[]),list=doors as Door[],colliders=worldColliders(isObj(world.nodes)?world.nodes:{},Array.isArray(world.veins)?world.veins:[]);
+  const stations=(Array.isArray(base.buildings)?base.buildings:[]).filter(isObj).map(b=>stationBox({kind:String(b.kind),level:Number(b.level),x:Number(b.x),y:Number(b.y),z:Number(b.z)}));
+  let returned=0,at:{x:number;z:number}|null=null;const moved:{d:Door;side:'front'|'back'}[]=[];
+  for(const d of list){if(Object.hasOwn(d,'width'))continue;
+   const rot=((Number(d.rot)%4)+4)%4,a=doorAlong(rot),others=list.filter(o=>o!==d),taken=new Set(others.flatMap(o=>doorKeys(o))),reserved=new Set(others.flatMap(o=>[...landingCells(o,'front'),...landingCells(o,'back')]));
+   const wide=[newDoor(d.id,d.x,d.y,d.z,rot),newDoor(d.id,d.x-a.x,d.y,d.z-a.z,rot)].find(c=>{const mine=new Set(doorKeys(c)),extra=doorKeys(c).filter(k=>!doorKeys(d).includes(k));
+    return extra.every(k=>glass.has(k))&&doorFits(k=>(glass.has(k)&&!mine.has(k))||taken.has(k),c,stations,reserved,colliders);});
+   // A player the dome step set down on this door's landing (its centre) moves to the centre of the wider landing.
+   const f=doorFront(rot),side=(['front','back'] as const).find(v=>{const s=v==='front'?1:-1;return Math.abs(Number(pl.x)-(d.x+.5+f.x*s))<1e-9&&Math.abs(Number(pl.z)-(d.z+.5+f.z*s))<1e-9;});
+   if(wide){for(const k of doorKeys(wide))if(glass.delete(k))returned++;Object.assign(d,wide);at??=doorCenter(d);if(side)moved.push({d,side});}
+   else Object.assign(d,newDoor(d.id,d.x,d.y,d.z,rot,1));
   }
   base.glass=[...glass].sort((p,q)=>p-q);
   if(returned&&Array.isArray(pl.inventory)){const left=addItems(pl.inventory as Slot[],'window',returned);if(left){const drops=Array.isArray(world.drops)?world.drops:(world.drops=[]),id=Number(world.nextDropId);(drops as unknown[]).push({id:'drop-'+id,x:at!.x,z:at!.z,items:[{itemId:'window',count:left}]});world.nextDropId=id+1;}}
-  if(isObj(pass)&&typeof pass.doorId==='string'){const d=(doors as Door[]).find(v=>v.id===pass.doorId);if(d)Object.assign(pl,landingAt(deriveRooms(base.glass as number[],doors as Door[]),d,pass.direction==='in'?'back':'front'));}
+  const view=deriveRooms(base.glass as number[],list);for(const v of moved)Object.assign(pl,landingAt(view,v.d,v.side));
+  if(isObj(pass)&&typeof pass.doorId==='string'){const d=list.find(v=>v.id===pass.doorId);if(d)Object.assign(pl,landingAt(view,d,pass.direction==='in'?'back':'front'));}
  }
  m.stateVersion=Math.max(Number(m.stateVersion),STATE_VERSION);return next;
 }
