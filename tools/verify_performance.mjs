@@ -51,7 +51,7 @@ try{
   // same views without it (all glass is one mesh; the rest is the airlock model and the room lamp), building and entering it
   // compiles no shader (the glass program is compiled at boot), the glass never casts a shadow, and Low stays within 150
   // calls looking every way. Each view is measured after the terrain around it settled.
-  const room=on=>page.evaluate(async on=>{const R=await import('/src/game/rooms.ts');const s=window.__vireon.snapshot(),door={id:'door-'+s.world.base.nextId,x:57,y:0,z:45,rot:0},keys=R.doorKeys(door);
+  const room=on=>page.evaluate(async on=>{const R=await import('/src/game/rooms.ts');const s=window.__vireon.snapshot(),door=R.newDoor('door-'+s.world.base.nextId,57,0,45,0),keys=R.doorKeys(door);
    s.world.base.glass=on?R.shellOf(R.boxCells(56,0,42,3,3,3)).filter(k=>!keys.includes(k)).sort((a,b)=>a-b):[];s.world.base.doors=on?[door]:[];s.world.base.zones=[];s.world.base.nextId++;window.__vireon.setState(s);
    if(on){const t=window.__vireon.snapshot();for(const z of t.world.base.zones)Object.assign(z,{q:540000,purity:1,temperature:20});window.__vireon.setState(t);}},on);
   // A frame drawn after the view settled (the draw-call count is per frame); counted in frames, not in time.

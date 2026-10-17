@@ -89,7 +89,7 @@ function boot(){
  let lastSurvivalEvent='none';
  const token=(globalThis.crypto?.randomUUID?.()??Math.random().toString(36).slice(2)+Date.now().toString(36));
  let game:GameState|null=null,store:SaveStore|null=null,saver:Saver|null=null,storeError='',slotId:string|null=null;
- let holdMine=false,holdRefill=false,aimNode:string|null=null,aimNear=Infinity,hadPassage=false,aimReason='',mineRatio=0,nearDrop:string|null=null,slots:SlotRecord[]=[],actionKind='none',hudKey='';
+ let holdMine=false,holdRefill=false,aimNode:string|null=null,aimNear=Infinity,hadDoorMotion=false,aimReason='',mineRatio=0,nearDrop:string|null=null,slots:SlotRecord[]=[],actionKind='none',hudKey='';
  let refillTanks=false;
  // S4 mining feel: the strike timeline of the current hold (strikes.ts) drives the swing, the reticle ring and every impact cue.
  let swingActive=false,swingStruck=false,swingNeed=0,swingPoseValue=0,kickT=1,kickPitch=0,kickYaw=0,lastHit='',strikesLanded=0,ringNeed=0,heldModel:string|null=null;
@@ -814,7 +814,7 @@ function boot(){
    // Held F: one more block every 0.25 s as the aim moves to a new cell resting on something that was there before the hold.
    if(holdPlace&&running&&game&&interaction.cellTool&&performance.now()-lastPlace>=250&&interaction.cell!==null&&!interaction.problem&&!placedInHold.has(interaction.cell)&&!placedInHold.has(interaction.support))placeCell();}
   // Moving airlock leaves cast moving shadows; the frame after they stop still redraws it once.
-  if(game&&started){built.update(game,frozen?0:dt);const cycling=built.glass.animating;if(built.animating||cycling||hadPassage)world.invalidateShadows();hadPassage=cycling;}
+  if(game&&started){built.update(game,frozen?0:dt);const cycling=built.glass.animating;if(built.animating||cycling||hadDoorMotion)world.invalidateShadows();hadDoorMotion=cycling;}
   if(running&&dt>0){frames.push(actualFrameMs);if(frames.length>180)frames.shift();}
   if(now-lastUI>150){updateUI();lastUI=now;if(showMetrics){const sorted=[...frames].sort((a,b)=>a-b),s={drawCalls:renderCalls,triangles:renderTriangles,terrainSettled:world.terrain.settled,frameP95Ms:sorted[Math.floor(sorted.length*.95)]??0};const ob=el('objective').getBoundingClientRect();el('metrics').style.top=`${Math.round(ob.bottom+8)}px`;el('metrics').textContent=`S3 / WebGL2 / DPR ${renderer.getPixelRatio()} / ${settings.quality}\nВызовы: ${s.drawCalls} · треуг.: ${s.triangles}\nКадр p95: ${s.frameP95Ms.toFixed(1)} мс\nX ${actor.x.toFixed(1)} · Z ${actor.z.toFixed(1)}\nЭто замер текущего браузера`;}}
   diagnostics.stage('hud',measured);if(diagnostics.enabled&&!afterHidden)diagnostics.frame(diagnosticGapMs,workStart,diagnosticContext());
