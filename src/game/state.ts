@@ -168,7 +168,7 @@ export function migrateRaw(raw:unknown):unknown{
 const needsDepth=(r:Obj)=>{const b=isObj(r.world)&&isObj(r.world.base)?r.world.base:null;return !!b&&Array.isArray(b.doors)&&b.doors.some(d=>isObj(d)&&!('depth' in d));};
 /**
  * S5 modules → two cells deep (S5.1). A module two wide gets the row in front of its wall row when that row is free air
- * (no glass, other module or ground) and the deeper module fits by the rules of a new one (doorFits: the new front landing
+ * outside any room (no glass, other module, ground or room air) and the deeper module fits by the rules of a new one (doorFits: the new front landing
  * clear of glass, ground, stations, rocks, deposits and veins, the module off the other modules' landings and stations).
  * Otherwise (and for a legacy one-wide module) it stays one deep. Rooms keep every cell and their air: the new row was
  * outside air. A player standing in the new row (on the old front landing) is set down on the new front landing.
@@ -180,13 +180,14 @@ export function toDeepModules(r:Obj):Obj{
  if(Array.isArray(base.glass)&&base.glass.every(num)&&doors.every(d=>isObj(d)&&['x','y','z','rot'].every(k=>num(d[k])))){
   const glass=new Set(base.glass as number[]),list=doors as Door[],colliders=worldColliders(isObj(world.nodes)?world.nodes:{},Array.isArray(world.veins)?world.veins:[]);
   const stations=(Array.isArray(base.buildings)?base.buildings:[]).filter(isObj).map(b=>stationBox({kind:String(b.kind),level:Number(b.level),x:Number(b.x),y:Number(b.y),z:Number(b.z)}));
+  const view=deriveRooms(glass,list.map(o=>o.depth?o:{...o,depth:1 as const}));
   for(const d of list){if(Object.hasOwn(d,'depth'))continue;
    const shallow={...d,depth:1 as const},deep={...d,depth:2 as const},others=list.filter(o=>o!==d),taken=new Set(others.flatMap(o=>doorKeys(o.depth?o:{...o,depth:1}))),mine=new Set(doorKeys(deep));
    const reserved=new Set(others.flatMap(o=>{const v=o.depth?o:{...o,depth:1 as const};return [...landingCells(v,'front'),...landingCells(v,'back')];}));
    const row=doorKeys(deep).filter(k=>!doorKeys(shallow).includes(k));
-   const fits=d.width===2&&row.every(k=>!glass.has(k)&&!taken.has(k)&&!groundKey(k))&&doorFits(k=>(glass.has(k)&&!mine.has(k))||taken.has(k),deep,stations,reserved,colliders);
+   const fits=d.width===2&&row.every(k=>!glass.has(k)&&!taken.has(k)&&!groundKey(k)&&(view.tag.get(k)??-1)<0)&&doorFits(k=>(glass.has(k)&&!mine.has(k))||taken.has(k),deep,stations,reserved,colliders);
    Object.assign(d,{depth:fits?2:1});
-   if(fits&&overlaps(moduleBox(deep,1,1),playerBox(Number(pl.x),Number(pl.y),Number(pl.z))))Object.assign(pl,landingAt(deriveRooms(base.glass as number[],list.map(o=>o.depth?o:{...o,depth:1 as const})),deep,'front'));
+   if(fits&&overlaps(moduleBox(deep,1,1),playerBox(Number(pl.x),Number(pl.y),Number(pl.z))))Object.assign(pl,landingAt(view,deep,'front'));
   }
  }
  m.stateVersion=Math.max(Number(m.stateVersion),STATE_VERSION);return next;

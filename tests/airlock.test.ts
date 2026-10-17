@@ -288,5 +288,13 @@ test('S5.1 migration: an S5 module gets the second row where it fits; glass or a
  const st = sanitizeState(v9(raw => { const b = makeBuilding(fresh(), 'refill', 57, heightAt(57, 48), 48); raw.world.base.buildings = [JSON.parse(JSON.stringify({ ...b, id: 'build-2' }))]; raw.world.base.nextId = 3; }));
  assert.equal(st.world.base.doors[0].depth, 1);
  assert.deepEqual(sanitizeState(JSON.parse(JSON.stringify(m))), m, 'idempotent');
+ // A module between two rooms: the row in front of it is the second room's air — it stays one deep and both rooms keep
+ // their cells and gas (a full room would otherwise fail to load).
+ const two = sanitizeState(v9(raw => { const outer = shellOf(boxCells(53, 0, 39, 9, 5, 10)).filter(k => !raw.world.base.glass.includes(k));
+  raw.world.base.glass = [...raw.world.base.glass, ...outer].sort((a: number, b: number) => a - b); }));
+ const vols = allRooms(two).map(r => r.volume); assert.equal(two.world.base.doors[0].depth, 1); assert.equal(vols.length, 2);
+ const big = allRooms(two).find(r => r.volume !== 27)!; big.zone.q = big.volume * 20000; Object.assign(big.zone, { temperature: 20, purity: 1 });
+ const raw2: any = JSON.parse(JSON.stringify(two)); raw2.meta.stateVersion = 9; delete raw2.world.base.doors[0].depth;
+ const full = sanitizeState(raw2); assert.equal(full.world.base.doors[0].depth, 1); assert.deepEqual(allRooms(full).map(r => [r.volume, r.zone.q]).sort((a, b) => a[0] - b[0]), allRooms(two).map(r => [r.volume, r.zone.q]).sort((a, b) => a[0] - b[0]));
  const bad: any = JSON.parse(JSON.stringify(m)); bad.world.base.doors[0].depth = 3; assert.throws(() => sanitizeState(bad), /глубина/);
 });
